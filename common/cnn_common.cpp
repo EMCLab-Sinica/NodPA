@@ -56,6 +56,8 @@ int64_t get_int64_param(const ParameterInfo *param, size_t i) {
     MY_ASSERT(param->bitwidth == 64);
     MY_ASSERT(param->slot == SLOT_PARAMETERS);
     int64_t ret;
+    // detect mis-aligned memory access on ARM
+    MY_ASSERT(param->params_offset % 4 == 0);
     my_memcpy_from_parameters(&ret, param, i * sizeof(int64_t), sizeof(int64_t));
     return ret;
 

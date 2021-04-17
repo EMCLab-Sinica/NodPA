@@ -170,7 +170,7 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
     // appears to still give correct results when srcARows is odd
     // srcBCols should really be even, though
     // http://e2e.ti.com/support/microcontrollers/msp430/f/166/t/716353?MSP430FR5992-MSP-DSPLib-msp-matrix-mpy-q15
-    MY_ASSERT((A_cols & 1) || (B_cols & 1) == 0);
+    // MY_ASSERT((A_cols & 1) || (B_cols & 1) == 0); // FIXME
     MY_ASSERT(B_rows * B_cols <= ARM_PSTATE_LEN);
     MY_ASSERT(A_cols == B_rows);
     check_buffer_address(pSrcA, A_rows * A_cols);
@@ -200,6 +200,26 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
 #endif
 }
 
+void my_mpy_q15(const int16_t *pSrcA, const int16_t *pSrcB, int16_t *pDst, uint32_t blockSize) {
+    check_buffer_address(pSrcA, blockSize);
+    check_buffer_address(pSrcB, blockSize);
+    check_buffer_address(pDst, blockSize);
+#if !USE_ARM_CMSIS
+    uint32_t blockSizeForLEA = blockSize / 2 * 2;
+    if (blockSizeForLEA) {
+        msp_mpy_q15_params mpy_params;
+        mpy_params.length = blockSizeForLEA;
+        msp_status status = msp_mpy_q15(&mpy_params, pSrcA, pSrcB, pDst);
+        my_checkStatus(status);
+    }
+    if (blockSize % 2) {
+        pDst[blockSize - 1] = pSrcA[blockSize - 1] + pSrcB[blockSize - 1];
+    }
+#else
+    arm_mult_q15(pSrcA, pSrcB, pDst, blockSize);
+#endif
+}
+
 void my_scale_q15(const int16_t *pSrc, int16_t scaleFract, uint8_t shift, int16_t *pDst, uint32_t blockSize) {
 #if !USE_ARM_CMSIS
     uint32_t blockSizeForLEA = blockSize / 2 * 2;
@@ -215,6 +235,39 @@ void my_scale_q15(const int16_t *pSrc, int16_t scaleFract, uint8_t shift, int16_
     }
 #else
     arm_scale_q15(pSrc, scaleFract, shift, pDst, blockSize);
+#endif
+}
+
+void my_sub_q15(const int16_t *pSrcA, const int16_t *pSrcB, int16_t *pDst, uint32_t blockSize) {
+    check_buffer_address(pSrcA, blockSize);
+    check_buffer_address(pSrcB, blockSize);
+    check_buffer_address(pDst, blockSize);
+#if !USE_ARM_CMSIS
+    uint32_t blockSizeForLEA = blockSize / 2 * 2;
+    if (blockSizeForLEA) {
+        msp_sub_q15_params sub_params;
+        sub_params.length = blockSizeForLEA;
+        msp_status status = msp_sub_q15(&sub_params, pSrcA, pSrcB, pDst);
+        my_checkStatus(status);
+    }
+    if (blockSize % 2) {
+        pDst[blockSize - 1] = pSrcA[blockSize - 1] + pSrcB[blockSize - 1];
+    }
+#else
+    arm_sub_q15(pSrcA, pSrcB, pDst, blockSize);
+#endif
+}
+
+void my_vsqrt_q15(int16_t* pIn, int16_t* pOut, uint32_t blockSize) {
+#if !USE_ARM_CMSIS
+    ERROR_OCCURRED();
+#else
+    // somehow arm_vsqrt_q15 is defined in headers but there is no implementation
+    for (uint32_t idx = 0; idx < blockSize; idx++) {
+        arm_sqrt_q15(*pIn, pOut);
+        pIn++;
+        pOut++;
+    }
 #endif
 }
 

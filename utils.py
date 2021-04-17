@@ -19,6 +19,7 @@ import onnx
 import onnxoptimizer
 import onnxruntime
 import onnxruntime.backend as backend
+import onnx.helper
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +150,13 @@ def load_data_google_speech(start: int, limit: int) -> ModelData:
 
 
     return ModelData(labels=labels, images=np.array(mfccs, dtype=np.float32), data_layout=DataLayout.NEUTRAL)
+
+def load_data_omniglot(start: int, limit: int) -> ModelData:
+    n_way = 5
+    data = np.load(os.path.expanduser('~/.cache/omniglot/omniglot.npy'))[:n_way,:,:,:,:]
+    labels = list(itertools.chain.from_iterable([[idx]*20 for idx in range(n_way)]))
+    images = np.concatenate(data)
+    return ModelData(labels=labels, images=images, data_layout=DataLayout.NEUTRAL)
 
 def kws_dnn_model():
     return download_file('https://github.com/ARM-software/ML-KWS-for-MCU/raw/master/Pretrained_models/DNN/DNN_S.pb', 'KWS-DNN_S.pb')
@@ -326,8 +334,15 @@ def change_batch_size(onnx_model: onnx.ModelProto):
     for value_info in itertools.chain(g.value_info, g.input, g.output):
         if value_info.name in initializer_names or value_info.name in constant_names:
             continue
+        n = find_node_by_output(onnx_model.graph.node, value_info.name)
+        if not n and value_info.name not in [inp.name for inp in g.input]:
+            continue
+        if n and n.op_type == 'Shape':
+            continue
         shape = value_info.type.tensor_type.shape
         if shape.dim and shape.dim[0].dim_param:
+            if n and n.op_type == 'Concat' and len(shape.dim) == 1:
+                continue
             shape.dim[0].dim_value = 1
 
     # make sure above steps did not break the model

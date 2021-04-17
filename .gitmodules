@@ -14,3 +14,6 @@
 [submodule "ARM-CMSIS"]
 	path = ARM-CMSIS
 	url = ssh://git@github.com/EMCLab-Sinica/ARM-CMSIS.git
+[submodule "data/MAML-Pytorch"]
+	path = data/MAML-Pytorch
+	url = https://github.com/yan12125/MAML-Pytorch

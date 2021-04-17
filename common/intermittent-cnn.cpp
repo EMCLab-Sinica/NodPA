@@ -21,8 +21,8 @@ static void handle_node(Model *model, uint16_t node_idx) {
     my_printf("op_type = %d" NEWLINE, cur_node->op_type);
 #endif
 
-    int16_t input_id[3];
-    const ParameterInfo *input[3];
+    int16_t input_id[NUM_INPUTS];
+    const ParameterInfo *input[NUM_INPUTS];
     for (uint16_t j = 0; j < cur_node->inputs_len; j++) {
         input_id[j] = cur_node->inputs[j];
         my_printf_debug("input_id[%d] = %d" NEWLINE, j, input_id[j]);

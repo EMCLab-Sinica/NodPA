@@ -345,8 +345,8 @@ def infer_auto_pad(node):
             raise NotImplementedError
 
 for idx, n in enumerate(nodes):
-    if n.op_type == 'Dropout':
-        output = n.output[:1]  # we don't care the second output `mask`
+    if n.op_type in ('Dropout', 'BatchNormalization'):
+        output = n.output[:1]  # we don't care outputs for training
     else:
         output = n.output
     if n.op_type == 'Conv':
@@ -452,6 +452,7 @@ def determine_conv_tile_c(n):
 
         if not input_tile_too_large:
             params_len = math.ceil(CHANNEL / node_flags.input_tile_c) * OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W * 2
+            logger.debug('Candidate params_len %d', params_len)
             if params_len < config['intermediate_values_size']:
                 break
             logger.debug(f'params_len={params_len}, too high!')
@@ -615,13 +616,6 @@ for node in graph:
 
 parameter_info_idx = 0
 
-def decode_raw_data(params):
-    format_char = {
-        onnx.TensorProto.FLOAT: 'f',
-        onnx.TensorProto.INT64: 'q',
-    }[params.data_type]
-    return list(map(lambda t: t[0], struct.iter_unpack(format_char, params.raw_data)))
-
 model_parameters_info = outputs['model_parameters_info']
 for params in parameters:
     if params is None:  # input
@@ -643,10 +637,7 @@ for params in parameters:
         param_scale = 0
         assert len(params.dims) <= 4
         if params.data_type == onnx.TensorProto.FLOAT:
-            if params.float_data:
-                float_data = params.float_data
-            else:
-                float_data = decode_raw_data(params)
+            float_data = extract_data(params).flatten()
             data_len = len(float_data)
             assert data_len > 0
             slot = parameters_slot
@@ -658,20 +649,19 @@ for params in parameters:
             param_scale = config['scale']
             slot.target.write(to_bytes(_Q15(np.array(float_data) / param_scale, 'Parameter')))
             slot.offset += 2 * len(float_data)
+            if slot.offset % 4:
+                slot.offset += 2
+                slot.target.write(to_bytes(0))
             model_parameters_info.write(to_bytes(16, size=8)) # bitwidth
         elif params.data_type == onnx.TensorProto.INT64:
-            if params.int64_data:
-                int64_data = params.int64_data
-            else:
-                int64_data = decode_raw_data(params)
-            data_len = len(int64_data)
+            int64_data = extract_data(params)
+            data_len = int(np.prod(np.shape(int64_data)))
             assert data_len > 0
             slot = parameters_slot
             model_parameters_info.write(to_bytes(slot.offset, size=32))  # params_offset
             model_parameters_info.write(to_bytes(data_len * 8, size=32))
-            for param in int64_data:
-                slot.target.write(to_bytes(param, size=64))
-                slot.offset += 8
+            slot.target.write(to_bytes(int64_data, size=64))
+            slot.offset += 8 * data_len
             model_parameters_info.write(to_bytes(64, size=8)) # bitwidth
         else:
             assert False

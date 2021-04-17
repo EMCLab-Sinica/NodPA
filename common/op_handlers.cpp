@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cmath>
 #include "cnn_common.h"
 #include "data.h"
 #include "op_utils.h"
@@ -264,4 +265,79 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
         my_memcpy_to_param(output, idx*buffer_size, buffer_a, buffer_size * sizeof(int16_t), 0);
     }
     dump_params_nhwc_debug(model, output, node->output_name);
+}
+
+void alloc_batchnormalization(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node*) {
+    const ParameterInfo* X = input[0];
+    output->slot = get_next_slot(model, X);
+}
+
+void handle_batchnormalization(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node*) {
+    my_printf_debug("BatchNormalization!" NEWLINE);
+
+    const ParameterInfo *X = input[0], *scale = input[1], *B = input[2], *mean = input[3], *var = input[4];
+    const uint16_t CHANNEL = X->dims[1], H = X->dims[2], W= X->dims[3];
+    int16_t *buffer_x = lea_buffer,
+            *buffer_scale = buffer_x + CHANNEL,
+            *buffer_b = buffer_scale + CHANNEL,
+            *buffer_mean = buffer_b + CHANNEL,
+            *buffer_var = buffer_mean + CHANNEL;
+    MY_ASSERT(buffer_var + CHANNEL < lea_buffer + LEA_BUFFER_SIZE);
+
+    my_memcpy_from_param(model, buffer_scale, scale, 0, CHANNEL * sizeof(int16_t));
+    my_memcpy_from_param(model, buffer_b, B, 0, CHANNEL * sizeof(int16_t));
+    my_memcpy_from_param(model, buffer_mean, mean, 0, CHANNEL * sizeof(int16_t));
+    my_memcpy_from_param(model, buffer_var, var, 0, CHANNEL * sizeof(int16_t));
+
+    int16_t scaleFract;
+    uint8_t shift;
+    float_to_scale_params(&scaleFract, &shift, 1.0f * mean->scale / (X->scale * 2));
+    my_scale_q15(buffer_mean, scaleFract, shift, buffer_mean, CHANNEL);
+
+    int16_t var_scale_sqrt = static_cast<int16_t>(sqrtf(1.0f * var->scale));
+    MY_ASSERT(var_scale_sqrt * var_scale_sqrt == var->scale);
+
+    float_to_scale_params(&scaleFract, &shift, 1.0f * var_scale_sqrt / (X->scale * 2));
+    my_scale_q15(buffer_b, scaleFract, shift, buffer_b, CHANNEL);
+
+    output->scale = scale->scale * (X->scale * 2) / var_scale_sqrt;
+
+    // assume conventional epsilon
+    my_offset_q15(buffer_var, static_cast<int16_t>(0.00001 * 0x8000 / var->scale), buffer_var, CHANNEL);
+    my_vsqrt_q15(buffer_var, buffer_var, CHANNEL);
+
+    uint32_t offset = 0;
+    for (uint16_t idx = 0; idx < H * W; idx++) {
+        my_memcpy_from_param(model, buffer_x, X, offset, CHANNEL * sizeof(int16_t));
+
+        my_printf_debug("(h, w) = (%d, %d)" NEWLINE, idx / W, idx % W);
+
+        my_sub_q15(buffer_x, buffer_mean, buffer_x, CHANNEL);
+        my_printf_debug("x - mean" NEWLINE);
+        dump_matrix_debug(buffer_x, CHANNEL, ValueInfo(X->scale * 2));
+
+        // XXX: use LEA?
+        for (uint16_t channel = 0; channel < CHANNEL; channel++) {
+            // https://sestevenson.wordpress.com/2010/09/20/fixed-point-division-2/
+            int32_t tmp = (static_cast<int32_t>(buffer_x[channel]) << 15) / static_cast<int32_t>(buffer_var[channel]);
+            tmp = MIN_VAL(32767, MAX_VAL(-32768, tmp));
+            buffer_x[channel] = static_cast<int16_t>(tmp);
+        }
+        my_printf_debug("(x - mean)/sqrt(var+epsilon)" NEWLINE);
+        dump_matrix_debug(buffer_x, CHANNEL, ValueInfo((X->scale * 2) / var_scale_sqrt));
+
+        my_mpy_q15(buffer_x, buffer_scale, buffer_x, CHANNEL);
+        my_printf_debug("(x - mean)/sqrt(var+epsilon)*scale" NEWLINE);
+        dump_matrix_debug(buffer_x, CHANNEL, ValueInfo(output, model));
+
+        my_add_q15(buffer_x, buffer_b, buffer_x, CHANNEL);
+        my_printf_debug("(x - mean)/sqrt(var+epsilon)*scale+B" NEWLINE);
+        dump_matrix_debug(buffer_x, CHANNEL, ValueInfo(output, model));
+
+        my_memcpy_to_param(output, offset, buffer_x, CHANNEL * sizeof(int16_t), 0);
+        offset += CHANNEL;
+    }
+
+    my_printf_debug("handle_batchnormalization output" NEWLINE);
+    dump_params_nhwc_debug(model, output);
 }
