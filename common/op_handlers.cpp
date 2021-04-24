@@ -225,9 +225,39 @@ void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *ou
     dump_params_nhwc_debug(model, B);
 }
 
-void handle_softmax(Model*, const ParameterInfo*[], ParameterInfo*, const Node*) {
-    // Do nothing - softmax does not change the relative order of values.
-    // Just let run_model determine the max value
+void alloc_softmax(Model *model, const ParameterInfo **input, ParameterInfo *output, const struct NodeFlags*) {
+    const ParameterInfo* X = input[0];
+    output->slot = get_next_slot(model, X);
+}
+
+void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node*) {
+    my_printf_debug("Softmax!" NEWLINE);
+
+    const ParameterInfo* X = input[0];
+
+    const int16_t data_len = X->params_len / sizeof(int16_t);
+    int16_t *buffer_input = lea_buffer;
+    float *buffer_input_exp = reinterpret_cast<float*>(buffer_input + data_len);
+    MY_ASSERT(reinterpret_cast<int16_t*>(buffer_input_exp) + data_len < lea_buffer + LEA_BUFFER_SIZE);
+    my_memcpy_from_param(model, buffer_input, X, 0, X->params_len);
+
+    float denominator = 0;
+
+    for (uint8_t idx = 0; idx < data_len; idx++) {
+        buffer_input_exp[idx] = exp(q15_to_float(buffer_input[idx], ValueInfo(X)));
+        MY_ASSERT(!std::isnan(buffer_input_exp[idx]));
+        denominator += buffer_input_exp[idx];
+    }
+
+    for (uint8_t idx = 0; idx < data_len; idx++) {
+        buffer_input[idx] = static_cast<int16_t>(buffer_input_exp[idx] / denominator * 0x8000);
+    }
+
+    output->scale = 1;
+
+    my_memcpy_to_param(output, 0, buffer_input, data_len * sizeof(int16_t), 0);
+
+    dump_matrix_debug(buffer_input, data_len, ValueInfo(output));
 }
 
 void handle_transpose(Model*, const ParameterInfo *input[], ParameterInfo *output, const Node*) {
@@ -316,13 +346,7 @@ void handle_batchnormalization(Model* model, const ParameterInfo* input[], Param
         my_printf_debug("x - mean" NEWLINE);
         dump_matrix_debug(buffer_x, CHANNEL, ValueInfo(X->scale * 2));
 
-        // XXX: use LEA?
-        for (uint16_t channel = 0; channel < CHANNEL; channel++) {
-            // https://sestevenson.wordpress.com/2010/09/20/fixed-point-division-2/
-            int32_t tmp = (static_cast<int32_t>(buffer_x[channel]) << 15) / static_cast<int32_t>(buffer_var[channel]);
-            tmp = MIN_VAL(32767, MAX_VAL(-32768, tmp));
-            buffer_x[channel] = static_cast<int16_t>(tmp);
-        }
+        my_div_q15(buffer_x, buffer_var, buffer_x, CHANNEL);
         my_printf_debug("(x - mean)/sqrt(var+epsilon)" NEWLINE);
         dump_matrix_debug(buffer_x, CHANNEL, ValueInfo((X->scale * 2) / var_scale_sqrt));
 

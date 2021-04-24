@@ -10,6 +10,7 @@
 #include "platform.h"
 #include "my_debug.h"
 #include "op_utils.h"
+#include "cnn_common.h"
 
 #if !USE_ARM_CMSIS
 #if MY_DEBUG >= MY_DEBUG_NORMAL
@@ -37,6 +38,16 @@ void my_add_q15(const int16_t *pSrcA, const int16_t *pSrcB, int16_t *pDst, uint3
 #else
     arm_add_q15(pSrcA, pSrcB, pDst, blockSize);
 #endif
+}
+
+void my_div_q15(const int16_t *pSrcA, const int16_t *pSrcB, int16_t *pDst, uint32_t blockSize) {
+    // XXX: use LEA?
+    for (uint16_t idx = 0; idx < blockSize; idx++) {
+        // https://sestevenson.wordpress.com/2010/09/20/fixed-point-division-2/
+        int32_t tmp = (static_cast<int32_t>(pSrcA[idx]) << 15) / static_cast<int32_t>(pSrcB[idx]);
+        tmp = MIN_VAL(32767, MAX_VAL(-32768, tmp));
+        pDst[idx] = static_cast<int16_t>(tmp);
+    }
 }
 
 void my_fill_q15(int16_t value, int16_t *pDst, uint32_t blockSize) {
