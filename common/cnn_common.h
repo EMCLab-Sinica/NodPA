@@ -171,4 +171,5 @@ typedef void (*handler)(Model *model, const ParameterInfo *input[], ParameterInf
 typedef void (*allocator)(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node);
 // below are defined in ops.c
 extern const handler handlers[];
+extern const handler backward_handlers[];
 extern const allocator allocators[];

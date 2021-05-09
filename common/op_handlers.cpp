@@ -260,6 +260,12 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
     dump_matrix_debug(buffer_input, data_len, ValueInfo(output));
 }
 
+void handle_backward_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const NodeFlags*) {
+    const uint8_t *labels = labels_data;
+    put_q15_param(output, labels[0], get_q15_param(model, output, labels[0]) - 0x8000);
+    dump_params(model, output);
+}
+
 void handle_transpose(Model*, const ParameterInfo *input[], ParameterInfo *output, const Node*) {
     my_printf_debug("Transpose!" NEWLINE);
 

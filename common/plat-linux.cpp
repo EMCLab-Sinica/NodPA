@@ -120,6 +120,7 @@ int main(int argc, char* argv[]) {
     }
 
     ret = run_cnn_tests(n_samples);
+    fine_tuning();
 
 exit:
     close(nvm_fd);

@@ -781,17 +781,23 @@ struct Node;
     for idx, op in enumerate(ops):
         output_h.write(f'#define Op{op} {idx}\n')
 
-    for op in ops:
-        output_h.write('void alloc_{}(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node);\n'.format(op.lower()))
-        output_h.write('void handle_{}(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node);\n'.format(op.lower()))
-    output_c.write('const handler handlers[] = {\n')
-    for op in ops:
-        output_c.write(f'    handle_{op},\n'.lower())
-    output_c.write('};\n')
-    output_c.write('const allocator allocators[] = {\n')
-    for op in ops:
-        output_c.write(f'    alloc_{op},\n'.lower())
-    output_c.write('};\n')
+    for array_name, func_prefix in (('allocators', 'alloc_'), ('handlers', 'handle_'), ('backward_handlers', 'handle_backward_')):
+        output_c.write(f'const handler {array_name}[] = {{\n')
+        for op in ops:
+            op = op.lower()
+            output_h.write(f'void {func_prefix}{op}(struct Model *model, const struct ParameterInfo *[], struct ParameterInfo *output, const struct Node*);\n')
+            output_c.write(f'    {func_prefix}{op},\n')
+        output_c.write('};\n')
+        for op in ops:
+            if func_prefix == 'alloc_' and op in inplace_update_ops:
+                continue
+            op = op.lower()
+            output_c.write(textwrap.dedent(f'''
+                void __attribute__((weak)) {func_prefix}{op}(struct Model *model, const struct ParameterInfo *[], struct ParameterInfo *output, const struct Node*) {{
+                    ERROR_OCCURRED();
+                }}
+            '''))
+
     for op in ops:
         if op in inplace_update_ops:
             output_c.write(textwrap.dedent(f'''
@@ -802,17 +808,6 @@ struct Node;
                     }}
                 }}
             '''))
-        else:
-            output_c.write(textwrap.dedent(f'''
-                void __attribute__((weak)) alloc_{op.lower()}(struct Model *model, const struct ParameterInfo *[], struct ParameterInfo *output, const struct Node*) {{
-                    ERROR_OCCURRED();
-                }}
-            '''))
-        output_c.write(textwrap.dedent(f'''
-            void __attribute__((weak)) handle_{op.lower()}(struct Model *model, const struct ParameterInfo *[], struct ParameterInfo *output, const struct Node*) {{
-                ERROR_OCCURRED();
-            }}
-        '''))
 
     # data
     for idx, name in enumerate(other_flags):
