@@ -17,7 +17,7 @@
 
 # CCS-generated files
 .launches/
-/msp430/Large_Data/
+/msp430/Large_Data__GNU/
 /msp432/Debug__GNU/
 
 # External projects

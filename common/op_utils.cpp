@@ -6,9 +6,10 @@
 
 // Not using DSPLIB_DATA here as it does not work under C++ (?)
 #ifdef __MSP430__
-#pragma DATA_SECTION(".leaRAM")
-#endif
+int16_t __attribute__((section(".leaRAM"))) lea_buffer[LEA_BUFFER_SIZE];
+#else
 int16_t lea_buffer[LEA_BUFFER_SIZE];
+#endif
 
 #if HAWAII
 void hawaii_record_footprints(Model* model, uint16_t vector_len) {

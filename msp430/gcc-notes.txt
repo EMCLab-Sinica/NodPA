@@ -1,0 +1,5 @@
+Make the initialization faster?
+    Skip resetting .bss?
+        gcc generates a reference for __crt0_init_bss for *.o where there are variables in .bss
+        -> __crt0_init_bss is not garbage-collected (removed) by the linker
+    Remove impure_data?

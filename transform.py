@@ -842,7 +842,7 @@ extern const uint8_t * const {var_name};
 ''')
         # #define with _Pragma seems to be broken :/
         output_c.write(f'''
-const uint8_t _{var_name}[{len(data)}] = {{
+const uint8_t __attribute__((section(".upper.rodata"))) _{var_name}[{len(data)}] = {{
 ''')
         n_pieces, remaining = divmod(len(data), 16)
         for idx in range(n_pieces):

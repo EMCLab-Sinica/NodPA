@@ -26,8 +26,7 @@ Counters *counters() {
 
 #define MY_DMA_CHANNEL DMA_CHANNEL_0
 
-#pragma vector=DMA_VECTOR
-__interrupt void DMA_ISR(void)
+void __attribute__((__interrupt__(DMA_VECTOR))) DMA_ISR(void)
 {
     switch(__even_in_range(DMAIV,16))
     {
@@ -47,8 +46,7 @@ __interrupt void DMA_ISR(void)
 #endif
 
 #ifdef __MSP430__
-#pragma vector=configTICK_VECTOR
-__interrupt void vTimerHandler( void )
+void  __attribute__((__interrupt__(configTICK_VECTOR))) vTimerHandler( void )
 #elif defined(__MSP432__)
 extern "C" void TA1_0_IRQHandler(void)
 #endif

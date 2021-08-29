@@ -119,8 +119,7 @@ int _system_pre_init( void )
  *
  */
 
-#pragma vector=PORT5_VECTOR
-__interrupt void Port_5(void)
+void __attribute__((__interrupt__(PORT5_VECTOR))) Port_5(void)
 {
     GPIO_disableInterrupt(GPIO_PORT_P5, GPIO_PIN6);
     GPIO_disableInterrupt(GPIO_PORT_P5, GPIO_PIN5);
@@ -170,3 +169,29 @@ const unsigned short usACLK_Frequency_Hz = 32768;
 }
 #endif
 /*-----------------------------------------------------------*/
+
+#ifdef __GNUC__
+/* GCC hack - when data in .bss and .data is large, initializing them can
+ * take a long time and thus the watchdog resets the CPU [1]. This function,
+ * which is taken from [3], disables the watchdog before .bss and .data are
+ * initialized. How it works is also explained in [3]. MSP430-GCC sources
+ * help on understanding this as well [4].
+ *
+ * As a side note, applications built with msp430-cgt holds WDT during
+ * initialization when the linker option "Hold watchdog timer during cinit
+ * auto-initialization" is set. Under the hood, `_c_int00_template` calls
+ * `_auto_init`, which maps to `__TI_auto_init_nobinit_nopinit_hold_wdt`.
+ *
+ * References:
+ * [1] https://e2e.ti.com/support/microcontrollers/msp-low-power-microcontrollers-group/msp430/f/msp-low-power-microcontroller-forum/948357/msp430-gcc-opensource-watchdog-timeout-during-crt-bss-initialisation
+ * [2] https://e2e.ti.com/support/microcontrollers/msp-low-power-microcontrollers-group/msp430/f/msp-low-power-microcontroller-forum/541054/msp430-gcc-startup-source-code
+ * [3] https://www.ti.com/lit/ug/slau646f/slau646f.pdf, Sectio 5.3
+ * [4] newlib/libgloss/msp430/{crt0.S,memmodel.h}, from msp430-gcc-9.3.1.11-source-full.tar.bz2 available on https://www.ti.com/tool/MSP430-GCC-OPENSOURCE
+ * [5] ccs/tools/compiler/ti-cgt-msp430_20.2.5.LTS/lib/src/{boot.c,autoinit.c} under CCS installation
+ */
+static void __attribute__((naked, used, section(".crt_0042")))
+disable_watchdog (void)
+{
+    WDTCTL = WDTPW | WDTHOLD;
+}
+#endif
