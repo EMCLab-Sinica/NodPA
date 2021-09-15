@@ -1,4 +1,7 @@
+#include "Tools/portable.h"
+#ifdef __TOOLS_MSP__
 #include <driverlib.h>
+#endif
 #ifdef __MSP430__
 #include <msp430.h>
 #include <DSPLib.h>
@@ -14,9 +17,11 @@
 #include "platform-private.h"
 #include "data.h"
 #include "my_debug.h"
+#include "plat-msp430.h"
 #include "Tools/myuart.h"
 #include "Tools/our_misc.h"
 #include "Tools/dvfs.h"
+#include "Tools/ext_fram/extfram.h"
 
 #ifdef __MSP430__
 #pragma DATA_SECTION(".nvm2")
@@ -111,7 +116,7 @@ void copy_samples_data(void) {
 #define GPIO_COUNTER_PIN GPIO_PIN0
 #define GPIO_RESET_PORT GPIO_PORT_P5
 #define GPIO_RESET_PIN GPIO_PIN7
-#else
+#elif defined(__MSP432__)
 #define GPIO_COUNTER_PORT GPIO_PORT_P5
 #define GPIO_COUNTER_PIN GPIO_PIN5
 #define GPIO_RESET_PORT GPIO_PORT_P2
@@ -121,13 +126,16 @@ void copy_samples_data(void) {
 #define STABLE_POWER_ITERATIONS 10
 
 void IntermittentCNNTest() {
+#ifdef __TOOLS_MSP__
     GPIO_setAsOutputPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setOutputLowOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setAsInputPinWithPullUpResistor(GPIO_RESET_PORT, GPIO_RESET_PIN);
 
     // sleep to wait for external FRAM
     // 5ms / (1/f)
+    // XXX: seems not needed on STM32(?)
     our_delay_cycles(5E-3 * getFrequency(FreqLevel));
+#endif
 
     initSPI();
     if (testSPI() != 0) {
@@ -136,11 +144,18 @@ void IntermittentCNNTest() {
         // waiting some time seems to increase the possibility
         // of a successful FRAM initialization on next boot
         while (counter--);
+#ifdef __TOOLS_MSP__
         WDTCTL = 0;
+#else
+        while (1) {} // TODO
+#endif
     }
 
     Model* model = load_model_from_nvm();
-    if (!GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN)) {
+#ifdef __TOOLS_MSP__
+    if (!GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN))
+#endif
+    {
         uartinit();
 
         my_printf(NEWLINE "run_counter = %d" NEWLINE, model->run_counter);
@@ -169,7 +184,9 @@ void button_pushed(uint16_t button1_status, uint16_t button2_status) {
 
 void notify_model_finished(void) {
     my_printf("." NEWLINE);
+#ifdef __TOOLS_MSP__
     GPIO_toggleOutputOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
+#endif
 }
 
 void start_cpu_counter(void) {
