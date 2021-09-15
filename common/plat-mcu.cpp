@@ -1,10 +1,15 @@
+#include "tools/portable.h"
+#ifdef __TOOLS_MSP__
 #include <driverlib.h>
+#endif
 #ifdef __MSP430__
 #include <msp430.h>
 #include <DSPLib.h>
 #include "main.h"
 #elif defined(__MSP432__)
 #include <msp432.h>
+#elif defined(__STM32__)
+#include STM32_HAL_HEADER
 #endif
 #include <cstdint>
 #include <cstring>
@@ -14,9 +19,11 @@
 #include "platform.h"
 #include "data.h"
 #include "my_debug.h"
+#include "plat-mcu.h"
 #include "tools/myuart.h"
 #include "tools/our_misc.h"
 #include "tools/dvfs.h"
+#include "tools/ext_fram/extfram.h"
 
 #ifdef __MSP430__
 #define DATA_SECTION_NVM _Pragma("DATA_SECTION(\".nvm\")")
@@ -78,6 +85,9 @@ void my_memcpy(void* dest, const void* src, size_t n) {
     MAP_DMA_enableChannel(0);
     MAP_DMA_requestSoftwareTransfer(0);
     while (MAP_DMA_isChannelEnabled(0)) {}
+#else
+#warning "Using the slower memcpy(). Please implement this function using DMA."
+    memcpy(dest, src, n);
 #endif
 }
 
@@ -121,26 +131,60 @@ void copy_samples_data(void) {
 #define GPIO_COUNTER_PIN GPIO_PIN0
 #define GPIO_RESET_PORT GPIO_PORT_P5
 #define GPIO_RESET_PIN GPIO_PIN7
-#else
+#elif defined(__MSP432__)
 #define GPIO_COUNTER_PORT GPIO_PORT_P5
 #define GPIO_COUNTER_PIN GPIO_PIN5
 #define GPIO_RESET_PORT GPIO_PORT_P2
 #define GPIO_RESET_PIN GPIO_PIN5
+#elif defined(__STM32__)
+// PG6, or ARD_D7
+#define GPIO_COUNTER_PORT GPIOG
+#define GPIO_COUNTER_PIN GPIO_PIN_6
+// PG15, or ARD_D8
+#define GPIO_RESET_PORT GPIOG
+#define GPIO_RESET_PIN GPIO_PIN_15
 #endif
 
 #define STABLE_POWER_ITERATIONS 10
 
+static uint8_t needs_reset() {
+#ifdef __TOOLS_MSP__
+    return !GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN);
+#elif defined(__STM32__)
+    return !HAL_GPIO_ReadPin(GPIO_RESET_PORT, GPIO_RESET_PIN);
+#endif
+}
+
 void IntermittentCNNTest() {
+#ifdef __TOOLS_MSP__
     GPIO_setAsOutputPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setOutputLowOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setAsInputPinWithPullUpResistor(GPIO_RESET_PORT, GPIO_RESET_PIN);
+#elif defined(__STM32__)
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
 
+    GPIO_InitStruct.Pin = GPIO_COUNTER_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIO_COUNTER_PORT, &GPIO_InitStruct);
+    HAL_GPIO_WritePin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN, GPIO_PIN_RESET);
+
+    GPIO_InitStruct.Pin = GPIO_RESET_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIO_RESET_PORT, &GPIO_InitStruct);
+#endif
+
+#ifdef __TOOLS_MSP__
     GPIO_setAsOutputPin( GPIO_PORT_P1, GPIO_PIN0 );
     GPIO_setOutputHighOnPin(GPIO_PORT_P1, GPIO_PIN0);
 
     // sleep to wait for external FRAM
     // 5ms / (1/f)
+    // XXX: seems not needed on STM32(?)
     our_delay_cycles(5E-3 * getFrequency(FreqLevel));
+#endif
 
     initSPI();
     if (testSPI() != 0) {
@@ -149,11 +193,15 @@ void IntermittentCNNTest() {
         // waiting some time seems to increase the possibility
         // of a successful FRAM initialization on next boot
         while (counter--);
+#ifdef __TOOLS_MSP__
         WDTCTL = 0;
+#else
+        while (1) {} // TODO
+#endif
     }
 
     load_model_from_nvm();
-    if (!GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN)) {
+    if (needs_reset()) {
         uartinit();
 
         // To get counters in NVM after intermittent tests
@@ -189,8 +237,12 @@ void button_pushed(uint16_t button1_status, uint16_t button2_status) {
 
 void notify_model_finished(void) {
     my_printf("." NEWLINE);
+#ifdef __TOOLS_MSP__
     // Trigger a short peak so that multiple inferences in long power cycles are correctly recorded
     GPIO_setOutputHighOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     our_delay_cycles(5E-3 * getFrequency(FreqLevel));
     GPIO_setOutputLowOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
+#elif defined(__STM32__)
+    HAL_GPIO_TogglePin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
+#endif
 }

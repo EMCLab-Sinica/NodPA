@@ -15,7 +15,7 @@
 #define MY_DEBUG MY_DEBUG_NO_ASSERT
 #endif
 
-#if defined(__MSP430__) || defined(__MSP432__)
+#if defined(__MSP430__) || defined(__MSP432__) || defined(__STM32__)
 #  include "tools/myuart.h"
 #  define my_printf print2uart_new
 #  define my_flush()
