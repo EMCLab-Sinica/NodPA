@@ -75,6 +75,9 @@ void my_memcpy(void* dest, const void* src, size_t n) {
     MAP_DMA_enableChannel(0);
     MAP_DMA_requestSoftwareTransfer(0);
     while (MAP_DMA_isChannelEnabled(0)) {}
+#else
+#warning "Using the slower memcpy(). Please implement this function using DMA."
+    memcpy(dest, src, n);
 #endif
 }
 
