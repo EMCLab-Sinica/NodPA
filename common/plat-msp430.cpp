@@ -8,6 +8,8 @@
 #include "main.h"
 #elif defined(__MSP432__)
 #include <msp432.h>
+#elif defined(__STM32__)
+#include STM32_HAL_HEADER
 #endif
 #include <cstdint>
 #include <cstring>
@@ -124,16 +126,47 @@ void copy_samples_data(void) {
 #define GPIO_COUNTER_PIN GPIO_PIN5
 #define GPIO_RESET_PORT GPIO_PORT_P2
 #define GPIO_RESET_PIN GPIO_PIN5
+#elif defined(__STM32__)
+// PG6, or ARD_D7
+#define GPIO_COUNTER_PORT GPIOG
+#define GPIO_COUNTER_PIN GPIO_PIN_6
+// PG15, or ARD_D8
+#define GPIO_RESET_PORT GPIOG
+#define GPIO_RESET_PIN GPIO_PIN_15
 #endif
 
 #define STABLE_POWER_ITERATIONS 10
+
+static uint8_t needs_reset() {
+#ifdef __TOOLS_MSP__
+    return !GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN);
+#elif defined(__STM32__)
+    return !HAL_GPIO_ReadPin(GPIO_RESET_PORT, GPIO_RESET_PIN);
+#endif
+}
 
 void IntermittentCNNTest() {
 #ifdef __TOOLS_MSP__
     GPIO_setAsOutputPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setOutputLowOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setAsInputPinWithPullUpResistor(GPIO_RESET_PORT, GPIO_RESET_PIN);
+#elif defined(__STM32__)
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
 
+    GPIO_InitStruct.Pin = GPIO_COUNTER_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIO_COUNTER_PORT, &GPIO_InitStruct);
+    HAL_GPIO_WritePin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN, GPIO_PIN_RESET);
+
+    GPIO_InitStruct.Pin = GPIO_RESET_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(GPIO_RESET_PORT, &GPIO_InitStruct);
+#endif
+
+#ifdef __TOOLS_MSP__
     // sleep to wait for external FRAM
     // 5ms / (1/f)
     // XXX: seems not needed on STM32(?)
@@ -155,10 +188,7 @@ void IntermittentCNNTest() {
     }
 
     Model* model = load_model_from_nvm();
-#ifdef __TOOLS_MSP__
-    if (!GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN))
-#endif
-    {
+    if (needs_reset()) {
         uartinit();
 
         my_printf(NEWLINE "run_counter = %d" NEWLINE, model->run_counter);
@@ -189,6 +219,8 @@ void notify_model_finished(void) {
     my_printf("." NEWLINE);
 #ifdef __TOOLS_MSP__
     GPIO_toggleOutputOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
+#elif defined(__STM32__)
+    HAL_GPIO_TogglePin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
 #endif
 }
 
