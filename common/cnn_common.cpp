@@ -163,7 +163,7 @@ static void handle_node(Model *model, uint16_t node_idx) {
     }
 }
 
-#if MY_DEBUG >= MY_DEBUG_NORMAL
+#if MY_DEBUG >= MY_DEBUG_NO_ASSERT
 const float first_sample_outputs[] = FIRST_SAMPLE_OUTPUTS;
 #endif
 
@@ -204,7 +204,7 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
     if (output_node_ptr) {
         *output_node_ptr = output_node;
     }
-#if MY_DEBUG >= MY_DEBUG_NORMAL
+#if MY_DEBUG >= MY_DEBUG_NO_ASSERT
     int16_t max = INT16_MIN;
     uint16_t u_ans;
     uint8_t ans_len = sizeof(first_sample_outputs) / sizeof(float);
@@ -277,7 +277,8 @@ uint8_t run_cnn_tests(uint16_t n_samples) {
             // stdout is not flushed at \n if it is not a terminal
             my_flush();
         }
-        my_printf_debug("idx=%d label=%d predicted=%d correct=%d" NEWLINE, i, label, predicted, label == predicted);
+        my_printf_debug("idx=%d label=%d correct=%d" NEWLINE, i, label, label == predicted);
+        my_printf("predicted=%d", predicted);
 #endif
     }
 #if MY_DEBUG >= MY_DEBUG_NORMAL
