@@ -29,6 +29,8 @@ uint8_t *nvm;
 static uint32_t shutdown_counter = UINT32_MAX;
 static uint64_t nvm_writes = 0;
 static std::ofstream out_file;
+static std::ifstream parameters_file;
+static std::ifstream samples_file;
 
 static Counters counters_data[COUNTERS_LEN];
 Counters *counters(uint16_t idx) {
@@ -107,6 +109,13 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    parameters_file.open("parameters.bin");
+    samples_file.open("samples.bin");
+    if (!parameters_file || !samples_file) {
+        my_printf("Failed to open parameters.bin or samples.bin" NEWLINE);
+        goto exit;
+    }
+
     model = load_model_from_nvm();
 
     // emulating button_pushed - treating as a fresh run
@@ -165,6 +174,16 @@ void my_memcpy(void* dest, const void* src, size_t n) {
     my_memcpy_ex(dest, src, n, 0);
 }
 
+void my_memcpy_from_parameters(void *dest, uint32_t total_offset, size_t n) {
+    parameters_file.seekg(total_offset);
+    parameters_file.read(reinterpret_cast<char*>(dest), n);
+}
+
+void read_from_samples(void *dest, uint32_t offset_in_word, size_t n) {
+    samples_file.seekg((sample_idx % PLAT_LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t));
+    samples_file.read(reinterpret_cast<char*>(dest), n);
+}
+
 void read_from_nvm(void *vm_buffer, uint32_t nvm_offset, size_t n) {
     my_memcpy_ex(vm_buffer, nvm + nvm_offset, n, 0);
 }
@@ -183,23 +202,6 @@ uint64_t get_nvm_writes(void) {
 
 void my_erase() {
     memset(nvm, 0, NVM_SIZE);
-}
-
-void copy_samples_data(void) {
-    std::ifstream samples_file("samples.bin");
-    const uint16_t samples_buflen = 1024;
-    char samples_buffer[samples_buflen];
-    uint32_t samples_offset = SAMPLES_OFFSET;
-    while (true) {
-        samples_file.read(samples_buffer, samples_buflen);
-        int16_t read_len = samples_file.gcount();
-        write_to_nvm(samples_buffer, samples_offset, read_len);
-        samples_offset += read_len;
-        my_printf_debug("Copied %d bytes of samples data" NEWLINE, read_len);
-        if (read_len < samples_buflen) {
-            break;
-        }
-    }
 }
 
 void notify_model_finished(void) {}

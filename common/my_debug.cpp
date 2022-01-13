@@ -43,7 +43,7 @@ static void print_q15(LayerOutput* layer_out, int16_t val, const ValueInfo& val_
     }
 }
 
-void dump_value(Model *model, const ParameterInfo *cur_param, LayerOutput* layer_out, size_t offset, bool has_state) {
+void dump_value(Model *model, const ParameterInfo *cur_param, LayerOutput* layer_out, uint32_t offset, bool has_state) {
     if (cur_param->bitwidth == 16) {
         print_q15(layer_out, get_q15_param(model, cur_param, offset), ValueInfo(cur_param, model), has_state);
     } else if (cur_param->bitwidth == 64) {
@@ -114,10 +114,10 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
     NUM = find_real_num(NUM, CHANNEL, H, W, cur_param);
     LayerOutput* layer_out = nullptr;
     dump_params_common(model, cur_param, layer_name, &layer_out);
-    int16_t output_tile_c = cur_param->dims[1];
+    uint16_t output_tile_c = cur_param->dims[1];
     for (uint16_t n = 0; n < NUM; n++) {
         my_printf("Matrix %d" NEWLINE, n);
-        for (uint16_t tile_c_base = 0; tile_c_base < CHANNEL; tile_c_base += output_tile_c) {
+        for (uint32_t tile_c_base = 0; tile_c_base < CHANNEL; tile_c_base += output_tile_c) {
             uint16_t cur_tile_c = MIN_VAL(output_tile_c, CHANNEL - tile_c_base);
             for (uint16_t c = 0; c < cur_tile_c; c++) {
                 if (!layer_out) {
@@ -126,7 +126,7 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
                 for (uint16_t h = 0; h < H; h++) {
                     for (uint16_t w = 0; w < W; w++) {
                         // internal format is NWHC (transposed) or NHWC
-                        size_t offset2 = n * W * H * CHANNEL + W * H * tile_c_base;
+                        uint32_t offset2 = n * W * H * CHANNEL + W * H * tile_c_base;
                         if (cur_param->param_flags & TRANSPOSED) {
                             offset2 += w * H * cur_tile_c + h * cur_tile_c + c;
                         } else {
@@ -254,7 +254,7 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
 static const uint16_t BUFFER_TEMP_SIZE = 256;
 static int16_t buffer_temp[BUFFER_TEMP_SIZE];
 
-void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint16_t output_offset, uint16_t blockSize) {
+void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint32_t output_offset, uint16_t blockSize) {
     check_buffer_address(vm_data, blockSize);
     MY_ASSERT(blockSize <= BUFFER_TEMP_SIZE);
 

@@ -33,10 +33,8 @@ Indexing policy:
 """
 
 class Constants:
-    SLOT_PARAMETERS = 0xf0
+    SLOT_PARAMETERS = 0xfe
     SLOT_TEST_SET = 0xff
-    SLOT_CONSTANTS_MIN = SLOT_PARAMETERS
-    SLOT_INTERMEDIATE_VALUES = 0b01
     NODE_NAME_LEN = 60
     EXTRA_INFO_LEN = 3  # for memory alignment
     TURNING_POINTS_LEN = 8
@@ -528,6 +526,8 @@ outputs = {
     'labels': io.BytesIO(),
 }
 
+EXTERNAL_DATA = ('parameters', 'samples')
+
 Constants.MODEL_NODES_LEN = len(graph)
 
 model = outputs['model']
@@ -605,6 +605,7 @@ for params in parameters:
             model_parameters_info.write(to_bytes(0))
         model_parameters_info.write(to_bytes(config['input_scale']))     # scale
     else:
+        param_scale = 0
         assert len(params.dims) <= 4
         if params.data_type == onnx.TensorProto.FLOAT:
             if params.float_data:
@@ -619,7 +620,8 @@ for params in parameters:
             if params.name in conv_param_names:
                 logger.info('Reorder conv param %s', params.name)
                 float_data = nchw2nhwc(float_data, params.dims)
-            slot.target.write(to_bytes(_Q15(np.array(float_data) / config['scale'], 'Parameter')))
+            param_scale = config['scale']
+            slot.target.write(to_bytes(_Q15(np.array(float_data) / param_scale, 'Parameter')))
             slot.offset += 2 * len(float_data)
             model_parameters_info.write(to_bytes(16, size=8)) # bitwidth
         elif params.data_type == onnx.TensorProto.INT64:
@@ -650,7 +652,7 @@ for params in parameters:
         # dims are always 4 uint16_t's in C++
         for _ in range(4 - len(params.dims)):
             model_parameters_info.write(to_bytes(0))
-        model_parameters_info.write(to_bytes(config['scale']))       # scale
+        model_parameters_info.write(to_bytes(param_scale))          # scale
 
     # common to input and non-inputs
     model_parameters_info.write(to_bytes(0, size=8))                 # param_flags
@@ -669,7 +671,7 @@ for idx, n in enumerate(nodes):
     intermediate_parameters_info.write(to_bytes(0))         # dummy
     for _ in range(4):  # dims[4]
         intermediate_parameters_info.write(to_bytes(0))
-    intermediate_parameters_info.write(to_bytes(config['scale']))   # scale
+    intermediate_parameters_info.write(to_bytes(0))             # scale
     intermediate_parameters_info.write(to_bytes(0, size=8))     # param_flags
     for _ in range(Constants.EXTRA_INFO_LEN):
         intermediate_parameters_info.write(to_bytes(0, size=8)) # extra_info
@@ -678,7 +680,6 @@ for idx, n in enumerate(nodes):
 
 for idx in range(model_data.images.shape[0]):
     im = model_data.images[idx, :]
-    # load_data returns NCHW
     # https://stackoverflow.com/a/34794744
     outputs['samples'].write(to_bytes(_Q15(im.flatten(order='C') / config['input_scale'], 'Input')))
     if args.write_images:
@@ -788,6 +789,10 @@ struct Node;
 extern const uint8_t * const {var_name};
 #define {var_name.upper()}_LEN {len(data)}
 ''')
+
+        if var_name[:-len('_data')] in EXTERNAL_DATA:
+            return
+
         # #define with _Pragma seems to be broken :/
         output_c.write(f'''
 const uint8_t _{var_name}[{len(data)}] = {{
@@ -810,7 +815,8 @@ const uint8_t * const {var_name} = _{var_name};
             data = data_obj.read()
         define_var(full_var_name, data)
 
-with open('samples.bin', 'wb') as f:
-    samples = outputs['samples']
-    samples.seek(0)
-    f.write(samples.read())
+for var_name in EXTERNAL_DATA:
+    with open(f'{var_name}.bin', 'wb') as f:
+        data = outputs[var_name]
+        data.seek(0)
+        f.write(data.read())

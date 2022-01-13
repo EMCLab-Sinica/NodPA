@@ -26,10 +26,9 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     /* XXX: use LEA? */
     uint16_t bitwidth = X->bitwidth;
     MY_ASSERT(bitwidth == 16);
-    int16_t data_len = X->params_len / (bitwidth / 8);
 
-    uint16_t data_offset = 0;
-    uint16_t output_offset = 0;
+    uint32_t data_offset = 0;
+    uint32_t output_offset = 0;
 #if INTERMITTENT
 
     uint32_t first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
@@ -65,7 +64,7 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
         for (; output_h < H; output_h++) {
             for (; output_w < W; output_w++) {
-                    int16_t val_offset = output_w * H * CHANNEL + output_h * CHANNEL + c;
+                    uint32_t val_offset = output_w * H * CHANNEL + output_h * CHANNEL + c;
                     output_offset = output_h * W * OUTPUT_CHANNEL + output_w * OUTPUT_CHANNEL + c;
 #if INDIRECT_RECOVERY
                     check_next_turning_point(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, output_offset);
@@ -138,13 +137,13 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             output_w = 0;
         }
     } else {
-        uint16_t i = output_offset;
+        uint32_t i = output_offset;
 #if JAPARI
         uint8_t cur_batch_offset = i % (BATCH_SIZE + 1);
 #else
         uint8_t cur_batch_offset = i % BATCH_SIZE;
 #endif
-        for (; i < data_len; i++) {
+        for (uint32_t data_len = X->params_len / (bitwidth / 8); i < data_len; i++) {
             int16_t output_val;
 #if JAPARI
             if (cur_batch_offset == BATCH_SIZE) {

@@ -7,7 +7,6 @@
 
 // growing up (like heap). Not starting from zero as first few 16 bytes are for testing (see testSPI() function)
 #define INTERMEDIATE_VALUES_OFFSET 256
-#define SAMPLES_OFFSET (INTERMEDIATE_VALUES_OFFSET + NUM_SLOTS * INTERMEDIATE_VALUES_SIZE)
 
 // growing down (like stack)
 #define FIRST_RUN_OFFSET (NVM_SIZE - 2)
@@ -24,4 +23,3 @@ void write_to_nvm(const void* vm_buffer, uint32_t nvm_offset, size_t n, uint16_t
 // DMA controller on MSP432 can handle at most 1024 words at a time
 void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint16_t total_len, uint16_t segment_size = 1024);
 void my_erase(void);
-void copy_samples_data(void);

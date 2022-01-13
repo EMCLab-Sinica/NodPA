@@ -71,14 +71,14 @@ class ModelOutput;
 class LayerOutput;
 extern std::unique_ptr<ModelOutput> model_output_data;
 
-void dump_value(Model *model, const ParameterInfo *cur_param, LayerOutput* layer_out, size_t offset, bool has_state = true);
+void dump_value(Model *model, const ParameterInfo *cur_param, LayerOutput* layer_out, uint32_t offset, bool has_state = true);
 void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state = true);
 void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info, bool has_state = true);
 void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer_name = nullptr);
 void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* layer_name = nullptr);
 void dump_model(Model *model);
 void dump_turning_points(Model *model, const ParameterInfo *output);
-void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint16_t output_offset, uint16_t blockSize);
+void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint32_t output_offset, uint16_t blockSize);
 void check_nvm_write_address_impl(uint32_t nvm_offset, size_t n);
 
 #if MY_DEBUG >= MY_DEBUG_VERBOSE

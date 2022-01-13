@@ -8,7 +8,7 @@
 #include "intermittent-cnn.h" // for sample_idx
 
 // put offset checks here as extra headers are used
-static_assert(NODES_OFFSET > SAMPLES_OFFSET + SAMPLES_DATA_LEN, "Incorrect NVM layout");
+static_assert(NODES_OFFSET > INTERMEDIATE_VALUES_OFFSET + NUM_SLOTS * INTERMEDIATE_VALUES_SIZE, "Incorrect NVM layout");
 
 Model model_vm;
 uint8_t dma_counter_enabled = 1;
@@ -46,20 +46,16 @@ const char* datatype_name<Model>(void) {
     return "model";
 }
 
-void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const void *src, size_t n, uint16_t timer_delay) {
+void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const void *src, size_t n, uint16_t timer_delay) {
     MY_ASSERT(param->bitwidth == 16);
-    MY_ASSERT(param->slot < SLOT_CONSTANTS_MIN);
+    MY_ASSERT(param->slot < NUM_SLOTS);
     uint32_t total_offset = param->params_offset + offset_in_word * sizeof(int16_t);
     MY_ASSERT(total_offset + n <= param->params_len);
     write_to_nvm(src, intermediate_values_offset(param->slot) + total_offset, n, timer_delay);
 }
 
-void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n) {
+void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n) {
     read_from_nvm(dest, intermediate_values_offset(param->slot) + offset_in_word * sizeof(int16_t), n);
-}
-
-void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
-    read_from_nvm(dest, SAMPLES_OFFSET + (sample_idx % PLAT_LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
 }
 
 ParameterInfo* get_intermediate_parameter_info(uint8_t i) {
@@ -156,7 +152,6 @@ void first_run(void) {
     dma_counter_enabled = 0;
     my_printf_debug("First run, resetting everything..." NEWLINE);
     my_erase();
-    copy_samples_data();
 
     write_to_nvm_segmented(intermediate_parameters_info_data, intermediate_parameters_info_addr(0),
                            INTERMEDIATE_PARAMETERS_INFO_DATA_LEN, sizeof(ParameterInfo));

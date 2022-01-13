@@ -72,7 +72,7 @@ static uint8_t maxpool_patch(MaxPoolParams *maxpool_params) {
 
     for (uint16_t sH = 0; sH < kernel_size; sH++) {
         for (uint16_t sW = 0; sW < kernel_size; sW++) {
-            uint16_t val_offset = (maxpool_params->output_h*stride+sH) * offset_h + (maxpool_params->output_w*stride+sW) * offset_w + maxpool_params->start_channel;
+            uint32_t val_offset = (maxpool_params->output_h*stride+sH) * offset_h + (maxpool_params->output_w*stride+sW) * offset_w + maxpool_params->start_channel;
             my_memcpy_from_param(maxpool_params->model, input_buffer, maxpool_params->data, val_offset, maxpool_params->n_channels * sizeof(int16_t));
             output_channel_offset = 0;
             for (uint8_t input_channel_offset = 0; input_channel_offset < maxpool_params->n_channels; input_channel_offset++) {
@@ -105,7 +105,7 @@ static uint8_t maxpool_patch(MaxPoolParams *maxpool_params) {
 }
 
 #if STATEFUL
-static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t len, const uint16_t output_offset, const uint16_t next_output_turning_point) {
+static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t len, const uint32_t output_offset, const uint16_t next_output_turning_point) {
     int16_t cur_offset = offset;
     for (uint8_t idx = BATCH_SIZE - 1; idx < len; idx += BATCH_SIZE) {
         if (output_offset + idx == next_output_turning_point + BATCH_SIZE - 1) {
@@ -116,7 +116,7 @@ static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t 
 }
 #endif
 #if JAPARI
-static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t len, const uint16_t output_offset, const uint16_t next_output_turning_point) {
+static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t len, const uint32_t output_offset, const uint16_t next_output_turning_point) {
     int16_t cur_footprint = (offset == 0x4000 ? 1 : -1);
     uint8_t reverted = 0;
     for (uint8_t idx = BATCH_SIZE; idx < len; idx += BATCH_SIZE + 1) {
@@ -147,7 +147,7 @@ void handle_maxpool(Model *model, const ParameterInfo *input[], ParameterInfo *o
     uint16_t new_H = H / stride;
 
     uint16_t output_h = 0, output_w = 0, c = 0;
-    uint16_t output_offset = 0;
+    uint32_t output_offset = 0;
 
 #if INTERMITTENT
     uint32_t first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));

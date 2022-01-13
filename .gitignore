@@ -9,6 +9,7 @@
 # data files
 /nvm.bin
 /samples.bin
+/parameters.bin
 /images/
 /data/others.txt
 

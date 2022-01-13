@@ -146,7 +146,7 @@ static void convTask(uint16_t offset_h, ConvTaskParams *conv_params) {
     }
 #endif
     // use NWHC so that output is written continuously on the address space
-    uint16_t cur_output_data_offset =
+    uint32_t cur_output_data_offset =
              conv_params->OUTPUT_W * conv_params->OUTPUT_H * (conv_params->input_tile_c_index * conv_params->OUTPUT_CHANNEL) +   // n
              conv_params->input_w / conv_params->stride * conv_params->OUTPUT_H * conv_params->OUTPUT_CHANNEL +       // w
              (conv_params->input_h + offset_h) / conv_params->stride * conv_params->OUTPUT_CHANNEL +                  // h
@@ -157,7 +157,7 @@ static void convTask(uint16_t offset_h, ConvTaskParams *conv_params) {
     int16_t n_keep_state_bits = n_filters;
     if (conv_params->turning_point_idx <= cur_slot_info->n_turning_points && conv_params->next_turning_point != INVALID_TURNING_POINT) {
         my_printf_debug("next_turning_point = %d" NEWLINE, conv_params->next_turning_point);
-        uint16_t ending_offset = MAX_VAL(conv_params->next_turning_point, cur_output_data_offset);
+        uint32_t ending_offset = MAX_VAL(conv_params->next_turning_point, cur_output_data_offset);
         if (ending_offset < cur_output_data_offset + n_filters) {
             n_keep_state_bits -= cur_output_data_offset + n_filters - ending_offset;
         }
@@ -319,8 +319,8 @@ static void convTask(uint16_t offset_h, ConvTaskParams *conv_params) {
 }
 
 static inline uint16_t load_input_vector(uint32_t src_addr, int16_t* dest_addr, uint16_t len, const ConvTaskParams* conv_params) {
-    my_printf_debug("Load %d IFM values from range [%d, %d) ",
-                    len, src_addr, static_cast<int>(src_addr + len));
+    my_printf_debug("Load %d IFM values from range [%" PRIu32 ", %" PRIu32 ") ",
+                    len, src_addr, src_addr + len);
     int16_t* memcpy_dest_addr = nullptr;
     uint16_t loaded_len = 0;
 
@@ -430,7 +430,7 @@ static void handle_conv_inner_loop(Model *model, ConvTaskParams *conv_params) {
         cur_input_channel = extend_for_footprints(cur_input_channel);
     }
 #endif
-    int16_t input_src_offset = (conv_params->input_h + h_start) * conv_params->W * cur_input_channel + (conv_params->input_w + w_start) * cur_input_channel;
+    uint32_t input_src_offset = (conv_params->input_h + h_start) * conv_params->W * cur_input_channel + (conv_params->input_w + w_start) * cur_input_channel;
 #if JAPARI
     input_src_offset += conv_params->input_tile_c_offset_with_footprints;
 #else
@@ -756,7 +756,7 @@ void alloc_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo *
 #if STATEFUL
 struct ConvMergeInputChunkHandlerParams {
     int16_t *to_add;
-    uint16_t data_offset;
+    uint32_t data_offset;
 };
 
 void ConvMergeInputChunkHandler(uint32_t range_offset, uint16_t range_len, int8_t state_bit, void* _params) {
@@ -844,7 +844,7 @@ void handle_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
         my_printf_debug("real_chunk_len = %d" NEWLINE, real_chunk_len);
         for (uint16_t input_tile_c_index = 0; input_tile_c_index < n_tiles_c; input_tile_c_index++) {
             int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
-            uint16_t data_offset = input_tile_c_index * tiling_results_len + tiling_results_offset;
+            uint32_t data_offset = input_tile_c_index * tiling_results_len + tiling_results_offset;
             my_memcpy_from_param(model, to_add, data, data_offset, real_chunk_len * sizeof(int16_t));
 #if STATEFUL
             start_cpu_counter();

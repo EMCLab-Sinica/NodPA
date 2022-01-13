@@ -72,7 +72,7 @@ typedef struct ParameterInfo {
      */
     uint8_t bitwidth;
     /* A flag to indicate where the data are. Possible values are SLOT_TEST_SET,
-     * SLOT_PARAMETERS and SLOT_INTERMEDIATE_VALUES.
+     * SLOT_PARAMETERS and a value in [0, NUM_SLOTS-1].
      */
     uint8_t slot;
     uint16_t dummy;
@@ -148,16 +148,15 @@ extern ParameterInfo intermediate_parameters_info_vm[MODEL_NODES_LEN];
 /**********************************
  * Helpers for the model & nodes  *
  **********************************/
-const uint8_t* get_param_base_pointer(const ParameterInfo *param, uint32_t *limit_p);
-int16_t get_q15_param(Model* model, const ParameterInfo *param, uint16_t offset_in_word);
-void put_q15_param(ParameterInfo *param, uint16_t offset_in_word, int16_t val);
+int16_t get_q15_param(Model* model, const ParameterInfo *param, uint32_t offset_in_word);
+void put_q15_param(ParameterInfo *param, uint32_t offset_in_word, int16_t val);
 int64_t get_int64_param(const ParameterInfo *param, size_t i);
 uint16_t get_next_slot(Model *model, const ParameterInfo *param);
 const ParameterInfo* get_parameter_info(uint16_t i);
 const Node* get_node(size_t i);
 const Node* get_node(const ParameterInfo* param);
 SlotInfo * get_slot_info(Model* model, uint8_t i);
-void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n);
+void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n);
 
 /**********************************
  *       Operation handlers       *
