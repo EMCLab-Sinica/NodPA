@@ -10,7 +10,7 @@
 #include "intermittent-cnn.h" // for sample_idx
 
 // put offset checks here as extra headers are used
-static_assert(NODES_OFFSET > SAMPLES_OFFSET + SAMPLES_DATA_LEN, "Incorrect NVM layout");
+static_assert(NODES_OFFSET > INTERMEDIATE_VALUES_OFFSET + NUM_SLOTS * INTERMEDIATE_VALUES_SIZE, "Incorrect NVM layout");
 
 Model model_vm;
 
@@ -47,7 +47,7 @@ const char* datatype_name<Model>(void) {
     return "model";
 }
 
-void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const void *src, size_t n, uint16_t timer_delay) {
+void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const void *src, size_t n, uint16_t timer_delay) {
     MY_ASSERT(param->slot < NUM_SLOTS);
     uint32_t total_offset = param->params_offset + offset_in_word * sizeof(int16_t);
     MY_ASSERT(total_offset + n <= param->params_len);
@@ -63,12 +63,8 @@ void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const voi
 #endif
 }
 
-void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n) {
+void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n) {
     read_from_nvm(dest, intermediate_values_offset(param->slot) + offset_in_word * sizeof(int16_t), n);
-}
-
-void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
-    read_from_nvm(dest, SAMPLES_OFFSET + (sample_idx % PLAT_LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
 }
 
 ParameterInfo* get_intermediate_parameter_info(uint8_t i) {
@@ -173,7 +169,6 @@ void commit_model(void) {
 void first_run(void) {
     my_printf_debug("First run, resetting everything..." NEWLINE);
     my_erase();
-    copy_samples_data();
     reset_counters();
 
     write_to_nvm_segmented(intermediate_parameters_info_data, intermediate_parameters_info_addr(0),
@@ -187,7 +182,7 @@ void first_run(void) {
     my_printf_debug("Init for " CONFIG "/" METHOD " with batch size=%d" NEWLINE, BATCH_SIZE);
 }
 
-void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint16_t total_len, uint16_t segment_size) {
+void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint32_t total_len, uint16_t segment_size) {
     for (uint16_t idx = 0; idx < total_len; idx += segment_size) {
         write_to_nvm(vm_buffer + idx, nvm_offset + idx, MIN_VAL(total_len - idx, segment_size));
     }

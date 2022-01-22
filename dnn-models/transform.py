@@ -502,6 +502,8 @@ outputs = {
     'labels': io.BytesIO(),
 }
 
+EXTERNAL_DATA = ('parameters', 'samples')
+
 Constants.MODEL_NODES_LEN = len(graph)
 
 model = outputs['model']
@@ -678,7 +680,6 @@ def ensure_channel_last(images, data_layout):
 images = ensure_channel_last(model_data.images, model_data.data_layout)
 for idx in range(model_data.images.shape[0]):
     im = images[idx, :]
-    # load_data returns NCHW
     # https://stackoverflow.com/a/34794744
     outputs['samples'].write(to_bytes(_Q15(im.flatten(order='C') / config['input_scale'], 'Input')))
     if args.write_images:
@@ -790,6 +791,10 @@ struct Node;
 extern const uint8_t * const {var_name};
 #define {var_name.upper()}_LEN {len(data)}
 ''')
+
+        if var_name[:-len('_data')] in EXTERNAL_DATA:
+            return
+
         # #define with _Pragma seems to be broken :/
         output_c.write(f'''
 const uint8_t _{var_name}[{len(data)}] = {{
@@ -812,7 +817,8 @@ const uint8_t * const {var_name} = _{var_name};
             data = data_obj.read()
         define_var(full_var_name, data)
 
-with open('samples.bin', 'wb') as f:
-    samples = outputs['samples']
-    samples.seek(0)
-    f.write(samples.read())
+for var_name in EXTERNAL_DATA:
+    with open(f'{var_name}.bin', 'wb') as f:
+        data = outputs[var_name]
+        data.seek(0)
+        f.write(data.read())

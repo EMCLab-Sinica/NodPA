@@ -38,7 +38,7 @@ SlotInfo* get_slot_info(Model* model, uint8_t i) {
     }
 }
 
-int16_t get_q15_param(Model* model, const ParameterInfo *param, uint16_t i) {
+int16_t get_q15_param(Model* model, const ParameterInfo *param, uint32_t i) {
     if (param->slot == SLOT_TEST_SET) {
         int16_t ret;
         read_from_samples(&ret, i, sizeof(int16_t));
@@ -54,7 +54,7 @@ int16_t get_q15_param(Model* model, const ParameterInfo *param, uint16_t i) {
     }
 }
 
-void put_q15_param(ParameterInfo *param, uint16_t i, int16_t val) {
+void put_q15_param(ParameterInfo *param, uint32_t i, int16_t val) {
     my_memcpy_to_param(param, i, &val, sizeof(int16_t), 0);
 }
 
@@ -63,7 +63,6 @@ int64_t get_int64_param(const ParameterInfo *param, size_t i) {
     int64_t ret;
     my_memcpy_from_parameters(&ret, param, i * sizeof(int64_t), sizeof(int64_t));
     return ret;
-
 }
 
 uint16_t get_next_slot(Model *model, const ParameterInfo *param) {
@@ -103,7 +102,7 @@ uint16_t get_next_slot(Model *model, const ParameterInfo *param) {
     return next_slot_id;
 }
 
-void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n) {
+void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n) {
     if (param->slot == SLOT_TEST_SET) {
         read_from_samples(dest, offset_in_word, n);
     } else if (param->slot == SLOT_PARAMETERS) {

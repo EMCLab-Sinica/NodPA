@@ -24,9 +24,9 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     const ParameterInfo *X = input[0];
 
-    int16_t data_len = X->params_len / 2;
+    uint32_t data_len = X->params_len / 2;
 
-    uint16_t output_offset = 0;
+    uint32_t output_offset = 0;
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
@@ -47,7 +47,7 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
     int16_t vals[32];
-    uint16_t i = output_offset;
+    uint32_t i = output_offset;
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
     const uint8_t real_relu_tile_size = extend_for_footprints(RELU_TILE_SIZE);

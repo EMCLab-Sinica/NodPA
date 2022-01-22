@@ -10,6 +10,7 @@
 # data files
 /nvm.bin
 /samples.bin
+/parameters.bin
 /images/
 
 # CCS-generated files

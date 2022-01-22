@@ -146,7 +146,7 @@ static uint8_t value_finished(Model* model, const ParameterInfo* output, uint32_
 }
 #endif
 
-uint32_t job_index_to_offset(const ParameterInfo *output, uint16_t job_index) {
+uint32_t job_index_to_offset(const ParameterInfo *output, uint32_t job_index) {
 #if STATEFUL
     if (job_index >= output->params_len / sizeof(int16_t)) {
         return job_index;
@@ -183,7 +183,7 @@ uint32_t job_index_to_offset(const ParameterInfo *output, uint16_t job_index) {
 #endif
 
     /* BEGIN constants */
-    uint16_t input_tile_len, input_tile_jobs, jobs_in_a_filter_tile, jobs_in_an_op, output_tile_c, OUTPUT_CHANNEL;
+    uint32_t input_tile_len, input_tile_jobs, jobs_in_a_filter_tile, jobs_in_an_op, output_tile_c, OUTPUT_CHANNEL;
     output_tile_c = node->flags.conv.output_tile_c;
     OUTPUT_CHANNEL = output->dims[1];
 

@@ -8,21 +8,21 @@
 struct ParameterInfo;
 struct Model;
 
-uint32_t job_index_to_offset(const ParameterInfo* output, uint16_t job_index);
+uint32_t job_index_to_offset(const ParameterInfo* output, uint32_t job_index);
 uint32_t batch_start(uint32_t batch_end_offset);
 
 int8_t get_state_bit(Model *model, uint8_t slot_id);
 
 #if HAWAII || STATEFUL
-static inline bool offset_has_state(uint16_t offset) {
+static inline bool offset_has_state(uint32_t offset) {
     return offset % BATCH_SIZE == BATCH_SIZE - 1;
 }
 #elif JAPARI
-static inline bool offset_has_state(uint16_t offset) {
+static inline bool offset_has_state(uint32_t offset) {
     return offset % (BATCH_SIZE + 1) == BATCH_SIZE;
 }
 #else
-static inline bool offset_has_state(uint16_t) {
+static inline bool offset_has_state(uint32_t) {
     return false;
 }
 #endif

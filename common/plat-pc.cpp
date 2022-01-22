@@ -30,6 +30,8 @@
 uint8_t *nvm;
 static uint32_t shutdown_counter = UINT32_MAX;
 static std::ofstream out_file;
+static std::ifstream parameters_file;
+static std::ifstream samples_file;
 
 #if ENABLE_COUNTERS
 Counters counters_data[2][COUNTERS_LEN];
@@ -112,6 +114,13 @@ int main(int argc, char* argv[]) {
     }
 #endif
 
+    parameters_file.open("parameters.bin", std::ios::binary);
+    samples_file.open("samples.bin", std::ios::binary);
+    if (!parameters_file || !samples_file) {
+        my_printf("Failed to open parameters.bin or samples.bin" NEWLINE);
+        goto exit;
+    }
+
     model = load_model_from_nvm();
 
     if (!model->version) {
@@ -168,8 +177,13 @@ void my_memcpy(void* dest, const void* src, size_t n) {
 }
 
 void my_memcpy_from_parameters(void *dest, const ParameterInfo *param, uint32_t offset_in_bytes, size_t n) {
-    MY_ASSERT(offset_in_bytes + n <= PARAMETERS_DATA_LEN);
-    my_memcpy(dest, parameters_data + param->params_offset + offset_in_bytes, n);
+    parameters_file.seekg(param->params_offset + offset_in_bytes);
+    parameters_file.read(reinterpret_cast<char*>(dest), n);
+}
+
+void read_from_samples(void *dest, uint32_t offset_in_word, size_t n) {
+    samples_file.seekg((sample_idx % PLAT_LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t));
+    samples_file.read(reinterpret_cast<char*>(dest), n);
 }
 
 void read_from_nvm(void *vm_buffer, uint32_t nvm_offset, size_t n) {
@@ -185,21 +199,6 @@ void write_to_nvm(const void *vm_buffer, uint32_t nvm_offset, size_t n, uint16_t
 
 void my_erase() {
     memset(nvm, 0, NVM_SIZE);
-}
-
-void copy_samples_data(void) {
-    std::ifstream samples_file("samples.bin", std::ios::binary);
-    MY_ASSERT(samples_file.good(), "Failed to open samples.bin");
-    const uint16_t samples_buflen = 1024;
-    char samples_buffer[samples_buflen];
-    uint32_t samples_offset = SAMPLES_OFFSET;
-    while (!samples_file.eof()) {
-        samples_file.read(samples_buffer, samples_buflen);
-        int16_t read_len = samples_file.gcount();
-        write_to_nvm(samples_buffer, samples_offset, read_len);
-        samples_offset += read_len;
-        my_printf_debug("Copied %d bytes of samples data" NEWLINE, read_len);
-    }
 }
 
 void notify_model_finished(void) {}

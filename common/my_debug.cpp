@@ -124,10 +124,10 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
     extract_dimensions(cur_param, &NUM, &H, &W, &CHANNEL);
     LayerOutput* layer_out = nullptr;
     dump_params_common(model, cur_param, layer_name, &layer_out);
-    int16_t output_tile_c = cur_param->dims[1];
+    uint16_t output_tile_c = cur_param->dims[1];
     for (uint16_t n = 0; n < NUM; n++) {
         my_printf("Matrix %d" NEWLINE, n);
-        for (uint16_t tile_c_base = 0; tile_c_base < CHANNEL; tile_c_base += output_tile_c) {
+        for (uint32_t tile_c_base = 0; tile_c_base < CHANNEL; tile_c_base += output_tile_c) {
             uint16_t cur_tile_c = MIN_VAL(output_tile_c, CHANNEL - tile_c_base);
             for (uint16_t c = 0; c < cur_tile_c; c++) {
                 if (!layer_out) {
@@ -136,7 +136,7 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
                 for (uint16_t h = 0; h < H; h++) {
                     for (uint16_t w = 0; w < W; w++) {
                         // internal format is NHWC
-                        size_t offset2 = n * H * W * CHANNEL + H * W * tile_c_base + h * W * cur_tile_c + w * cur_tile_c + c;
+                        uint32_t offset2 = n * H * W * CHANNEL + H * W * tile_c_base + h * W * cur_tile_c + w * cur_tile_c + c;
                         print_q15(layer_out, get_q15_param(model, cur_param, offset2), ValueInfo(cur_param, model), offset_has_state(offset2));
                     }
                     PRINT_NEWLINE_IF_DATA_NOT_SAVED
@@ -237,7 +237,7 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
 static const uint16_t BUFFER_TEMP_SIZE = 256;
 static int16_t buffer_temp[BUFFER_TEMP_SIZE];
 
-void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint16_t output_offset, uint16_t blockSize) {
+void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint32_t output_offset, uint16_t blockSize) {
     check_buffer_address(vm_data, blockSize);
     MY_ASSERT(blockSize <= BUFFER_TEMP_SIZE);
 

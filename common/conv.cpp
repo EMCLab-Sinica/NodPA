@@ -152,7 +152,7 @@ static void convTask(int16_t cur_input_h, ConvTaskParams *conv_params) {
     uint16_t output_h = (cur_input_h - conv_params->input_h_first) / conv_params->strides[0],
              output_w = (conv_params->input_w - conv_params->input_w_first) / conv_params->strides[1];
     // use NWHC so that output is written continuously on the address space
-    uint16_t cur_output_data_offset =
+    uint32_t cur_output_data_offset =
              conv_params->OUTPUT_W * conv_params->OUTPUT_H * (conv_params->input_tile_c_index * conv_params->OUTPUT_CHANNEL) +  // n
              output_w * conv_params->OUTPUT_H * conv_params->OUTPUT_CHANNEL +                                                   // w
              output_h * conv_params->OUTPUT_CHANNEL +                                                                           // h
@@ -164,7 +164,7 @@ static void convTask(int16_t cur_input_h, ConvTaskParams *conv_params) {
     int16_t n_keep_state_bits = n_filters;
     if (conv_params->turning_point_idx <= cur_slot_info->n_turning_points && conv_params->next_turning_point != INVALID_TURNING_POINT) {
         my_printf_debug("next_turning_point = %d" NEWLINE, conv_params->next_turning_point);
-        uint16_t ending_offset = MAX_VAL(conv_params->next_turning_point, cur_output_data_offset);
+        uint32_t ending_offset = MAX_VAL(conv_params->next_turning_point, cur_output_data_offset);
         if (ending_offset < cur_output_data_offset + n_filters) {
             n_keep_state_bits -= cur_output_data_offset + n_filters - ending_offset;
         }
@@ -185,11 +185,11 @@ static void convTask(int16_t cur_input_h, ConvTaskParams *conv_params) {
         uint16_t buffer_size = sizeof(int16_t) * conv_params->cur_filter_tile_c;
         uint16_t filter_len = conv_params->kH * conv_params->kW * conv_params->CHANNEL;
         for (uint16_t idx = 0; idx < cur_output_tile_c; idx++) {
-            uint16_t filter_src_offset = (conv_params->filter_idx + idx) * filter_len;
+            uint32_t filter_src_offset = (conv_params->filter_idx + idx) * filter_len;
             my_printf_debug("Copying filter %d" NEWLINE, conv_params->filter_idx + idx);
             for (uint16_t h = 0; h < conv_params->kH; h++) {
                 int16_t *filter_dest_ptr = filter_tmp + h * conv_params->dest_offset;
-                uint16_t cur_filter_src_offset = filter_src_offset + h * conv_params->kW * conv_params->CHANNEL + conv_params->input_tile_c_offset;
+                uint32_t cur_filter_src_offset = filter_src_offset + h * conv_params->kW * conv_params->CHANNEL + conv_params->input_tile_c_offset;
                 for (uint16_t w = 0; w < conv_params->kW; w++) {
                     my_memcpy_from_param(conv_params->model, filter_dest_ptr, conv_params->conv_filter, cur_filter_src_offset, buffer_size);
                     filter_dest_ptr += conv_params->cur_filter_tile_c;
@@ -340,8 +340,8 @@ static void convTask(int16_t cur_input_h, ConvTaskParams *conv_params) {
 }
 
 static inline uint16_t load_input_vector(uint32_t src_addr, int16_t* dest_addr, uint16_t len, const ConvTaskParams* conv_params) {
-    my_printf_debug("Load %d IFM values from range [%d, %d) ",
-                    len, src_addr, static_cast<int>(src_addr + len));
+    my_printf_debug("Load %d IFM values from range [%" PRIu32 ", %" PRIu32 ") ",
+                    len, src_addr, src_addr + len);
     int16_t* memcpy_dest_addr = nullptr;
     uint16_t loaded_len = 0;
 
@@ -458,7 +458,7 @@ static void handle_conv_inner_loop(Model *model, ConvTaskParams *conv_params) {
     }
     stop_cpu_counter();
 #endif
-    int16_t input_src_offset = h_start * conv_params->W * cur_input_channel + w_start * cur_input_channel;
+    uint32_t input_src_offset = h_start * conv_params->W * cur_input_channel + w_start * cur_input_channel;
 #if JAPARI
     input_src_offset += conv_params->input_tile_c_offset_with_footprints;
 #else
@@ -809,7 +809,7 @@ void alloc_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo *
 #if STATEFUL
 struct ConvMergeInputChunkHandlerParams {
     int16_t *to_add;
-    uint16_t input_offset;
+    uint32_t input_offset;
 };
 
 void ConvMergeInputChunkHandler(uint32_t range_offset, uint16_t range_len, int8_t state_bit, void* _params) {
@@ -898,7 +898,7 @@ void handle_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
             my_printf_debug("real_chunk_len = %d" NEWLINE, real_chunk_len);
             for (uint16_t input_tile_c_index = 0; input_tile_c_index < n_tiles_c; input_tile_c_index++) {
                 int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
-                uint16_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
+                uint32_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
                 my_memcpy_from_param(model, to_add, data, cur_input_offset, real_chunk_len * sizeof(int16_t));
 #if JAPARI && ENABLE_COUNTERS
                 counters()->data_loading += (real_chunk_len/2)*(4*8);
