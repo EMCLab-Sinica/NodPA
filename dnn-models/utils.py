@@ -425,3 +425,18 @@ def import_model_output_pb2():
         return model_output_pb2
     finally:
         sys.path = orig_sys_path
+
+def print_histogram(tensor):
+    shape = np.shape(tensor)
+    dimensions = np.shape(shape)[0]
+    if dimensions >= 1 and np.prod(shape) != 0:
+        threshold = 1
+        abs_tensor = np.absolute(tensor)
+        total = np.prod(tensor.shape)
+        while True:
+            count = np.count_nonzero(np.where(abs_tensor >= threshold, tensor, np.zeros(tensor.shape)))
+            if not count:
+                break
+            print(f'>= {threshold}: {count} / {100.0*count/total:.2f}%')
+            threshold *= 2
+        print(f'Max={np.max(tensor)}, min={np.min(tensor)}')

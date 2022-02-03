@@ -7,7 +7,7 @@ import numpy as np
 TOPDIR = pathlib.Path(__file__).absolute().parents[1]
 sys.path.append(str(TOPDIR / 'dnn-models'))
 
-from utils import import_model_output_pb2
+from utils import import_model_output_pb2, print_histogram
 
 def get_tensor(layer_out):
     arr = np.array(layer_out.value)
@@ -44,6 +44,7 @@ def main():
         print(f'Layer output {name}')
         if name not in baseline_data:
             continue
+        print_histogram(baseline_data[name])
         max_num = np.max(np.abs(baseline_data[name]))
         cur_baseline_data = baseline_data[name]
         cur_target_data = get_tensor(layer_out)

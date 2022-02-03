@@ -9,12 +9,19 @@ TOPDIR = pathlib.Path(__file__).absolute().parents[1]
 sys.path.append(str(TOPDIR / 'dnn-models'))
 
 from configs import configs
-from utils import dynamic_shape_inference, onnxruntime_prepare_model, onnxruntime_get_intermediate_tensor, load_model, import_model_output_pb2
+from utils import (
+    dynamic_shape_inference,
+    onnxruntime_prepare_model,
+    onnxruntime_get_intermediate_tensor,
+    load_model,
+    import_model_output_pb2,
+    print_histogram,
+)
 
 def print_float(val):
     print('%13.6f' % val, end='')
 
-def print_tensor(tensor, print_histogram):
+def print_tensor(tensor):
     shape = np.shape(tensor)
     print(f'Shape: {shape}')
     dimensions = np.shape(shape)[0]
@@ -55,18 +62,6 @@ def print_tensor(tensor, print_histogram):
         print()
     else:
         print(f'Skip: unsupported {dimensions}-dimensional array')
-    if dimensions >= 1 and np.prod(shape) != 0:
-        if print_histogram:
-            threshold = 1
-            abs_tensor = np.absolute(tensor)
-            total = np.prod(tensor.shape)
-            while True:
-                count = np.count_nonzero(np.where(abs_tensor >= threshold, tensor, np.zeros(tensor.shape)))
-                if not count:
-                    break
-                print(f'>= {threshold}: {count} / {100.0*count/total:.2f}%')
-                threshold *= 2
-        print(f'Max={np.max(tensor)}, min={np.min(tensor)}')
 
 def prepare_model_and_data(config, limit):
     model = load_model(config, for_deployment=False)
@@ -83,14 +78,16 @@ def run_model(model, model_data, limit, verbose=True, save_file=None):
         last_layer_out = None
         if verbose:
             print('Input')
-            print_tensor(model_data.images, False)
+            print_tensor(model_data.images)
         if save_file:
             model_output_pb2 = import_model_output_pb2()
             model_output = model_output_pb2.ModelOutput()
         for layer_name, op_type, layer_out in onnxruntime_get_intermediate_tensor(model, model_data.images[0:1]):
             if verbose:
                 print(f'{op_type} layer: {layer_name}')
-                print_tensor(layer_out, op_type in ('Conv', 'Gemm'))
+                print_tensor(layer_out)
+                if op_type in ('Conv', 'Gemm'):
+                    print_histogram(layer_out)
             if save_file:
                 layer_out_obj = model_output_pb2.LayerOutput()
                 layer_out_obj.name = layer_name
