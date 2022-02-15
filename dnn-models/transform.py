@@ -52,7 +52,7 @@ class Constants:
     SLOT_PARAMETERS = 0xfe
     SLOT_TEST_SET = 0xff
     NODE_NAME_LEN = 60
-    TURNING_POINTS_LEN = 8
+    TURNING_POINTS_LEN = 10
     MODEL_NODES_LEN = 0
     INPUTS_DATA_LEN = 0
     NUM_INPUTS = 0  # will be filled during parsing
@@ -67,7 +67,7 @@ class Constants:
     USE_ARM_CMSIS = 0
     CONFIG = None
 
-    DEFAULT_TILE_H = 8
+    DEFAULT_TILE_H = 32
     BATCH_SIZE = 1
     STATEFUL = 0
     HAWAII = 0
@@ -78,7 +78,7 @@ class Constants:
     FIRST_SAMPLE_OUTPUTS = []
 
 # XXX: Transpose does nothing as we happens to need NHWC
-inplace_update_ops = ['Reshape', 'Softmax', 'Squeeze', 'Transpose', 'Unsqueeze']
+inplace_update_ops = ['Dropout', 'Reshape', 'Softmax', 'Squeeze', 'Transpose', 'Unsqueeze']
 
 other_flags = [
     # parameter flags
@@ -95,6 +95,8 @@ def _Q15(arr, name):
 
     lower = -1
     upper = 32767.0 / 32768.0
+
+    arr = arr.flatten()
 
     overflowed_indices = np.concatenate((
         np.flatnonzero(np.asarray(arr < lower)),
@@ -126,7 +128,7 @@ class ONNXNodeWrapper:
         self.orig_node = orig_node
         self.max_output_id = 0
         self.flags = ffi.new('union NodeFlags*')
-        self.name = orig_node.name or orig_node.op_type
+        self.name = orig_node.name or orig_node.output[0] or orig_node.op_type
         self.inputs = []
 
     def __getattr__(self, name):
@@ -285,6 +287,7 @@ for idx, n in enumerate(nodes):
     if n.op_type == 'Conv':
         conv_param_names.add(n.input[1])
         n.flags.conv.pads = infer_auto_pad(onnx_model, n)
+        n.flags.conv.group = get_attr(n, 'group') or 1
     if n.op_type in ('Conv', 'MaxPool'):
         extra_flags = getattr(n.flags, n.op_type.lower())
         kernel_shape = find_kernel_shape(onnx_model, n)
@@ -317,6 +320,11 @@ for idx, n in enumerate(nodes):
         n.flags.gemmmerge.tile_length = config['gemm_tile_length']
     if n.op_type == 'Concat':
         n.flags.concat.axis = get_attr(n, 'axis')
+    if n.op_type == 'Add':
+        scale_tensor = find_tensor_annotation(onnx_model, key='SCALE_TENSOR', tensor_name=n.output[0])
+        if scale_tensor:
+            # * 2 for asymmetric quantization (?)
+            n.flags.add.output_scale = scale_tensor * 2
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
@@ -397,7 +405,11 @@ def determine_gemm_tile_sizes(n):
                                        (config['gemm_tile_length'] or float('inf')),
                                        # MSP432 DMA controller only allows 1024 transfers for a DMA command. For external FRAM,
                                        # 1024 transfers = 1024 bytes = 512 Q-15 values
-                                       512]) // tile_size_unit * tile_size_unit
+                                       512])
+        assert node_flags.tile_channel
+        # TODO: handle non-aligned tiles appeared in decomposed networks
+        # node_flags.tile_channel = node_flags.tile_channel // tile_size_unit * tile_size_unit
+        assert node_flags.tile_channel
         full_tile_width = (extend_for_footprints(tile_size_unit)+1)/2*2
         while node_flags.tile_channel > 0:
             tmp = int(math.ceil(B_rows / node_flags.tile_channel))
@@ -555,7 +567,7 @@ for params in parameters:
                 logger.info('Reorder conv param %s', params.name)
                 params_data = nchw2nhwc(params_data, params.dims)
             used_node = find_node_by_input(onnx_model.graph.node, params.name)
-            param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=params.name) or config['scale']
+            param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_PARAMS', tensor_name=used_node.output[0]) or config['scale']
             parameters_slot.target.write(to_bytes(_Q15(params_data / param_scale, 'Parameter')))
         elif params.data_type == onnx.TensorProto.INT64:
             param_size = 8
@@ -613,7 +625,7 @@ def ensure_channel_last(images, data_layout):
 images = ensure_channel_last(images, model_data.data_layout)
 for idx in range(images.shape[0]):
     im = images[idx, :]
-    outputs['samples'].write(to_bytes(_Q15(im.flatten(order='C') / config['input_scale'], 'Input')))
+    outputs['samples'].write(to_bytes(_Q15(im / config['input_scale'], 'Input')))
     if args.write_images:
         import cv2
         os.makedirs('images', exist_ok=True)

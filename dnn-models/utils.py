@@ -180,6 +180,9 @@ def load_model(config, model_variant, for_deployment):
     # https://github.com/onnx/optimizer/blob/v0.2.6/onnxoptimizer/passes/fuse_matmul_add_bias_into_gemm.h#L60
     change_batch_size(onnx_model)
 
+    annotation_strings =[annotation.SerializeToString()
+                         for annotation in onnx_model.graph.quantization_annotation]
+
     # https://zhuanlan.zhihu.com/p/41255090
     onnx_model = onnxoptimizer.optimize(onnx_model, [
         'eliminate_nop_dropout',
@@ -187,6 +190,12 @@ def load_model(config, model_variant, for_deployment):
         'fuse_add_bias_into_conv',
         'fuse_matmul_add_bias_into_gemm',
     ])
+
+    # onnx Graph does not preserve quantization_annotation
+    for annotation_str in annotation_strings:
+        annotation = onnx.TensorAnnotation()
+        annotation.ParseFromString(annotation_str)
+        onnx_model.graph.quantization_annotation.append(annotation)
 
     dynamic_shape_inference(onnx_model, config['sample_size'])
     onnx.checker.check_model(onnx_model)
@@ -215,7 +224,26 @@ def add_merge_nodes(model):
     del model.graph.node[:]
     model.graph.node.extend(new_nodes)
 
+added_zeros = set()
+def add_zeros(model, zero_dim):
+    new_node_name = f'Zero_{len(added_zeros)}'
+    if new_node_name in added_zeros:
+        return new_node_name
+
+    val_len = 1
+    if len(zero_dim):
+        val_len = np.prod(zero_dim)
+    model.graph.initializer.append(onnx.helper.make_tensor(
+        new_node_name, data_type=onnx.TensorProto.DataType.FLOAT, dims=zero_dim, vals=[0] * val_len
+    ))
+
+    added_zeros.add(new_node_name)
+    return new_node_name
+
 def onnxruntime_prepare_model(model):
+    # I use additional initializers to store tensor annotations, while onnxruntime does not like them
+    model = onnxoptimizer.optimize(model, ['eliminate_unused_initializer'])
+
     return backend.prepare(onnxruntime.InferenceSession(
         model.SerializeToString(),
         providers=["CPUExecutionProvider"],

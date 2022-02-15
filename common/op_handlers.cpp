@@ -247,7 +247,7 @@ void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* out
         MY_ASSERT(inp->dims[1] % BATCH_SIZE == 0);
 #endif
         output->dims[1] += inp->dims[1];
-        output->scale = (inp->scale > output->scale) ? inp->scale : output->scale;
+        output->scale = (inp->scale > output->scale) ? output->scale : inp->scale;
     }
 
     output->params_len = sizeof(int16_t);
@@ -341,6 +341,11 @@ void handle_softmax(Model*, const ParameterInfo*[], ParameterInfo*, const Node*)
     // Just let run_model determine the max value
 }
 
+void handle_dropout(Model*, const ParameterInfo*[], ParameterInfo*, const Node*) {
+    // Do nothing - dropout does not change the relative order of values.
+    // Just let run_model determine the max value
+}
+
 void handle_transpose(Model*, const ParameterInfo *input[], ParameterInfo *output, const Node*) {
     my_printf_debug("Transpose!" NEWLINE);
 
@@ -385,6 +390,12 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     uint16_t buffer_size = X->dims[1];
     int16_t *buffer_x = lea_buffer,
             *buffer_y = buffer_x + buffer_size;
+
+    if (node->flags.add.output_scale) {
+        my_printf_debug("output_scale: %f" NEWLINE, node->flags.add.output_scale);
+        float_to_scale_params(&output->scale.fract, &output->scale.shift, node->flags.add.output_scale);
+    }
+
     my_memcpy_from_param(model, buffer_y, Y, 0, buffer_size * sizeof(int16_t));
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
@@ -396,7 +407,7 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 
     int16_t scaleFract;
     uint8_t shift;
-    float_to_scale_params(&scaleFract, &shift, Y->scale/X->scale);
+    float_to_scale_params(&scaleFract, &shift, Y->scale/output->scale);
     my_scale_q15(buffer_y, scaleFract, shift, buffer_y, buffer_size);
 
     uint16_t idx = data_offset / buffer_size;
@@ -417,8 +428,14 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
         stop_cpu_counter();
 
         my_printf_debug("After strip states" NEWLINE);
-        dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(output), false);
 #endif
+        float_to_scale_params(&scaleFract, &shift, X->scale/output->scale);
+        my_scale_q15(buffer_x, scaleFract, shift, buffer_x, cur_buffer_size);
+
+        my_printf_debug("X tile" NEWLINE);
+        dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(output), false);
+        my_printf_debug("Y tile" NEWLINE);
+        dump_matrix_debug(buffer_y, cur_buffer_size, ValueInfo(output), false);
 
         my_add_q15(buffer_x, buffer_y + (buffer_size - cur_buffer_size), buffer_x, cur_buffer_size);
         my_printf_debug("After add" NEWLINE);

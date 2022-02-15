@@ -28,7 +28,7 @@ static uint32_t intermediate_values_offset(uint8_t slot_id) {
     return INTERMEDIATE_VALUES_OFFSET + slot_id * INTERMEDIATE_VALUES_SIZE;
 }
 
-static uint32_t intermediate_parameters_info_addr(uint8_t i) {
+static uint32_t intermediate_parameters_info_addr(uint16_t i) {
     return INTERMEDIATE_PARAMETERS_INFO_OFFSET + i * sizeof(ParameterInfo);
 }
 
@@ -77,7 +77,7 @@ void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
     read_from_nvm(dest, SAMPLES_OFFSET + (sample_idx % PLAT_LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
 }
 
-ParameterInfo* get_intermediate_parameter_info(uint8_t i) {
+ParameterInfo* get_intermediate_parameter_info(uint16_t i) {
     ParameterInfo* dst = intermediate_parameters_info_vm + i;
     read_from_nvm(dst, intermediate_parameters_info_addr(i), sizeof(ParameterInfo));
     my_printf_debug("Load intermediate parameter info %d from NVM" NEWLINE, i);
@@ -86,7 +86,7 @@ ParameterInfo* get_intermediate_parameter_info(uint8_t i) {
     return dst;
 }
 
-void commit_intermediate_parameter_info(uint8_t i) {
+void commit_intermediate_parameter_info(uint16_t i) {
     const ParameterInfo* src = intermediate_parameters_info_vm + i;
     MY_ASSERT(src->parameter_info_idx == i + N_INPUT);
     write_to_nvm(src, intermediate_parameters_info_addr(i), sizeof(ParameterInfo));
@@ -193,8 +193,8 @@ void first_run(void) {
     my_printf_debug("Init for " CONFIG "/" METHOD " with batch size=%d" NEWLINE, BATCH_SIZE);
 }
 
-void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint16_t total_len, uint16_t segment_size) {
-    for (uint16_t idx = 0; idx < total_len; idx += segment_size) {
+void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint32_t total_len, uint16_t segment_size) {
+    for (uint32_t idx = 0; idx < total_len; idx += segment_size) {
         write_to_nvm(vm_buffer + idx, nvm_offset + idx, MIN_VAL(total_len - idx, segment_size));
     }
 }

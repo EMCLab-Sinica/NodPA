@@ -11,6 +11,7 @@
 /nvm.bin
 /samples.bin
 /images/
+/dnn-models/*decomposed*
 
 # CCS-generated files
 # See also https://github.com/github/gitignore/blob/main/Global/Eclipse.gitignore

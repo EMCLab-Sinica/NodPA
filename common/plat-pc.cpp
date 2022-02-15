@@ -62,11 +62,11 @@ int main(int argc, char* argv[]) {
                 shutdown_counter = atol(optarg);
                 break;
             case 's':
-#ifdef USE_PROTOBUF
+#if defined(USE_PROTOBUF) && MY_DEBUG >= MY_DEBUG_LAYERS
                 out_file.open(optarg);
                 break;
 #else
-                my_printf("Cannot save outputs as protobuf support is not compiled." NEWLINE);
+                my_printf("Cannot save outputs as protobuf support is not compiled or debug is not enabled." NEWLINE);
                 return 1;
 #endif
             default:
@@ -154,7 +154,7 @@ void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
     const uint8_t *src_u = reinterpret_cast<const uint8_t*>(src);
     for (size_t idx = 0; idx < n; idx++) {
         dest_u[idx] = src_u[idx];
-        if (write_to_nvm) {
+        if (write_to_nvm && shutdown_counter != UINT32_MAX) {
             shutdown_counter--;
             if (!shutdown_counter) {
                 exit_with_status(2);

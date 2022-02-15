@@ -91,6 +91,15 @@ static void handle_tensor(Onnx__TensorProto *tensor) {
     }
 }
 
+static void handle_tensor_annotations(Onnx__TensorAnnotation* annotation) {
+    size_t i;
+    printf("Annotations for tensor with name %s:\n", annotation->tensor_name);
+    for (i = 0; i < annotation->n_quant_parameter_tensor_names; i++) {
+        Onnx__StringStringEntryProto* mapping = annotation->quant_parameter_tensor_names[i];
+        printf("\t%s => %s\n", mapping->key, mapping->value);
+    }
+}
+
 int main(void) {
   Onnx__ModelProto *msg;
   size_t i, j, k;
@@ -182,6 +191,10 @@ int main(void) {
   printf("\nValue info:\n");
   for (i = 0; i < graph->n_value_info; i++) {
       handle_value_info(graph->value_info[i]);
+  }
+  printf("\nTensor annotations:\n");
+  for (i = 0; i < graph->n_quantization_annotation; i++) {
+      handle_tensor_annotations(graph->quantization_annotation[i]);
   }
 
   onnx__model_proto__free_unpacked(msg, NULL);

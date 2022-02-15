@@ -13,3 +13,6 @@
 [submodule "ARM-CMSIS"]
 	path = ARM-CMSIS
 	url = ssh://git@github.com/EMCLab-Sinica/ARM-CMSIS.git
+[submodule "decomposition/pytorch-tensor-decompositions"]
+	path = decomposition/pytorch-tensor-decompositions
+	url = https://github.com/jacobgil/pytorch-tensor-decompositions
