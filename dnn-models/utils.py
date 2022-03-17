@@ -121,6 +121,20 @@ def load_data_google_speech(start: int, limit: int) -> ModelData:
 
     return ModelData(labels=labels, images=np.array(mfccs, dtype=np.float32), data_layout=DataLayout.NEUTRAL)
 
+def load_data_tomato(start: int, limit: int):
+    import cv2
+    image = cv2.imread('../tomato-model/TOMATO/1.jpg', cv2.IMREAD_COLOR)
+
+    # See: https://blog.csdn.net/qq_39938666/article/details/86701344 for layouts for opencv
+    x = cv2.resize(image, (300, 300)).astype(np.float32)
+    x -= (104.0, 117.0, 123.0)
+    x = x.astype(np.float32)
+    x = x[:, :, ::-1].copy()  # BGR -> RGB (layout is HWC)
+    x /= 151
+    x = np.transpose(x, (2, 0, 1))  # HWC -> CHW
+    x = np.expand_dims(x, axis=0)
+    return ModelData(labels=[0], images=x, data_layout=DataLayout.NCHW)
+
 def kws_dnn_model():
     return download_file('https://github.com/ARM-software/ML-KWS-for-MCU/raw/master/Pretrained_models/DNN/DNN_S.pb', 'KWS-DNN_S.pb')
 

@@ -2,10 +2,24 @@ from utils import (
     load_data_cifar10,
     load_data_google_speech,
     load_har,
+    load_data_tomato,
 )
 
 # intermediate_values_size should < 65536, or TI's compiler gets confused
 configs = {
+    'tomato': {
+        'onnx_model': 'dnn-models/tomato.onnx',
+        'scale': 4,
+        'input_scale': 2,
+        'num_slots': 2,
+        'intermediate_values_size': 16000000,
+        'data_loader': load_data_tomato,
+        'n_all_samples': 1,
+        'sample_size': [3, 300, 300],
+        'op_filters': 2,
+        'first_sample_outputs': [ -4.368355, -5.787876, -1.454861, 0.323135, -12.185640, -5.198028, -18.445097, 12.515130, -3.513454, 1.321224 ],
+        'fp32_accuracy': 0.9769,
+    },
     'cifar10': {
         'onnx_model': 'dnn-models/squeezenet_cifar10.onnx',
         'scale': 2,

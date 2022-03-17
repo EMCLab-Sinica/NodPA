@@ -42,7 +42,7 @@ class Constants:
     NUM_INPUTS = 0  # will be filled during parsing
     N_INPUT = 0
     # Match the size of external FRAM
-    NVM_SIZE = 512 * 1024
+    NVM_SIZE = 50 * 1024 * 1024
     N_SAMPLES = 20
     # to make the code clearer; used in Conv
     TEMP_FILTER_WIDTH = 1
