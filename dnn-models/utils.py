@@ -123,7 +123,7 @@ def load_data_google_speech(start: int, limit: int) -> ModelData:
 
 def load_data_tomato(start: int, limit: int):
     import cv2
-    image = cv2.imread('../tomato-model/TOMATO/1.jpg', cv2.IMREAD_COLOR)
+    image = cv2.imread(str(TOPDIR / 'dnn-models' / 'tomato.jpg'), cv2.IMREAD_COLOR)
 
     # See: https://blog.csdn.net/qq_39938666/article/details/86701344 for layouts for opencv
     x = cv2.resize(image, (300, 300)).astype(np.float32)
