@@ -390,8 +390,12 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
             *buffer_y = buffer_x + buffer_size;
 
     if (node->flags.add.output_scale) {
-        my_printf_debug("output_scale: %f" NEWLINE, node->flags.add.output_scale);
-        float_to_scale_params(&output->scale.fract, &output->scale.shift, node->flags.add.output_scale);
+        float output_scale = node->flags.add.output_scale;
+#if STATEFUL
+        output_scale *= 2;
+#endif
+        my_printf_debug("output_scale: %f" NEWLINE, output_scale);
+        float_to_scale_params(&output->scale.fract, &output->scale.shift, output_scale);
     }
 
     my_memcpy_from_param(model, buffer_y, Y, 0, buffer_size * sizeof(int16_t));

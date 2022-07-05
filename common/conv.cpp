@@ -454,7 +454,13 @@ static void handle_conv_inner_loop(Model *model, ConvTaskParams *conv_params) {
     }
     stop_cpu_counter();
 #endif
-    int16_t input_src_offset = (h_start * conv_params->W + w_start) * cur_input_channel * conv_params->group;
+    int16_t input_src_offset;
+    uint8_t transposed = conv_params->conv_input->param_flags & TRANSPOSED;
+    if (transposed) {
+        input_src_offset = (w_start * conv_params->H + h_start) * cur_input_channel * conv_params->group;
+    } else {
+        input_src_offset = (h_start * conv_params->W + w_start) * cur_input_channel * conv_params->group;
+    }
 #if JAPARI
     input_src_offset += conv_params->input_tile_c_offset_with_footprints;
 #else
@@ -470,13 +476,17 @@ static void handle_conv_inner_loop(Model *model, ConvTaskParams *conv_params) {
 #endif
         uint16_t input_row_len = (w_end - w_start + 1) * cur_input_tile_c * conv_params->group;
         uint32_t src_addr = input_src_offset;
-        if (cur_input_tile_c == cur_input_channel) {
+        if ((cur_input_tile_c == cur_input_channel) && !transposed) {
             load_input_vector(src_addr, dest_addr, input_row_len, conv_params);
         } else {
             for (int32_t w = w_start; w <= w_end; w++) {
                 load_input_vector(src_addr, dest_addr, cur_input_tile_c * conv_params->group, conv_params);
-                dest_addr += im2col_channel_offset;
-                src_addr += cur_input_channel;
+                dest_addr += im2col_channel_offset * conv_params->group;
+                if (transposed) {
+                    src_addr += conv_params->H * cur_input_channel * conv_params->group;
+                } else {
+                    src_addr += cur_input_channel * conv_params->group;
+                }
             }
         }
 
@@ -504,7 +514,11 @@ static void handle_conv_inner_loop(Model *model, ConvTaskParams *conv_params) {
         stop_cpu_counter();
 #endif
         dest += conv_params->dest_offset * conv_params->group;
-        input_src_offset += conv_params->W * cur_input_channel * conv_params->group;
+        if (transposed) {
+            input_src_offset += cur_input_channel * conv_params->group;
+        } else {
+            input_src_offset += conv_params->W * cur_input_channel * conv_params->group;
+        }
     }
     if (conv_params->group == 1) {
         uint16_t bias_multipler_offset = conv_params->dest_offset - 1;
@@ -596,6 +610,7 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     output->dims[2] = conv_params->OUTPUT_H;
     output->dims[3] = conv_params->OUTPUT_W;
     output->scale = conv_input->scale * conv_filter->scale;
+    output->param_flags |= TRANSPOSED;
 #if STATEFUL
     start_cpu_counter(offsetof(Counters, embedding));
     if (conv_input->slot == SLOT_TEST_SET) {
@@ -797,6 +812,7 @@ void alloc_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo *
 
     output->slot = get_next_slot(model, data);
     output->params_len = OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W * sizeof(int16_t);
+    output->param_flags &= (~TRANSPOSED);
 }
 
 #if STATEFUL

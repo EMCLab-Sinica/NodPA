@@ -83,6 +83,7 @@ inplace_update_ops = ['Dropout', 'Reshape', 'Softmax', 'Squeeze', 'Transpose', '
 other_flags = [
     # parameter flags
     'CHANNEL_FIRST',
+    'TRANSPOSED',
 ]
 
 def op_flag(flag):
