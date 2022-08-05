@@ -34,6 +34,10 @@ struct ConcatNodeFlags {
     int8_t axis;
 };
 
+struct AddNodeFlags {
+    float output_scale;
+};
+
 #define NODE_FLAGS_SIZE 16
 
 union NodeFlags {
@@ -43,6 +47,7 @@ union NodeFlags {
     struct GemmMergeNodeFlags gemmmerge;
     struct SqueezeNodeFlags squeeze;
     struct ConcatNodeFlags concat;
+    struct AddNodeFlags add;
     uint8_t as_bytes[NODE_FLAGS_SIZE];
 };
 

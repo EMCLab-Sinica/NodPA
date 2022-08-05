@@ -32,7 +32,7 @@ def main():
         content = f.read()
         graph_def.ParseFromString(content)
 
-    replace_placeholder_with_constant(graph_def, 'keep', np.array(1.0, dtype=np.float32))
+    replace_placeholder_with_constant(graph_def, 'keep', np.array(0.5, dtype=np.float32))
 
     # Not using newer tf2onnx.convert.from_graph_def() API as that seems to fail during
     # recognizing the dropout structure due to extra Identity ops

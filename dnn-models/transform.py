@@ -64,7 +64,7 @@ class Constants:
     SLOT_PARAMETERS = 0xfe
     SLOT_TEST_SET = 0xff
     NODE_NAME_LEN = 60
-    TURNING_POINTS_LEN = 8
+    TURNING_POINTS_LEN = 10
     MODEL_NODES_LEN = 0
     INPUTS_DATA_LEN = 0
     NUM_INPUTS = 0  # will be filled during parsing
@@ -104,6 +104,8 @@ def _Q15(arr, name):
     lower = -1
     upper = 32767.0 / 32768.0
 
+    arr = arr.flatten()
+
     overflowed_indices = np.concatenate((
         np.flatnonzero(np.asarray(arr < lower)),
         np.flatnonzero(np.asarray(arr > upper))
@@ -134,7 +136,7 @@ class ONNXNodeWrapper:
         self.orig_node = orig_node
         self.max_output_id = 0
         self.flags = ffi.new('union NodeFlags*')
-        self.name = orig_node.name or orig_node.op_type
+        self.name = orig_node.name or orig_node.output[0] or orig_node.op_type
         self.inputs = []
 
     def __getattr__(self, name):
@@ -318,6 +320,11 @@ for idx, n in enumerate(nodes):
         n.flags.gemmmerge.tile_length = config['gemm_tile_length']
     if n.op_type == 'Concat':
         n.flags.concat.axis = get_attr(n, 'axis')
+    if n.op_type == 'Add':
+        scale_tensor = find_tensor_annotation(onnx_model, key='SCALE_TENSOR', tensor_name=n.output[0])
+        if scale_tensor:
+            # * 2 for asymmetric quantization (?)
+            n.flags.add.output_scale = scale_tensor * 2
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
@@ -475,7 +482,7 @@ for params in parameters:
                 params_data = np.reshape(params_data, params.dims)
                 params_data = np.transpose(params_data)
 
-            param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=params.name) or config['scale']
+            param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_PARAMS', tensor_name=used_node.output[0]) or config['scale']
             parameters_slot.target.write(to_bytes(_Q15(params_data / param_scale, 'Parameter')))
         elif params.data_type == onnx.TensorProto.INT64:
             param_size = 8
@@ -533,7 +540,7 @@ def ensure_channel_last(images, data_layout):
 images = ensure_channel_last(images, model_data.data_layout)
 for idx in range(images.shape[0]):
     im = images[idx, :]
-    outputs['samples'].write(to_bytes(_Q15(im.flatten(order='C') / config['input_scale'], 'Input')))
+    outputs['samples'].write(to_bytes(_Q15(im / config['input_scale'], 'Input')))
     if args.write_images:
         import cv2
         os.makedirs('images', exist_ok=True)

@@ -29,6 +29,8 @@ configs = {
         'n_all_samples': 10000,
         'sample_size': [3, 32, 32],
         'op_filters': 2,
+        'fine_tune_batch_size': 32,
+        'learning_rate': 1e-3,
     },
     'cifar10-cnn': {
         'onnx_model': 'cifar10-cnn',
@@ -65,6 +67,8 @@ configs = {
         'n_all_samples': 2947,
         'sample_size': [9, 128],
         'op_filters': 4,
+        'fine_tune_batch_size': 4,
+        'learning_rate': 1e-3,
     },
 }
 
