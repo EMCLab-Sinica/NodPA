@@ -11,6 +11,7 @@ import zipfile
 from typing import Callable, Iterable, NamedTuple, Optional
 from urllib.request import urlretrieve
 
+import cffi
 import filelock
 import numpy as np
 import onnx
@@ -22,7 +23,7 @@ from torch.utils.data import Dataset, DataLoader
 
 logger = logging.getLogger('intermittent-cnn.utils')
 
-INPLACE_UPDATE_OPS = ['Reshape', 'Softmax', 'Squeeze', 'Unsqueeze']
+INPLACE_UPDATE_OPS = ['Dropout', 'Reshape', 'Softmax', 'Squeeze', 'Unsqueeze']
 OPS_WITH_MERGE = ['Conv', 'Gemm']
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
@@ -42,6 +43,31 @@ class ModelData(NamedTuple):
 
     def data_loader(self, limit):
         return DataLoader(self.dataset, batch_size=(limit or len(self.dataset)))
+
+def init_cffi():
+    ffi = cffi.FFI()
+
+    c_sources = ''
+    with open(THIS_DIR.parent / 'common' / 'data_structures.h') as f:
+        for line in f:
+            if line.startswith(('#include', 'static_assert')):
+                continue
+            c_sources += line
+    ffi.cdef(c_sources)
+    return ffi
+
+ffi = init_cffi()
+
+class ONNXNodeWrapper:
+    def __init__(self, orig_node: onnx.NodeProto):
+        self.orig_node = orig_node
+        self.max_output_id = 0
+        self.flags = ffi.new('union NodeFlags*')
+        self.name = orig_node.name or orig_node.output[0] or orig_node.op_type
+        self.inputs = []
+
+    def __getattr__(self, name):
+        return getattr(self.orig_node, name)
 
 def extract_archive(archive_path: pathlib.Path, subdir: str):
     archive_dir = archive_path.with_name(subdir)
@@ -206,15 +232,27 @@ def load_model(config, model_variant):
 
     return onnx_model
 
-def add_merge_nodes(model):
+def add_merge_nodes(model, nodes):
     # Split Conv/Gemm into Conv/Gemm and ConvMerge/GemmMerge (for merging OFMs from channel tiling)
     new_nodes = []
-    for idx, n in enumerate(model.graph.node):
+    ret = []
+    for idx, n in enumerate(nodes):
         if n.op_type in audio_ops:
             logger.warning('skipping audio operator %s', n.op_type)
             continue
-        new_nodes.append(n)
-        if idx+1 < len(model.graph.node) and model.graph.node[idx+1].op_type == n.op_type:
+        new_nodes.append(n.orig_node)
+        ret.append(n)
+
+        needs_merge_node = False
+        if n.op_type == 'Conv':
+            filter_info = find_initializer(model, n.input[1])
+            needs_merge_node = n.flags.conv.input_tile_c != filter_info.dims[1]
+        elif n.op_type == 'Gemm':
+            B = find_initializer(model, n.input[1])
+            B_rows = B.dims[0]
+            needs_merge_node = n.flags.gemm.tile_channel != B_rows
+
+        if idx+1 < len(nodes) and nodes[idx+1].op_type == n.op_type and not needs_merge_node:
             continue
         if n.op_type in OPS_WITH_MERGE:
             output_name = n.output[0]
@@ -224,8 +262,11 @@ def add_merge_nodes(model):
             new_node.input[:] = n.output[:] = [output_name + '_before_merge']
             new_node.output[:] = [output_name]
             new_nodes.append(new_node)
+            ret.append(ONNXNodeWrapper(new_node))
     del model.graph.node[:]
     model.graph.node.extend(new_nodes)
+
+    return ret
 
 added_zeros = set()
 def add_zeros(model, zero_dim):

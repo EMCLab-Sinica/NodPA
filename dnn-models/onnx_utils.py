@@ -9,7 +9,7 @@ from utils import (
     find_initializer,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('intermittent-cnn.onnx_utils')
 
 def add_tensor_annotation(onnx_model, key, tensor_name, data_type, vals):
     vals = np.array(vals)
@@ -20,6 +20,8 @@ def add_tensor_annotation(onnx_model, key, tensor_name, data_type, vals):
         logger.debug(f'Update existing tensor annotation {existing_tensor.name} = {vals}')
         new_tensor = onnx.helper.make_tensor(existing_tensor.name, data_type, dims, vals.flatten())
         existing_tensor.ParseFromString(new_tensor.SerializeToString())
+    else:
+        logger.debug(f'Setting tensor annotation {tensor_name}.{key} = {vals}')
 
     mapping = onnx.StringStringEntryProto()
     mapping.key = key
@@ -36,6 +38,8 @@ def add_tensor_annotation(onnx_model, key, tensor_name, data_type, vals):
     onnx_model.graph.initializer.append(tensor)
 
 def find_tensor_annotation_initializer(onnx_model: onnx.ModelProto, key: str, tensor_name: str):
+    if tensor_name.endswith('_before_merge'):
+        tensor_name = tensor_name[:-len('_before_merge')]
     for tensor_annotation in onnx_model.graph.quantization_annotation:
         if tensor_annotation.tensor_name != tensor_name:
             continue
@@ -81,16 +85,18 @@ def compute_parameter_scales(onnx_model: onnx.ModelProto):
         add_tensor_annotation(onnx_model, key='Q15_SCLAE_PARAMS', tensor_name=node.output[0],
                               data_type=onnx.TensorProto.DataType.FLOAT, vals=get_param_limit(onnx_model, node))
 
+    # Scale propagation
     for idx in range(len(onnx_model.graph.node) - 1, 0, -1):
         node = onnx_model.graph.node[idx]
-        if node.op_type not in ('ConvMerge', 'GemmMerge'):
+        if node.op_type not in ('Conv', 'Gemm'):
             continue
+        logger.debug(f'Propagate scale for {node.output[0]}')
         # * 2 for asymmetric quantization (?)
         scale = find_tensor_annotation(onnx_model, key='SCALE_TENSOR', tensor_name=node.output[0]) * 2
-        param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_PARAMS', tensor_name=node.input[0])
+        param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_PARAMS', tensor_name=node.output[0])
         new_prev_scale = (scale / param_scale)
         for idx2 in range(idx - 2, 0, -1):
-            if onnx_model.graph.node[idx2].op_type in ('Add', 'ConvMerge', 'GemmMerge'):
+            if onnx_model.graph.node[idx2].op_type in ('Add', 'Conv', 'Gemm'):
                 break
         else:
             continue

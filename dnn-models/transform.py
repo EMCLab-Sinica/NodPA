@@ -9,7 +9,6 @@ import struct
 import textwrap
 import warnings
 
-import cffi
 import onnx
 import onnx.defs
 import onnx.helper
@@ -25,8 +24,9 @@ from configs import (
 from utils import (
     DataLayout,
     INPLACE_UPDATE_OPS,
-    THIS_DIR,
+    ONNXNodeWrapper,
     add_merge_nodes,
+    ffi,
     get_attr,
     find_kernel_shape,
     find_initializer,
@@ -64,7 +64,7 @@ class Constants:
     SLOT_PARAMETERS = 0xfe
     SLOT_TEST_SET = 0xff
     NODE_NAME_LEN = 60
-    TURNING_POINTS_LEN = 10
+    TURNING_POINTS_LEN = 12
     MODEL_NODES_LEN = 0
     INPUTS_DATA_LEN = 0
     NUM_INPUTS = 0  # will be filled during parsing
@@ -118,32 +118,6 @@ def _Q15(arr, name):
 
     return (arr * 2 ** 15).astype(int)
 
-def init_cffi():
-    ffi = cffi.FFI()
-
-    c_sources = ''
-    with open(THIS_DIR.parent / 'common' / 'data_structures.h') as f:
-        for line in f:
-            if line.startswith(('#include', 'static_assert')):
-                continue
-            c_sources += line
-    ffi.cdef(c_sources)
-    return ffi
-
-ffi = init_cffi()
-
-class ONNXNodeWrapper:
-    def __init__(self, orig_node: onnx.NodeProto):
-        self.orig_node = orig_node
-        self.max_output_id = 0
-        self.flags = ffi.new('union NodeFlags*')
-        self.name = orig_node.name or orig_node.output[0] or orig_node.op_type
-        self.inputs = []
-
-    def __getattr__(self, name):
-        return getattr(self.orig_node, name)
-
-
 def get_prev_node(n):
     return nodes[names[n.input[0]] - Constants.N_INPUT]
 
@@ -181,7 +155,6 @@ images = images.numpy()
 onnx_model = load_model(config, model_variant=args.model_variant)
 Constants.FIRST_SAMPLE_OUTPUTS = list(run_model(onnx_model, model_data, limit=1, verbose=False)[0])
 Constants.FP32_ACCURACY = run_model(onnx_model, model_data, limit=None, verbose=False)
-add_merge_nodes(onnx_model)
 
 Constants.BATCH_SIZE = args.batch_size
 if args.stateful:
@@ -281,10 +254,6 @@ Constants.N_INPUT = len(names.keys())
 logger.info('Constants.N_INPUT = %d', Constants.N_INPUT)
 
 for idx, n in enumerate(nodes):
-    if n.op_type == 'Dropout':
-        output = n.output[:1]  # we don't care the second output `mask`
-    else:
-        output = n.output
     if n.op_type == 'Conv':
         conv_param_names.add(n.input[1])
         n.flags.conv.pads = infer_auto_pad(onnx_model, n)
@@ -326,8 +295,6 @@ for idx, n in enumerate(nodes):
         if scale_tensor:
             # * 2 for asymmetric quantization (?)
             n.flags.add.output_scale = scale_tensor * 2
-    for output_ in output:
-        names[output_] = idx + Constants.N_INPUT
 
 max_output_tile_size = 0
 for n in nodes:
@@ -335,7 +302,19 @@ for n in nodes:
         max_output_tile_size = max(max_output_tile_size, determine_conv_tile_c(onnx_model, config, Constants.JAPARI, args.target, n))
     if n.op_type == 'Gemm':
         max_output_tile_size = max(max_output_tile_size, determine_gemm_tile_sizes(onnx_model, config, Constants.BATCH_SIZE, args.target, n))
-    n.inputs = [names[i] for i in n.input]
+
+nodes = add_merge_nodes(onnx_model, nodes)
+
+for idx, node in enumerate(nodes):
+    if node.op_type == 'Dropout':
+        output = node.output[:1]  # we don't care the second output `mask`
+    else:
+        output = node.output
+    for output_ in output:
+        names[output_] = idx + Constants.N_INPUT
+
+for node in nodes:
+    node.inputs = [names[i] for i in node.input]
 
 for idx, node in enumerate(nodes):
     for inp in node.inputs:
