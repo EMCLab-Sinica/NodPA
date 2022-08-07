@@ -1,3 +1,4 @@
+import argparse
 import logging
 import pathlib
 import sys
@@ -36,15 +37,22 @@ def fix_onnx_ir_version(model):
 def main():
     logging.basicConfig(level=logging.DEBUG)
 
-    config = configs[sys.argv[1]]
-    model = load_model(config, for_deployment=False, model_variant='')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config', choices=configs.keys())
+    decomposition_method = parser.add_mutually_exclusive_group(required=True)
+    decomposition_method.add_argument('--cp', dest='decomposition_method', action='store_const', const='cp')
+    decomposition_method.add_argument('--tucker2', dest='decomposition_method', action='store_const', const='tucker2')
+    args = parser.parse_args()
+
+    config = configs[args.config]
+    model = load_model(config, model_variant='')
 
     model_data = config['data_loader'](train=False)
 
     for idx in range(len(model.graph.node)-1, -1, -1):
         node = model.graph.node[idx]
         if node.op_type == 'Conv':
-            decompose_conv(model, idx)
+            decompose_conv(model, idx, args.decomposition_method)
         elif node.op_type == 'Gemm':
             decompose_gemm(model, idx)
 
@@ -57,7 +65,7 @@ def main():
             type_proto=onnx.helper.make_tensor_type_proto(elem_type=initializer.data_type, shape=initializer.dims),
         ))
 
-    output_file = TOPDIR / 'dnn-models' / (config['onnx_model'] + '-decomposed.onnx')
+    output_file = TOPDIR / 'dnn-models' / (config['onnx_model'] + f'-{args.decomposition_method}.onnx')
     onnx.save_model(model, output_file)
 
     model = onnxoptimizer.optimize(model, [

@@ -1,4 +1,5 @@
 import logging
+import sys
 
 import onnx
 import onnx.numpy_helper
@@ -6,7 +7,13 @@ import numpy as np
 import tensorly.decomposition
 import tensorly.tucker_tensor
 
-from utils import add_zeros, get_attr, find_initializer, infer_auto_pad
+from utils import (
+    THIS_DIR,
+    add_zeros,
+    get_attr,
+    find_initializer,
+    infer_auto_pad,
+)
 
 logger = logging.getLogger('decomposition')
 
@@ -14,6 +21,7 @@ RECONSTRUCTION_ERROR_THRESHOLD = 0.5
 
 class Tucker2DecomposedFilter:
     def __init__(self, data):
+        sys.path.append(str(THIS_DIR.parent / 'decomposition' / 'pytorch-tensor-decompositions'))
         from VBMF import VBMF
 
         unfold_0 = tensorly.unfold(data, 0)
@@ -24,7 +32,10 @@ class Tucker2DecomposedFilter:
         ranks = [diag_0.shape[0], diag_1.shape[1]]
         for idx, rank in enumerate(ranks):
             rank = max(1, rank)
-            rank = (rank + 1) // 2 * 2
+            if rank < data.shape[idx]:
+                rank = (rank + 1) // 2 * 2
+            else:
+                rank = rank // 2 * 2
             ranks[idx] = rank
         print(f'ranks={ranks}')
         self.roots = tensorly.decomposition.partial_tucker(data, modes=[0, 1], rank=ranks)
@@ -152,14 +163,14 @@ def add_tucker2_filters(model, node, roots, new_nodes):
         new_nodes.append(onnx.helper.make_node(
             'Conv',
             inputs=inputs,
-            outputs=[outputs[0] + f'_tucker{node_idx}' if node_idx != N_NODES else outputs[0]],
+            outputs=[outputs[0] + f'_tucker{node_idx}' if node_idx != N_NODES - 1 else outputs[0]],
             pads=pads,
             strides=strides,
             kernel_shape=data.shape[2:],
         ))
         model.graph.initializer.append(onnx.helper.make_tensor(inputs[1], data_type=orig_weights.data_type, dims=data.shape, vals=data))
 
-def decompose_conv(model: onnx.ModelProto, node_idx):
+def decompose_conv(model: onnx.ModelProto, node_idx, decomposition_method: str):
     graph = model.graph
     node = graph.node[node_idx]
 
@@ -180,10 +191,10 @@ def decompose_conv(model: onnx.ModelProto, node_idx):
     data = onnx.numpy_helper.to_array(orig_weights)
     data = np.reshape(data, orig_weights.dims)
 
-    if True:
+    if decomposition_method == 'cp':
         roots = CPDecomposedFilter(data).roots
         add_cp_filters(model, node, roots, new_nodes)
-    elif False:
+    elif decomposition_method == 'tucker2':
         roots = Tucker2DecomposedFilter(data).roots
         add_tucker2_filters(model, node, roots, new_nodes)
 
