@@ -5,7 +5,11 @@ import onnx.numpy_helper
 import numpy as np
 import tensorly.decomposition
 
-from utils import add_zeros, find_initializer
+from utils import (
+    add_zeros,
+    find_initializer,
+    find_node_and_idx_by_output,
+)
 
 logger = logging.getLogger('decomposition')
 
@@ -33,8 +37,8 @@ def add_cp_filters(model, node, factors, new_nodes):
         ))
         model.graph.initializer.append(onnx.helper.make_tensor(inputs[1], data_type=orig_weights.data_type, dims=dims, vals=data))
 
-def decompose_gemm(model, node_idx):
-    node = model.graph.node[node_idx]
+def decompose_gemm(model: onnx.ModelProto, node_output_name: str):
+    node, node_idx = find_node_and_idx_by_output(model.graph.node, node_output_name)
 
     new_nodes = []
     orig_weights_name = node.input[1]

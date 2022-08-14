@@ -47,14 +47,17 @@ def main():
     config = configs[args.config]
     model = load_model(config, model_variant='')
 
+    orig_model = onnx.ModelProto()
+    orig_model.ParseFromString(model.SerializeToString())
+
     model_data = config['data_loader'](train=False)
 
     for idx in range(len(model.graph.node)-1, -1, -1):
-        node = model.graph.node[idx]
+        node = orig_model.graph.node[idx]
         if node.op_type == 'Conv':
-            decompose_conv(model, idx, args.decomposition_method)
+            decompose_conv(model, node.output[0], args.decomposition_method)
         elif node.op_type == 'Gemm':
-            decompose_gemm(model, idx)
+            decompose_gemm(model, node.output[0])
 
     input_names = set(inp.name for inp in model.graph.input)
     for initializer in model.graph.initializer:

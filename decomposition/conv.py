@@ -12,6 +12,7 @@ from utils import (
     add_zeros,
     get_attr,
     find_initializer,
+    find_node_and_idx_by_output,
     infer_auto_pad,
 )
 
@@ -170,9 +171,9 @@ def add_tucker2_filters(model, node, roots, new_nodes):
         ))
         model.graph.initializer.append(onnx.helper.make_tensor(inputs[1], data_type=orig_weights.data_type, dims=data.shape, vals=data))
 
-def decompose_conv(model: onnx.ModelProto, node_idx, decomposition_method: str):
+def decompose_conv(model: onnx.ModelProto, node_output_name: str, decomposition_method: str):
     graph = model.graph
-    node = graph.node[node_idx]
+    node, node_idx = find_node_and_idx_by_output(graph.node, node_output_name)
 
     new_nodes = []
     orig_weights_name = node.input[1]
