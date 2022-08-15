@@ -126,11 +126,16 @@ def find_tensor_value_info(onnx_model: onnx.ModelProto, name: str) -> onnx.Value
             return value_info
     raise ValueError(f'No value_info found for {name}')
 
-def find_node_by_output(nodes: list[onnx.NodeProto], output_name: str) -> onnx.NodeProto:
-    for node in nodes:
+def find_node_and_idx_by_output(nodes: list[onnx.NodeProto], output_name: str) -> tuple[Optional[onnx.NodeProto], Optional[int]]:
+    for idx, node in enumerate(nodes):
         for output in node.output:
             if output == output_name:
-                return node
+                return node, idx
+    return None, None
+
+def find_node_by_output(nodes: list[onnx.NodeProto], output_name: str) -> onnx.NodeProto:
+    node, _ = find_node_and_idx_by_output(nodes, output_name)
+    return node
 
 def find_node_by_input(nodes: list[onnx.NodeProto], input_name: str) -> onnx.NodeProto:
     for node in nodes:
@@ -197,6 +202,20 @@ def get_model_ops(onnx_model):
 
     return ops
 
+def onnx_optimize(onnx_model: onnx.ModelProto, passes: list[str]):
+    annotation_strings =[annotation.SerializeToString()
+                         for annotation in onnx_model.graph.quantization_annotation]
+
+    onnx_model = onnxoptimizer.optimize(onnx_model, passes)
+
+    # onnx Graph does not preserve quantization_annotation
+    for annotation_str in annotation_strings:
+        annotation = onnx.TensorAnnotation()
+        annotation.ParseFromString(annotation_str)
+        onnx_model.graph.quantization_annotation.append(annotation)
+
+    return onnx_model
+
 def load_model(config, model_variant):
     model_name = config['onnx_model']
     if model_variant:
@@ -210,22 +229,13 @@ def load_model(config, model_variant):
     dynamic_shape_inference(onnx_model, config['sample_size'])
     change_batch_size(onnx_model)
 
-    annotation_strings =[annotation.SerializeToString()
-                         for annotation in onnx_model.graph.quantization_annotation]
-
     # https://zhuanlan.zhihu.com/p/41255090
-    onnx_model = onnxoptimizer.optimize(onnx_model, [
+    onnx_model = onnx_optimize(onnx_model, [
         'eliminate_nop_dropout',
         'extract_constant_to_initializer',
         'fuse_add_bias_into_conv',
         'fuse_matmul_add_bias_into_gemm',
     ])
-
-    # onnx Graph does not preserve quantization_annotation
-    for annotation_str in annotation_strings:
-        annotation = onnx.TensorAnnotation()
-        annotation.ParseFromString(annotation_str)
-        onnx_model.graph.quantization_annotation.append(annotation)
 
     dynamic_shape_inference(onnx_model, config['sample_size'])
     onnx.checker.check_model(onnx_model)

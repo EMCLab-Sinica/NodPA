@@ -66,6 +66,7 @@ def decompose_gemm(model: onnx.ModelProto, node_output_name: str):
     add_cp_filters(model, node, factors, new_nodes)
 
     model.graph.node.remove(node)
+    model.graph.initializer.remove(orig_weights)
     for new_node in new_nodes:
         model.graph.node.insert(node_idx, new_node)
         node_idx += 1

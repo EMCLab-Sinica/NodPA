@@ -200,6 +200,7 @@ def decompose_conv(model: onnx.ModelProto, node_output_name: str, decomposition_
         add_tucker2_filters(model, node, roots, new_nodes)
 
     graph.node.remove(node)
+    graph.initializer.remove(orig_weights)
     for new_node in new_nodes:
         graph.node.insert(node_idx, new_node)
         node_idx += 1
