@@ -278,11 +278,13 @@ def add_merge_nodes(model, nodes):
 
     return ret
 
-added_zeros = set()
 def add_zeros(model, zero_dim):
-    new_node_name = f'Zero_{len(added_zeros)}'
-    if new_node_name in added_zeros:
-        return new_node_name
+    idx = 0
+    while True:
+        new_node_name = f'Zero_{idx}'
+        if not find_initializer(model, new_node_name):
+            break
+        idx += 1
 
     val_len = 1
     if len(zero_dim):
@@ -291,7 +293,6 @@ def add_zeros(model, zero_dim):
         new_node_name, data_type=onnx.TensorProto.DataType.FLOAT, dims=zero_dim, vals=[0] * val_len
     ))
 
-    added_zeros.add(new_node_name)
     return new_node_name
 
 def onnxruntime_prepare_model(model):
