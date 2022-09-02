@@ -1,3 +1,4 @@
+import functools
 import logging
 import sys
 
@@ -15,69 +16,55 @@ from utils import (
     find_node_and_idx_by_output,
     infer_auto_pad,
 )
+from decomposition.common import (
+    Context,
+    add_new_nodes,
+    find_rank,
+    try_cp_rank,
+)
+from fine_tune import fine_tune
 
-logger = logging.getLogger('decomposition')
+logger = logging.getLogger('decomposition.conv')
 
-RECONSTRUCTION_ERROR_THRESHOLD = 0.5
+def tucker2_decomposition(ctx):
+    sys.path.append(str(THIS_DIR.parent / 'decomposition' / 'pytorch-tensor-decompositions'))
+    from VBMF import VBMF
 
-class Tucker2DecomposedFilter:
-    def __init__(self, data):
-        sys.path.append(str(THIS_DIR.parent / 'decomposition' / 'pytorch-tensor-decompositions'))
-        from VBMF import VBMF
+    unfold_0 = tensorly.unfold(ctx.orig_weights_data, 0)
+    unfold_1 = tensorly.unfold(ctx.orig_weights_data, 1)
+    _, diag_0, _, _ = VBMF.EVBMF(unfold_0)
+    _, diag_1, _, _ = VBMF.EVBMF(unfold_1)
+    ranks = [diag_0.shape[0], diag_1.shape[1]]
+    for idx, rank in enumerate(ranks):
+        rank = max(1, rank)
+        if rank < ctx.orig_weights_data.shape[idx]:
+            rank = (rank + 1) // 2 * 2
+        else:
+            rank = rank // 2 * 2
+        ranks[idx] = rank
+    logger.info('ranks=%r', ranks)
+    roots = tensorly.decomposition.partial_tucker(ctx.orig_weights_data, modes=[0, 1], rank=ranks)
 
-        unfold_0 = tensorly.unfold(data, 0)
-        unfold_1 = tensorly.unfold(data, 1)
-        sigma2 = 0.02 # XXX: sigma2 estimation does not work!?
-        _, diag_0, _, _ = VBMF.EVBMF(unfold_0, sigma2=sigma2)
-        _, diag_1, _, _ = VBMF.EVBMF(unfold_1, sigma2=sigma2)
-        ranks = [diag_0.shape[0], diag_1.shape[1]]
-        for idx, rank in enumerate(ranks):
-            rank = max(1, rank)
-            if rank < data.shape[idx]:
-                rank = (rank + 1) // 2 * 2
-            else:
-                rank = rank // 2 * 2
-            ranks[idx] = rank
-        print(f'ranks={ranks}')
-        self.roots = tensorly.decomposition.partial_tucker(data, modes=[0, 1], rank=ranks)
+    new_nodes = []
 
-class CPDecomposedFilter:
-    def __init__(self, data):
-        rank_lower = 2
-        shape = np.array(data.shape)
-        max_dim = max(np.delete(shape, np.where(shape == 1))) + 1
-        rank_upper = 1
-        while rank_upper <= max_dim:
-            (weights, factors), rec_error = tensorly.decomposition.parafac(data, rank=rank_upper, return_errors=True)
-            print(f'rank={rank_upper}, error={rec_error[-1]}')
-            if rec_error[-1] < RECONSTRUCTION_ERROR_THRESHOLD:
-                break
-            rank_upper *= 2
+    decomposed_model = onnx.ModelProto()
+    decomposed_model.ParseFromString(ctx.model.SerializeToString())
 
-        # Only try even ranks to avoid matrices with odd columns in GEMM
-        while rank_lower + 2 < rank_upper:
-            try_rank = ((rank_upper + rank_lower) // 2 + 1) // 2 * 2
-            (weights, factors), rec_error = tensorly.decomposition.parafac(data, rank=try_rank, return_errors=True)
-            print(f'rank={try_rank}, error={rec_error[-1]}')
-            if rec_error[-1] < RECONSTRUCTION_ERROR_THRESHOLD:
-                rank_upper = try_rank
-            else:
-                rank_lower = try_rank
-        self.roots = (weights, factors)
+    add_tucker2_filters(decomposed_model, ctx.node, roots, new_nodes)
+    add_new_nodes(ctx, decomposed_model, new_nodes)
 
-def add_cp_filters(model, node, roots, new_nodes):
-    weights, factors = roots
+    decomposed_model = fine_tune(ctx.model, ctx.train_data, ctx.test_data, ctx.epoch, qat=False, config=ctx.config)
 
-    print([factor.shape for factor in factors])
+    return decomposed_model
 
+def add_cp_filters(ctx, model, weights, factors, orig_weights_shape, new_nodes):
     assert np.all(weights == [1] * len(weights)), weights
 
-    orig_inputs = node.input
-    outputs = node.output
+    orig_inputs = ctx.node.input
+    outputs = ctx.node.output
 
-    orig_weights = find_initializer(model, orig_inputs[1])
-    orig_pads = infer_auto_pad(model, node)
-    orig_strides = get_attr(node, 'strides')
+    orig_pads = infer_auto_pad(model, ctx.node)
+    orig_strides = get_attr(ctx.node, 'strides')
 
     EXPANDED_DIMS = [
         [2, 3],
@@ -87,9 +74,22 @@ def add_cp_filters(model, node, roots, new_nodes):
     ]
     DIMS = [1, 2, 3, 0]
 
-    for node_idx in range(4):
+    n_nodes = len(factors)
+
+    augmented_factors = []
+    for dim in orig_weights_shape:
+        if dim == 1:
+            augmented_factors.append(None)
+        else:
+            augmented_factors.append(factors.pop(0))
+
+    node_idx = 0
+    for _ in range(4):
         inputs = list(orig_inputs)
-        dim = DIMS[node_idx]
+        dim = DIMS.pop(0)
+        expand_dims = EXPANDED_DIMS.pop(0)
+        if orig_weights_shape[dim] == 1:
+            continue
         if node_idx != 0:
             inputs[0] = outputs[0] + f'_cp{node_idx-1}'
         inputs[1] = orig_inputs[1] + f'_cp{node_idx}'
@@ -100,23 +100,23 @@ def add_cp_filters(model, node, roots, new_nodes):
             for pad_dim in (dim-2, dim):
                 pads[pad_dim] = orig_pads[pad_dim]
             strides[dim-2] = orig_strides[dim-2]
-        data = factors[dim]
+        data = augmented_factors[dim]
         if dim != 0:
             if len(inputs) == 3:
                 inputs[2] = add_zeros(model, (np.shape(data)[1],))
             data = np.transpose(data)
-        print(f'max/mean={np.max(np.abs(data)) / np.mean(np.abs(data))}')
-        data = np.expand_dims(data, axis=EXPANDED_DIMS[node_idx])
+        data = np.expand_dims(data, axis=expand_dims)
         new_nodes.append(onnx.helper.make_node(
             'Conv',
             inputs=inputs,
-            outputs=[outputs[0] + f'_cp{node_idx}' if node_idx != 3 else outputs[0]],
+            outputs=[outputs[0] + f'_cp{node_idx}' if node_idx != n_nodes - 1 else outputs[0]],
             pads=pads,
             strides=strides,
             kernel_shape=data.shape[2:],
             group=len(weights) if dim in (2, 3) else 1,
         ))
-        model.graph.initializer.append(onnx.helper.make_tensor(inputs[1], data_type=orig_weights.data_type, dims=data.shape, vals=data))
+        model.graph.initializer.append(onnx.helper.make_tensor(inputs[1], data_type=ctx.orig_weights.data_type, dims=data.shape, vals=data))
+        node_idx += 1
 
 def add_tucker2_filters(model, node, roots, new_nodes):
     core, factors = roots
@@ -157,9 +157,7 @@ def add_tucker2_filters(model, node, roots, new_nodes):
         if dim != 0:
             inputs = inputs[:2]
         data = weights[node_idx]
-        print(np.shape(data))
         data = np.transpose(data, axes=TRANSPOSE_AXES[node_idx])
-        # print(f'max/mean={np.max(np.abs(data)) / np.mean(np.abs(data))}')
         data = np.expand_dims(data, axis=EXPANDED_DIMS[node_idx])
         new_nodes.append(onnx.helper.make_node(
             'Conv',
@@ -171,36 +169,41 @@ def add_tucker2_filters(model, node, roots, new_nodes):
         ))
         model.graph.initializer.append(onnx.helper.make_tensor(inputs[1], data_type=orig_weights.data_type, dims=data.shape, vals=data))
 
-def decompose_conv(model: onnx.ModelProto, node_output_name: str, decomposition_method: str):
-    graph = model.graph
-    node, node_idx = find_node_and_idx_by_output(graph.node, node_output_name)
+def decompose_conv(model, orig_accuracy, node_output_name, train_data, test_data, epoch, config, decomposition_method):
+    node, node_idx = find_node_and_idx_by_output(model.graph.node, node_output_name)
 
-    new_nodes = []
     orig_weights_name = node.input[1]
     orig_weights = find_initializer(model, orig_weights_name)
     assert orig_weights
 
-    one_dims = 0
-    for dim in orig_weights.dims:
-        if dim == 1:
-            one_dims += 1
-    if one_dims >= 2:
-        return
+    logger.info('Decomposing %s node %s', node.op_type, node.output[0])
 
-    logger.info('Decomposing %s node %s', node.op_type, node.name)
+    orig_weights_data = onnx.numpy_helper.to_array(orig_weights)
+    orig_weights_data = np.reshape(orig_weights_data, orig_weights.dims)
 
-    data = onnx.numpy_helper.to_array(orig_weights)
-    data = np.reshape(data, orig_weights.dims)
+    ctx = Context(
+        model=model,
+        node=node,
+        node_idx=node_idx,
+        orig_weights=orig_weights,
+        orig_weights_data=orig_weights_data,
+        train_data=train_data,
+        test_data=test_data,
+        orig_accuracy=orig_accuracy,
+        epoch=epoch,
+        config=config,
+    )
 
     if decomposition_method == 'cp':
-        roots = CPDecomposedFilter(data).roots
-        add_cp_filters(model, node, roots, new_nodes)
+        shape = np.array(ctx.orig_weights_data.shape)
+        shape = np.delete(shape, np.where(shape == 1))
+        if len(shape) > 2:
+            max_dim = max(shape) + 1
+        else:
+            max_dim = min(shape) + 1
+        try_rank_func = functools.partial(try_cp_rank, ctx=ctx, add_cp_filters_func=add_cp_filters)
+        decomposed_model = find_rank(ctx.orig_accuracy, max_dim, try_rank_func=try_rank_func)
     elif decomposition_method == 'tucker2':
-        roots = Tucker2DecomposedFilter(data).roots
-        add_tucker2_filters(model, node, roots, new_nodes)
+        decomposed_model = tucker2_decomposition(ctx)
 
-    graph.node.remove(node)
-    graph.initializer.remove(orig_weights)
-    for new_node in new_nodes:
-        graph.node.insert(node_idx, new_node)
-        node_idx += 1
+    return decomposed_model

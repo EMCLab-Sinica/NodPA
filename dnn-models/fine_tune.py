@@ -21,6 +21,7 @@ from onnx_utils import (
     add_tensor_annotation,
 )
 
+import numpy as np
 import torch
 import torch.quantization
 import torch.quantization.quantize_fx as quantize_fx
@@ -47,7 +48,7 @@ def measure_accuracy(net, testloader, device):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
 
-    logger.info('Accuracy of the network on the 10000 test images: %.4f', correct / total)
+    return correct / total
 
 def train_model(net, trainloader, testloader, device, lr, epoch):
     criterion = torch.nn.CrossEntropyLoss()
@@ -146,14 +147,21 @@ class FXGraphWalker:
         self.onnx_node_idx += 1
 
     def _handle_linear(self, op, onnx_op_type):
-        params = [op.weight(), op.bias()]
+        # Different APIs for usual and quantized modules...
+        if callable(op.weight):
+            params = [op.weight(), op.bias()]
+        else:
+            params = [op.weight, op.bias]
+
+        params = [torch.dequantize(param).detach().numpy() if param is not None else None
+                  for param in params]
         if onnx_op_type == 'Gemm':
-            params[0] = torch.transpose(params[0], 0, 1)
+            params[0] = np.transpose(params[0])
         onnx_node = self._go_to_onnx_node(onnx_op_type)
         for idx in range(len(onnx_node.input[1:])):
             onnx_param = find_initializer(self.onnx_model, onnx_node.input[1+idx])
-            assert onnx_param.dims == list(params[idx].size())
-            new_param = onnx.helper.make_tensor(onnx_param.name, onnx_param.data_type, onnx_param.dims, vals=torch.flatten(torch.dequantize(params[idx])))
+            assert onnx_param.dims == list(np.shape(params[idx]))
+            new_param = onnx.helper.make_tensor(onnx_param.name, onnx_param.data_type, onnx_param.dims, vals=params[idx].flatten())
             onnx_param.ParseFromString(new_param.SerializeToString())
         if self.add_tensor_annotations:
             add_tensor_annotation(self.onnx_model, key='SCALE_TENSOR', tensor_name=onnx_node.output[0],
@@ -164,9 +172,9 @@ class FXGraphWalker:
 
     def _handle_call_module(self, node):
         op = getattr(self.net, node.target)
-        if isinstance(op, torch.nn.quantized.Conv2d):
+        if isinstance(op, (torch.nn.quantized.Conv2d, torch.nn.Conv2d)):
             self._handle_linear(op, 'Conv')
-        elif isinstance(op, torch.nn.quantized.Linear):
+        elif isinstance(op, (torch.nn.quantized.Linear, torch.nn.Linear)):
             self._handle_linear(op, 'Gemm')
 
     def _handle_call_function(self, node):
@@ -192,9 +200,6 @@ class FXGraphWalker:
         for node in self.net.graph.nodes:
             self._handle_node(node)
 
-def copy_quantized_parameters(net_int8, onnx_model: onnx.ModelProto, add_tensor_annotations: bool):
-    FXGraphWalker(net_int8, onnx_model, add_tensor_annotations).run()
-
 def strip_softmax(onnx_model: onnx.ModelProto):
     # PyTorch CrossEntropyLoss already includes Softmax - strip it from the model
     output_node = find_node_by_output(onnx_model.graph.node, onnx_model.graph.output[0].name)
@@ -207,7 +212,7 @@ def strip_softmax(onnx_model: onnx.ModelProto):
         onnx_model.graph.value_info.extend(new_value_infos)
         logger.info('Removed %s', output_node.name)
 
-def fine_tune(onnx_model: onnx.ModelProto, epoch: int, config: dict[str, Any]):
+def fine_tune(onnx_model: onnx.ModelProto, train_data, test_data, epoch: int, qat: bool, config: dict[str, Any]):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     logger.info('Using device %s', device)
 
@@ -229,31 +234,32 @@ def fine_tune(onnx_model: onnx.ModelProto, epoch: int, config: dict[str, Any]):
     net.to(device)
 
     net.train()
-    # fbgemm uses per-channel quantization, which is not supported yet
-    # https://github.com/pytorch/pytorch/issues/75785
-    net.qconfig = torch.quantization.get_default_qat_qconfig('qnnpack')
+    if qat:
+        # fbgemm uses per-channel quantization, which is not supported yet
+        # https://github.com/pytorch/pytorch/issues/75785
+        net.qconfig = torch.quantization.get_default_qat_qconfig('qnnpack')
 
-    # Skip fuse_modules - requires manually listing modules & seems working without that
+        # Skip fuse_modules - requires manually listing modules & seems working without that
 
-    qconfig_dict = {
-        '': net.qconfig,
-    }
-    try:
-        # example_inputs available and needed since pytorch 1.13
-        # https://github.com/pytorch/pytorch/pull/77608
-        net_prepared = quantize_fx.prepare_qat_fx(net, qconfig_dict, example_inputs=(example_inputs,))
-    except TypeError:
-        net_prepared = quantize_fx.prepare_qat_fx(net, qconfig_dict)
+        qconfig_dict = {
+            '': net.qconfig,
+        }
+        try:
+            # example_inputs available and needed since pytorch 1.13
+            # https://github.com/pytorch/pytorch/pull/77608
+            net_prepared = quantize_fx.prepare_qat_fx(net, qconfig_dict, example_inputs=(example_inputs,))
+        except TypeError:
+            net_prepared = quantize_fx.prepare_qat_fx(net, qconfig_dict)
+    else:
+        net_prepared = net
 
     batch_size = config['fine_tune_batch_size']
 
     if epoch:
-        trainset = config['data_loader'](train=True).dataset
-        trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
+        trainloader = torch.utils.data.DataLoader(train_data.dataset, batch_size=batch_size,
                                                   shuffle=True, pin_memory=True)
 
-        testset = config['data_loader'](train=False).dataset
-        testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
+        testloader = torch.utils.data.DataLoader(test_data.dataset, batch_size=batch_size,
                                                  shuffle=True, pin_memory=True)
 
         train_model(net_prepared, trainloader, testloader, device, lr=config['learning_rate'], epoch=epoch)
@@ -263,15 +269,19 @@ def fine_tune(onnx_model: onnx.ModelProto, epoch: int, config: dict[str, Any]):
     net_prepared.to(device)
     net_prepared.eval()
 
-    net_int8 = quantize_fx.convert_fx(net_prepared)
+    if qat:
+        result_net = quantize_fx.convert_fx(net_prepared)
+    else:
+        result_net = net_prepared
     if epoch:
-        measure_accuracy(net_int8, testloader, device)
+        accuracy = measure_accuracy(result_net, testloader, device)
+        logger.info('Accuracy for int8 network: %.4f', accuracy)
 
-    copy_quantized_parameters(net_int8, onnx_model, add_tensor_annotations=False)
+    FXGraphWalker(result_net, onnx_model, add_tensor_annotations=qat).run()
 
     dynamic_shape_inference(onnx_model, config['sample_size'])
 
-    return onnx_model, net_int8
+    return onnx_model
 
 def main():
     parser = argparse.ArgumentParser()
@@ -281,15 +291,16 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig()
-    logging.getLogger('intermittent-cnn').setLevel(logging.DEBUG)
+    logging.getLogger('intermittent-cnn').setLevel(logging.INFO)
+    logging.getLogger('decomposition').setLevel(logging.INFO)
 
     config = configs[args.config]
 
     onnx_model = load_model(config, args.model_variant)
 
-    onnx_model, net_int8 = fine_tune(onnx_model, args.epoch, config)
-
-    copy_quantized_parameters(net_int8, onnx_model, add_tensor_annotations=True)
+    train_data = config['data_loader'](train=True)
+    test_data = config['data_loader'](train=False)
+    onnx_model = fine_tune(onnx_model, train_data, test_data, args.epoch, qat=True, config=config)
 
     onnx.save_model(onnx_model, THIS_DIR / f'{config["onnx_model"]}-{args.model_variant}_qat.onnx')
 
