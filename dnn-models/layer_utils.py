@@ -109,7 +109,10 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: dict[str, Any
                                        (config['gemm_tile_length'] or float('inf')),
                                        # MSP432 DMA controller only allows 1024 transfers for a DMA command. For external FRAM,
                                        # 1024 transfers = 1024 bytes = 512 Q-15 values
-                                       512]) // tile_size_unit * tile_size_unit
+                                       512])
+        if node_flags.tile_channel < tile_size_unit:
+            break
+        node_flags.tile_channel = node_flags.tile_channel // tile_size_unit * tile_size_unit
         full_tile_width = (extend_for_footprints(batch_size, tile_size_unit)+1)/2*2
         while node_flags.tile_channel > 0:
             tmp = int(math.ceil(B_rows / node_flags.tile_channel))
