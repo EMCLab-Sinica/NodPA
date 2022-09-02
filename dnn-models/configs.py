@@ -43,6 +43,8 @@ configs = {
         'n_all_samples': 10000,
         'sample_size': [3, 32, 32],
         'op_filters': 2,
+        'fine_tune_batch_size': 32,
+        'learning_rate': 1e-3,
     },
     'kws': {
         'onnx_model': 'KWS-DNN_S',
