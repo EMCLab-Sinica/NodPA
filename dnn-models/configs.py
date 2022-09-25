@@ -49,7 +49,7 @@ configs = {
     'kws': {
         'onnx_model': 'KWS-DNN_S',
         'scale': 1,
-        'input_scale': 120,
+        'input_scale': 180,
         'num_slots': 2,
         # 1st fc output = (1*144*2)*sizeof(int16_t), N/T_n=2
         'intermediate_values_size': 576,
@@ -57,6 +57,9 @@ configs = {
         'n_all_samples': 4890,
         'sample_size': [25, 10],  # MFCC gives 25x10 tensors
         'op_filters': 4,
+        # https://github.com/ARM-software/ML-KWS-for-MCU/blob/master/train.py#L411
+        'fine_tune_batch_size': 100,
+        'learning_rate': 5e-4,
     },
     'har': {
         'onnx_model': 'HAR-CNN',
