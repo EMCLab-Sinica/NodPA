@@ -209,9 +209,6 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             compare_vm_nvm(buffer_temp, model, output, output_offset, values_to_preserve);
 
             my_printf_debug("output_offset=%d" NEWLINE, output_offset);
-#if HAWAII
-            hawaii_record_footprints(model, values_to_preserve);
-#endif
             output_offset += values_to_preserve;
         }
         j = j_with_footprints = 0;

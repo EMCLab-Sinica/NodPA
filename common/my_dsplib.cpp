@@ -168,6 +168,16 @@ void my_min_q15(const int16_t *pSrc, uint32_t blockSize, int16_t *pResult, uint1
 static int16_t pState[ARM_PSTATE_LEN];
 #endif
 
+static void my_memcpy_to_param_with_footprints(ParameterInfo *param, uint16_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear) {
+#if !HAWAII
+    my_memcpy_to_param(param, offset_in_word, src, n, timer_delay, is_linear);
+#else
+    MY_ASSERT(n == sizeof(int16_t));
+    my_memcpy_to_param(param, offset_in_word, src, n, 0, is_linear);
+    write_hawaii_layer_footprint(get_model()->layer_idx, 1);
+#endif
+}
+
 void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16_t B_cols, int16_t *pSrcA, int16_t *pSrcB, int16_t *pDst, ParameterInfo *param, uint16_t offset_in_word, size_t values_to_preserve) {
     // XXX: LEA doc requires all matrix dimensions to be even, while LEA
     // appears to still give correct results when srcARows is odd
@@ -184,20 +194,26 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
     matrix_mpy_params.srcACols = A_cols;
     matrix_mpy_params.srcBRows = B_rows;
     matrix_mpy_params.srcBCols = B_cols;
-    my_checkStatus(msp_matrix_mpy_q15(&matrix_mpy_params, pSrcA, pSrcB, pDst, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets));
+    my_checkStatus(msp_matrix_mpy_q15(&matrix_mpy_params, pSrcA, pSrcB, pDst, my_memcpy_to_param_with_footprints, param, offset_in_word, values_to_preserve, state_offsets));
 #else
     arm_matrix_instance_q15 A, B, C;
     arm_mat_init_q15(&A, A_rows, A_cols, pSrcA);
     arm_mat_init_q15(&B, B_rows, B_cols, pSrcB);
     arm_mat_init_q15(&C, A_rows, B_cols, pDst);
 #ifdef __MSP432__
-    arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets);
+    arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param_with_footprints, param, offset_in_word, values_to_preserve, state_offsets);
     MY_ASSERT(status == ARM_MATH_SUCCESS);
 #else
-    arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, NULL, 0, 0, state_offsets);
+    arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param_with_footprints, NULL, 0, 0, state_offsets);
     MY_ASSERT(status == ARM_MATH_SUCCESS);
     if (param) {
-        my_memcpy_to_param(param, offset_in_word, pDst, values_to_preserve * sizeof(int16_t), 0, true);
+#if !HAWAII
+        my_memcpy_to_param_with_footprints(param, offset_in_word, pDst, values_to_preserve * sizeof(int16_t), 0, true);
+#else
+        for (size_t idx = 0; idx < values_to_preserve; idx++) {
+            my_memcpy_to_param_with_footprints(param, offset_in_word + idx, pDst + idx, sizeof(int16_t), 0, true);
+        }
+#endif
     }
 #endif
     (void)status; // Suppress -Wunused-variable when MY_DEBUG == MY_DEBUG_NO_ASSERT

@@ -351,10 +351,6 @@ static void convTask(int16_t cur_input_h, ConvTaskParams *conv_params) {
     my_printf_debug("output_data offset = %d" NEWLINE, cur_output_data_offset);
 
     MY_ASSERT(cur_output_data_offset + n_filters < INTERMEDIATE_VALUES_SIZE * NUM_SLOTS);
-
-#if HAWAII
-    hawaii_record_footprints(conv_params->model, values_to_preserve);
-#endif
 }
 
 static inline uint16_t load_input_vector(uint32_t src_addr, int16_t* dest_addr, uint16_t len, const ConvTaskParams* conv_params) {
