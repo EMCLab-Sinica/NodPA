@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 2.8.12)
+# Python_FIND_VIRTUALENV used for pybind11 bindings needs 3.15+
+cmake_minimum_required(VERSION 3.15)
 
 project(intermittent-cnn)
 
@@ -26,6 +27,10 @@ if (USE_PROTOBUF)
     protobuf_generate_python(PROTO_PY ${CMAKE_CURRENT_SOURCE_DIR}/exp/model_output.proto)
     add_custom_target(model_output_pb2 ALL DEPENDS ${PROTO_PY})
 endif ()
+
+set(Python_FIND_VIRTUALENV ONLY)
+set(PYBIND11_FINDPYTHON ON)
+find_package(pybind11 CONFIG REQUIRED)
 
 set(COMMON_SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/common)
 
@@ -163,3 +168,8 @@ if (BUILD_MSP432)
             __MSP432P401R__
     )
 endif ()
+
+# https://pybind11.readthedocs.io/en/stable/compiling.html#building-with-cmake
+pybind11_add_module(intermittent_cnn_pybind11
+    ${COMMON_SRC_PATH}/pybind11.cpp
+)
