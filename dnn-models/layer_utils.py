@@ -87,6 +87,9 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: dict[str, Any], i
         node_flags.input_tile_c //= 2
         logger.debug('input_tile_c=%d', node_flags.input_tile_c)
     node_flags.output_tile_c = output_tile_c
+    reduce_output_ratio = 16
+    if node_flags.output_tile_c // (2*reduce_output_ratio) * (2*reduce_output_ratio) == node_flags.output_tile_c:
+        node_flags.output_tile_c //= reduce_output_ratio
     return output_tile_c
 
 def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: dict[str, Any], batch_size, target, node):

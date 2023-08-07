@@ -17,7 +17,7 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes, power_c
     timeout_counter = 0
     while True:
         cmd = [program, '1']
-        if first_run and shutdown_after_writes:
+        if (first_run or True) and shutdown_after_writes:
             cmd.extend(['-c', str(shutdown_after_writes)])
         with Popen(cmd, stdout=logfile, stderr=logfile) as proc:
             try:
