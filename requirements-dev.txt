@@ -4,5 +4,5 @@ odfpy==1.4.1
 pillow==9.4.0
 pyqt5==5.15.9
 scipy==1.10.1
-tf2onnx @ git+https://github.com/onnx/tensorflow-onnx@a9845998d8ac3eebaf286ae5857bbc2373dda583
+tf2onnx==1.15.1
 xlsxwriter==3.1.2
