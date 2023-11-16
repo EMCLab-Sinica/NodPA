@@ -52,7 +52,7 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes, power_c
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--rounds', type=int, default=0)
-    parser.add_argument('--interval', type=float, default=0.01)
+    parser.add_argument('--interval', type=float, default=0.02)
     parser.add_argument('--shutdown-after-writes', type=int, default=0)
     parser.add_argument('--power-cycles-limit', type=int, default=200)
     parser.add_argument('--suffix', default='')

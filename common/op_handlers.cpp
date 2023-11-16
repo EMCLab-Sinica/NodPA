@@ -383,13 +383,16 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     stop_cpu_counter();
 #endif
 
-    uint16_t buffer_size = X->dims[1];
+    uint16_t buffer_size = Y->dims[1];
+#if JAPARI
+    buffer_size = extend_for_footprints(buffer_size);
+#endif
     int16_t *buffer_x = lea_buffer,
             *buffer_y = buffer_x + buffer_size;
-    my_memcpy_from_param(model, buffer_y, Y, 0, buffer_size * sizeof(int16_t));
+    my_memcpy_from_param(model, buffer_y, Y, 0, Y->dims[1] * sizeof(int16_t));
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
-    move_weights(buffer_y, false, extend_for_footprints(buffer_size), buffer_size);
+    move_weights(buffer_y, false, buffer_size, Y->dims[1]);
     stop_cpu_counter();
 #endif
     my_printf_debug("Y" NEWLINE);

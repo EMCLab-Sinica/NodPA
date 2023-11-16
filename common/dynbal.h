@@ -6,7 +6,7 @@
 #define Fixed 0
 #define DynBal 1
 #define Exhaustive 2
-#define RuntimeConfiguration DynBal
+#define RuntimeConfiguration Fixed
 
 #define DYNBAL_REPORT_PARAMETERS 0
 

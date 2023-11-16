@@ -234,7 +234,14 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
     if (sample_idx == 0) {
         float output_max = 0;
         for (uint8_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
+#if JAPARI
+            if (offset_has_state(buffer_idx)) {
+                continue;
+            }
+            output_max = MAX_VAL(std::fabs(first_sample_outputs[offset_without_footprints(buffer_idx)]), output_max);
+#else
             output_max = MAX_VAL(std::fabs(first_sample_outputs[buffer_idx]), output_max);
+#endif
         }
         for (uint8_t buffer_idx = 0, ofm_idx = 0; buffer_idx < buffer_len; buffer_idx++) {
             int16_t got_q15 = lea_buffer[buffer_idx];
