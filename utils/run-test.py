@@ -27,10 +27,10 @@ def build_and_test(config, suffix, intermittent):
     check_call(['make', '-C', 'build'])
 
     rounds = 100
-    power_cycle = 0.02
+    power_cycle = 0.03
     if 'cifar10' in config or 'cifar10-cnn' in config:
         rounds=50
-        power_cycle = 0.03
+        power_cycle = 0.04
     if '--japari' in config:
         power_cycle += 0.01
 
