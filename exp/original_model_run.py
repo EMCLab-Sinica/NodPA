@@ -7,6 +7,7 @@ sys.path.append(str(TOPDIR / 'dnn-models'))
 
 from configs import configs
 from utils import load_model, run_model
+from onnx_utils import get_sample_size
 
 def main():
     parser = argparse.ArgumentParser()
@@ -20,8 +21,8 @@ def main():
         args.limit = None
 
     config = configs[args.config]
-    model = load_model(config, model_variant=args.model_variant)
-    model_data = config['data_loader'](train=False)
+    model = load_model(config, model_variant=args.model_variant)['batched']
+    model_data = config['data_loader'](train=False, target_size=get_sample_size(model))
     run_model(model, model_data, args.limit,
               verbose=not args.save_file, save_file=args.save_file)
 

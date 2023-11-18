@@ -181,7 +181,9 @@ else:
     logging.getLogger('intermittent-cnn').setLevel(logging.INFO)
 
 config = configs[args.config]
-onnx_model = load_model(config, model_variant=args.model_variant)
+onnx_models = load_model(config, model_variant=args.model_variant)
+onnx_model = onnx_models['single']
+onnx_model_batched = onnx_models['batched']
 
 sample_size = get_sample_size(onnx_model)
 
@@ -197,7 +199,7 @@ images, labels = next(iter(model_data.data_loader(limit=Constants.N_SAMPLES)))
 images = images.numpy()
 
 Constants.FIRST_SAMPLE_OUTPUTS = list(run_model(onnx_model, model_data, limit=1, verbose=False)[0])
-Constants.FP32_ACCURACY = run_model(onnx_model, model_data, limit=None, verbose=False)
+Constants.FP32_ACCURACY = run_model(onnx_model_batched, model_data, limit=None, verbose=False)
 add_merge_nodes(onnx_model)
 
 Constants.BATCH_SIZE = args.batch_size

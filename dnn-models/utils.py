@@ -23,7 +23,6 @@ from torch.utils.data import Dataset, DataLoader
 
 from onnx_utils import (
     find_initializer,
-    get_sample_size,
 )
 
 logger = logging.getLogger('intermittent-cnn.utils')
@@ -182,28 +181,30 @@ def load_model(config, model_variant):
     if model_variant:
         model_name += f'-{model_variant}'
     # https://github.com/onnx/onnx/blob/master/docs/PythonAPIOverview.md
-    onnx_model = onnx.load_model(THIS_DIR / f'{model_name}.onnx')
+    onnx_model_batched = onnx.load_model(THIS_DIR / f'{model_name}.onnx')
 
-    sample_size = get_sample_size(onnx_model)
+    # Generate a single ONNX model (first dimension of input data is 1) besides the original batched
+    # model (first dimension of input data is a placeholder). The batched model is needed for
+    # running inference with the whole dataset (ex: for getting accuracy), and the single model is
+    # simpler and suitable for on-device inference.
+    onnx_model_single = change_batch_size(onnx_model_batched)
 
-    # onnxoptimizer requires known dimensions, so do shape inference and set the batch size=1.
-    # The batch size will be changed to a variable after another dynamic_shape_inference.
+    # Use the single model as onnxoptimizer requires known dimensions.
     # https://github.com/onnx/optimizer/blob/v0.2.6/onnxoptimizer/passes/fuse_matmul_add_bias_into_gemm.h#L60
-    dynamic_shape_inference(onnx_model, sample_size)
-    change_batch_size(onnx_model)
-
     # https://zhuanlan.zhihu.com/p/41255090
-    onnx_model = onnxoptimizer.optimize(onnx_model, [
+    onnx_model_single = onnxoptimizer.optimize(onnx_model_single, [
         'eliminate_nop_dropout',
         'extract_constant_to_initializer',
         'fuse_add_bias_into_conv',
         'fuse_matmul_add_bias_into_gemm',
     ])
 
-    dynamic_shape_inference(onnx_model, sample_size)
-    onnx.checker.check_model(onnx_model)
+    onnx.checker.check_model(onnx_model_single)
 
-    return onnx_model
+    return {
+        'batched': onnx_model_batched,
+        'single': onnx_model_single,
+    }
 
 def add_merge_nodes(model):
     # Split Conv/Gemm into Conv/Gemm and ConvMerge/GemmMerge (for merging OFMs from channel tiling)
@@ -254,8 +255,11 @@ def onnxruntime_get_intermediate_tensor(model, image):
         node = find_node_by_output(tmp_model.graph.node, output_name)
         yield output_name, node.op_type, output
 
-def change_batch_size(onnx_model: onnx.ModelProto):
-    g = onnx_model.graph
+def change_batch_size(onnx_model_batched: onnx.ModelProto):
+    onnx_model_single = onnx.ModelProto()
+    onnx_model_single.CopyFrom(onnx_model_batched)
+
+    g = onnx_model_single.graph
     initializer_names = set([initializer.name for initializer in g.initializer])
     constant_names = set([node.output[0] for node in g.node if node.op_type == 'Constant'])
     for value_info in itertools.chain(g.value_info, g.input, g.output):
@@ -266,7 +270,9 @@ def change_batch_size(onnx_model: onnx.ModelProto):
             shape.dim[0].dim_value = 1
 
     # make sure above steps did not break the model
-    onnx.shape_inference.infer_shapes(onnx_model)
+    onnx.shape_inference.infer_shapes(onnx_model_single)
+
+    return onnx_model_single
 
 def dynamic_shape_inference(onnx_model: onnx.ModelProto, sample_size: Iterable[int]) -> None:
     for node in itertools.chain(onnx_model.graph.input, onnx_model.graph.output):
