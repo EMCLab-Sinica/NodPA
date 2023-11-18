@@ -9,7 +9,6 @@ import tf2onnx
 sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
 
 from utils import kws_dnn_model, find_tensor_value_info, remap_inputs
-from configs import configs
 
 # Simplied from tf2onnx/convert.py and added code for shape information
 def main():
@@ -32,7 +31,8 @@ def main():
     model_proto = remap_inputs(model_proto, {'wav_data:0': 'Mfcc:0'})
 
     input_value_info = find_tensor_value_info(model_proto, 'Mfcc:0')
-    input_value_info.CopyFrom(onnx.helper.make_tensor_value_info('Mfcc:0', onnx.TensorProto.FLOAT, [1] + configs['kws']['sample_size']))
+    original_shape = onnx_graph.get_shape('Mfcc:0')
+    input_value_info.CopyFrom(onnx.helper.make_tensor_value_info('Mfcc:0', onnx.TensorProto.FLOAT, ['N'] + original_shape[1:]))
 
     onnx.save_model(model_proto, 'dnn-models/KWS-DNN_S.onnx')
 
