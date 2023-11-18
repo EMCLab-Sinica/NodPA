@@ -101,19 +101,19 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: dict[str, Any], i
 
     return output_tile_c
 
-def get_gemm_pState_usage(tile_channel, tile_width, target):
+def get_gemm_pState_usage(tile_channel, tile_b_cols, target):
     if target == 'msp432':
-        return (tile_channel + 2) * (tile_width * 2)
+        return (tile_channel + 2) * (tile_b_cols * 2)
     return 0
 
-def check_gemm_vm_usage(A, tile_channel, tile_width, batch_size, target):
+def check_gemm_vm_usage(A, tile_channel, tile_b_cols, batch_size, target):
     A_shape = A.type.tensor_type.shape
     A_rows = 1  # Not using A_shape.dim[0] here, as it's a symbol "N"
     A_cols = A_shape.dim[1].dim_value
 
-    full_tile_width = (extend_for_footprints(batch_size, tile_width)+1)/2*2
-    tile_input_usage = (A_rows * A_cols + 2) + (tile_channel + 2) * full_tile_width + A_rows * full_tile_width
-    pState_usage = get_gemm_pState_usage(tile_channel, tile_width, target)
+    full_tile_b_cols = (extend_for_footprints(batch_size, tile_b_cols)+1)/2*2
+    tile_input_usage = (A_rows * A_cols + 2) + (tile_channel + 2) * full_tile_b_cols + A_rows * full_tile_b_cols
+    pState_usage = get_gemm_pState_usage(tile_channel, tile_b_cols, target)
     total_vm_usage = tile_input_usage + pState_usage
 
     ret = False
@@ -123,8 +123,8 @@ def check_gemm_vm_usage(A, tile_channel, tile_width, batch_size, target):
     else:
         if total_vm_usage <= vm_size[target]:
             ret = True
-    logger.debug("tile_channel=%d, tile_width=%d, tile_input_usage=%d, pState_usage=%d, total_vm_usage=%d => %s",
-                 tile_channel, tile_width, tile_input_usage, pState_usage, total_vm_usage, "OK" if ret else "not OK")
+    logger.debug("tile_channel=%d, tile_b_cols=%d, tile_input_usage=%d, pState_usage=%d, total_vm_usage=%d => %s",
+                 tile_channel, tile_b_cols, tile_input_usage, pState_usage, total_vm_usage, "OK" if ret else "not OK")
 
     return ret
 
@@ -139,7 +139,7 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: dict[str, Any
     # writing a batch at a time is simpler and faster
     tile_size_unit = config['op_filters']
 
-    gemm_flags.tile_width = tile_size_unit
+    gemm_flags.tile_b_cols = tile_size_unit
 
     # LEA wants addresses to be 4 byte-aligned, or 2 Q15-aligned
     gemm_flags.tile_channel = min([B_rows,
@@ -148,21 +148,21 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: dict[str, Any
                                    # 1024 transfers = 1024 bytes = 512 Q-15 values
                                    512]) // tile_size_unit * tile_size_unit
     while True:
-        if check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_width, batch_size, target):
+        if check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_b_cols, batch_size, target):
             break
-        assert gemm_flags.tile_channel > gemm_flags.tile_width
-        gemm_flags.tile_channel -= gemm_flags.tile_width
+        assert gemm_flags.tile_channel > gemm_flags.tile_b_cols
+        gemm_flags.tile_channel -= gemm_flags.tile_b_cols
 
-    assert gemm_flags.tile_width % tile_size_unit == 0
+    assert gemm_flags.tile_b_cols % tile_size_unit == 0
 
     while True:
-        new_tile_width = gemm_flags.tile_width + tile_size_unit
-        if new_tile_width > B_cols:
+        new_tile_b_cols = gemm_flags.tile_b_cols + tile_size_unit
+        if new_tile_b_cols > B_cols:
             break
-        if not check_gemm_vm_usage(A, gemm_flags.tile_channel, new_tile_width, batch_size, target):
+        if not check_gemm_vm_usage(A, gemm_flags.tile_channel, new_tile_b_cols, batch_size, target):
             break
-        gemm_flags.tile_width = new_tile_width
+        gemm_flags.tile_b_cols = new_tile_b_cols
 
-    gemm_flags.pState_len = get_gemm_pState_usage(gemm_flags.tile_channel, gemm_flags.tile_width, target)
+    gemm_flags.pState_len = get_gemm_pState_usage(gemm_flags.tile_channel, gemm_flags.tile_b_cols, target)
 
-    return gemm_flags.tile_width
+    return gemm_flags.tile_b_cols

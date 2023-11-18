@@ -71,7 +71,7 @@ def usage_span_conv(layer_dims, cur_input_tile_c, cur_output_tile_c, power_cycle
 
     return usage_span;
 
-def usage_span_fc(layer_dims, cur_tile_channel, cur_tile_width, power_cycle_energy, use_floor=True):
+def usage_span_fc(layer_dims, cur_tile_channel, cur_tile_b_cols, power_cycle_energy, use_floor=True):
     upper_gauss = lambda x, y: (numpy.ceil(x / y) if use_floor else x / y)
 
     n_input_values = layer_dims.A_rows * layer_dims.A_cols;
@@ -90,7 +90,7 @@ def usage_span_fc(layer_dims, cur_tile_channel, cur_tile_width, power_cycle_ener
 
     # Data refetch cost
     # TODO: compare with counters
-    input_cost = cur_tile_channel * cur_tile_width;
+    input_cost = cur_tile_channel * cur_tile_b_cols;
     filter_cost = cur_tile_channel;
     # memory costs?
     data_refetch_cost = (input_cost * n_input_values + filter_cost * n_filter_values) / power_cycle_energy;
@@ -150,20 +150,20 @@ def parameter_importance_fc(onnx_model, node, power_cycle_energy):
     )
 
     cur_tile_channel = input_dims[1-1]
-    cur_tile_width = weights.dims[1]
-    cur_usage_span = usage_span_fc(layer_dims, cur_tile_channel, cur_tile_width, power_cycle_energy)
+    cur_tile_b_cols = weights.dims[1]
+    cur_usage_span = usage_span_fc(layer_dims, cur_tile_channel, cur_tile_b_cols, power_cycle_energy)
 
     ind = numpy.arange(start=2, stop=cur_tile_channel+2, step=2)
-    usage_spans = usage_span_fc(layer_dims, ind, cur_tile_width, power_cycle_energy)
+    usage_spans = usage_span_fc(layer_dims, ind, cur_tile_b_cols, power_cycle_energy)
     tile_channel_range = cur_usage_span - min(usage_spans)
 
-    ind = numpy.arange(start=2, stop=cur_tile_width+2, step=2)
+    ind = numpy.arange(start=2, stop=cur_tile_b_cols+2, step=2)
     usage_spans = usage_span_fc(layer_dims, cur_tile_channel, ind, power_cycle_energy)
-    tile_width_range = cur_usage_span - min(usage_spans)
+    tile_b_cols_range = cur_usage_span - min(usage_spans)
 
-    logger.debug('node %s: tile_channel_range=%f, tile_width_range=%f',
-                 node.name, tile_channel_range, tile_width_range)
-    if tile_channel_range > tile_width_range:
+    logger.debug('node %s: tile_channel_range=%f, tile_b_cols_range=%f',
+                 node.name, tile_channel_range, tile_b_cols_range)
+    if tile_channel_range > tile_b_cols_range:
         node.parameters_by_importance = [0, 1]
     else:
         node.parameters_by_importance = [1, 0]
@@ -197,9 +197,9 @@ def walk_search_space(nodes, node_flags, exhaustive_lookup_table):
                 exhaustive_lookup_table.write(to_bytes(node_idx))
                 exhaustive_lookup_table.write(to_bytes(0))  # dim_idx
                 exhaustive_lookup_table.write(to_bytes(tile_channel))
-            for tile_width in range(exhaustive_search_step, cur_node_flags.gemm.tile_width, exhaustive_search_step):
+            for tile_b_cols in range(exhaustive_search_step, cur_node_flags.gemm.tile_b_cols, exhaustive_search_step):
                 exhaustive_lookup_table.write(to_bytes(node_idx))
                 exhaustive_lookup_table.write(to_bytes(0))  # dim_idx
-                exhaustive_lookup_table.write(to_bytes(tile_width))
-            search_space_size += int(cur_node_flags.gemm.tile_channel / search_step) * int(cur_node_flags.gemm.tile_width / search_step)
+                exhaustive_lookup_table.write(to_bytes(tile_b_cols))
+            search_space_size += int(cur_node_flags.gemm.tile_channel / search_step) * int(cur_node_flags.gemm.tile_b_cols / search_step)
     logger.info('Search space size: %d', search_space_size)

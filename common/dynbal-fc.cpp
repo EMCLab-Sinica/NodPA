@@ -13,7 +13,7 @@
 #include "platform.h"
 
 // tile_channel: convex
-// tile_width: convex
+// tile_b_cols: convex
 
 uint32_t UsageSpanFc::data_reuse_cost(uint8_t dim_idx, uint16_t dim_value) const {
     uint32_t input_fetch, filter_fetch, partial_sum_cost, data_reuse_cost;
@@ -41,12 +41,12 @@ uint32_t UsageSpanFc::data_reuse_cost(uint8_t dim_idx, uint16_t dim_value) const
 
 uint32_t UsageSpanFc::data_refetch_cost(uint8_t dim_idx, uint16_t dim_value) const {
     uint16_t cur_tile_channel = (dim_idx == ParameterDimension::TileChannel) ? dim_value : tile_channel;
-    uint16_t cur_tile_width = (dim_idx == ParameterDimension::TileWidth) ? dim_value : tile_width;
+    uint16_t cur_tile_b_cols = (dim_idx == ParameterDimension::TileBCols) ? dim_value : tile_b_cols;
 
     // Data refetch cost
     // TODO: compare with counters
     uint32_t input_cost, filter_cost, data_refetch_cost;
-    input_cost = cur_tile_channel * cur_tile_width;
+    input_cost = cur_tile_channel * cur_tile_b_cols;
     filter_cost = cur_tile_channel;
     // memory costs?
     data_refetch_cost = (input_cost * n_input_values + filter_cost * n_filter_values) / power_cycle_energy;
@@ -64,7 +64,7 @@ uint16_t UsageSpanFc::nearest_value(uint8_t dim_idx, uint16_t dim_value, bool no
         dim_upper_bound = tile_channel_largest_local_minimum;
     } else {
         dim_original_value = layer_dims.B_cols;
-        dim_upper_bound = tile_width_largest_local_minimum;
+        dim_upper_bound = tile_b_cols_largest_local_minimum;
     }
     if (not_larger_than) {
         tmp = upper_gauss(dim_original_value, dim_value);
@@ -84,10 +84,10 @@ static void adapt_fc_dynbal(const Node* node, NodeFlags* node_flags, const NodeF
     uint32_t output_len = layer_dims.A_rows * layer_dims.B_cols;
     uint16_t tile_channel_upper = orig_flags->gemm.tile_channel,
              tile_channel_lower = MAX_VAL(2, output_len * sizeof(int16_t) * layer_dims.A_cols / INTERMEDIATE_VALUES_SIZE);
-    uint16_t tile_width_upper = orig_flags->gemm.tile_width, tile_width_lower = 2;
+    uint16_t tile_b_cols_upper = orig_flags->gemm.tile_b_cols, tile_b_cols_lower = 2;
     const uint16_t value_ranges[2][2] = {
         { tile_channel_lower, tile_channel_upper },
-        { tile_width_lower, tile_width_upper },
+        { tile_b_cols_lower, tile_b_cols_upper },
     };
     for (uint8_t dim_idx : node->parameters_by_importance) {
 #if ENABLE_DEMO_COUNTERS
@@ -102,8 +102,8 @@ static void adapt_fc_dynbal(const Node* node, NodeFlags* node_flags, const NodeF
                 node_flags->gemm.tile_channel = new_dim_value;
                 my_printf_debug("Selected tile_channel: %d" NEWLINE, node_flags->gemm.tile_channel);
             } else {
-                node_flags->gemm.tile_width = new_dim_value;
-                my_printf_debug("Selected tile_width: %d" NEWLINE, node_flags->gemm.tile_width);
+                node_flags->gemm.tile_b_cols = new_dim_value;
+                my_printf_debug("Selected tile_b_cols: %d" NEWLINE, node_flags->gemm.tile_b_cols);
             }
         }
     }
@@ -116,7 +116,7 @@ void update_progress_indicator_fc(const Node* node, NodeFlags* node_flags, const
 
     InferenceStats* stats = load_inference_stats_from_nvm(InferenceStatsOpType::FC);
 
-    const UsageSpanFc usage_span(layer_dims, orig_flags->gemm.tile_channel, orig_flags->gemm.tile_width, stats->power_cycle_energy);
+    const UsageSpanFc usage_span(layer_dims, orig_flags->gemm.tile_channel, orig_flags->gemm.tile_b_cols, stats->power_cycle_energy);
 
     if (first_unfinished_value_offset == 0) {
         if (!read_gpio_flag(GPIOFlag::DisableDynBalSearch)) {
