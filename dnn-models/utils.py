@@ -188,6 +188,7 @@ def load_model(config, model_variant):
     # running inference with the whole dataset (ex: for getting accuracy), and the single model is
     # simpler and suitable for on-device inference.
     onnx_model_single = change_batch_size(onnx_model_batched)
+    onnx_model_single = onnx.shape_inference.infer_shapes(onnx_model_single)
 
     # Use the single model as onnxoptimizer requires known dimensions.
     # https://github.com/onnx/optimizer/blob/v0.2.6/onnxoptimizer/passes/fuse_matmul_add_bias_into_gemm.h#L60
