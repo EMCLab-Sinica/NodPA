@@ -154,6 +154,16 @@ int main(int argc, char* argv[]) {
     exit(exit_code);
 }
 
+/* Disable LeakSanitizer. It uses ptrace and conflicts with exit_with_status()
+ * above, and thus some program logs might be lost due to the error message
+ * "LeakSanitizer has encountered a fatal error." I'll use valgrind for leak
+ * detection, anyway.
+ * See: https://github.com/google/sanitizers/issues/1306
+ */
+extern "C" int __lsan_is_turned_off() {
+    return 1;
+}
+
 void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     if (counters_enabled) {
