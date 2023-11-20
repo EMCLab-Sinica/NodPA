@@ -176,18 +176,23 @@ def get_model_ops(onnx_model):
 
     return ops
 
-def load_model(config, model_variant):
-    model_name = config['onnx_model']
+def load_model_from_file(model_name, model_variant):
     if model_variant:
         model_name += f'-{model_variant}'
     # https://github.com/onnx/onnx/blob/master/docs/PythonAPIOverview.md
-    onnx_model_batched = onnx.load_model(THIS_DIR / f'{model_name}.onnx')
+    return onnx.load_model(THIS_DIR / f'{model_name}.onnx')
 
-    # Generate a single ONNX model (first dimension of input data is 1) besides the original batched
+def load_model(config, model_variant):
+    onnx_model_batched = load_model_from_file(config['onnx_model'], model_variant)
+
+    # Get a single ONNX model (first dimension of input data is 1) besides the original batched
     # model (first dimension of input data is a placeholder). The batched model is needed for
     # running inference with the whole dataset (ex: for getting accuracy), and the single model is
     # simpler and suitable for on-device inference.
-    onnx_model_single = change_batch_size(onnx_model_batched)
+    if 'onnx_model_single' in config:
+        onnx_model_single = load_model_from_file(config['onnx_model_single'], model_variant)
+    else:
+        onnx_model_single = change_batch_size(onnx_model_batched)
     onnx_model_single = onnx.shape_inference.infer_shapes(onnx_model_single)
 
     # Use the single model as onnxoptimizer requires known dimensions.

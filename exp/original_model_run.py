@@ -21,7 +21,11 @@ def main():
         args.limit = None
 
     config = configs[args.config]
-    model = load_model(config, model_variant=args.model_variant)['batched']
+    models = load_model(config, model_variant=args.model_variant)
+    if args.limit == 1:
+        model = models['single']
+    else:
+        model = models['batched']
     model_data = config['data_loader'](train=False, target_size=get_sample_size(model))
     run_model(model, model_data, args.limit,
               verbose=not args.save_file, save_file=args.save_file)
