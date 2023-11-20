@@ -18,8 +18,6 @@
 void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *A = input[0], *B = input[1];
 
-    MY_ASSERT(A->dims[0] == 1);
-
     output->dims[0] = A->dims[0];
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
@@ -39,7 +37,14 @@ void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 int16_t* const weights_tmp = op_buffer;
 
 void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    const ParameterInfo *A = input[0], *B = input[1], *matC = input[2];
+    const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
+
+#ifdef OpGemm
+    // OpMatMul does not have a bias
+    if (node->op_type == OpGemm) {
+        matC = input[2];
+    }
+#endif
 
     my_printf_debug("Gemm! A: (%dx%d), B: (%dx%d)" NEWLINE,
               A->dims[0], A->dims[1], B->dims[0], B->dims[1]);
@@ -59,7 +64,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
     make_buffer_aligned(&buffer_b);
 
-    uint16_t i = 0, tile = 0, j = 0, j_with_footprints = 0;
+    uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0;
 
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
@@ -79,16 +84,16 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
-    tile = first_unfinished_value_offset / output_len;
-    i = tile * node_flags->gemm.tile_channel;
-    j_with_footprints = first_unfinished_value_offset % output_len;
+    tile_channel_idx = first_unfinished_value_offset / output_len;
+    tile_channel_offset = tile_channel_idx * node_flags->gemm.tile_channel;
+    extended_tile_b_col_offset = first_unfinished_value_offset % output_len;
 
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
-    j = j_with_footprints / (BATCH_SIZE + 1) * BATCH_SIZE;
+    tile_b_col_offset = extended_tile_b_col_offset / (BATCH_SIZE + 1) * BATCH_SIZE;
     stop_cpu_counter();
 #else
-    j = j_with_footprints;
+    tile_b_col_offset = extended_tile_b_col_offset;
 #endif
 
     stop_cpu_counter();
@@ -114,8 +119,8 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 #endif
 
-    for (; i < B->dims[0]; i += node_flags->gemm.tile_channel, tile++) {
-        const uint16_t tile_channels = MIN_VAL(node_flags->gemm.tile_channel, B->dims[0] - i);
+    for (; tile_channel_offset < B->dims[0]; tile_channel_offset += node_flags->gemm.tile_channel, tile_channel_idx++) {
+        const uint16_t tile_channels = MIN_VAL(node_flags->gemm.tile_channel, B->dims[0] - tile_channel_offset);
         const uint16_t extended_tile_channels = tile_channels + 2;
 
 #if JAPARI
@@ -123,7 +128,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         bool need_skipping = has_footprints(A);
         if (need_skipping) {
             // somehow loading many pieces is faster than loading a chunk and moving values around to remove footprints, even with external FRAM
-            uint16_t input_offset = extend_for_footprints(i);
+            uint16_t input_offset = extend_for_footprints(tile_channel_offset);
             for (uint16_t idx = 0, output_idx = 0; output_idx < tile_channels; idx += BATCH_SIZE + 1, output_idx += BATCH_SIZE) {
                 my_memcpy_from_param(model, buffer_a + output_idx, A, input_offset + idx, BATCH_SIZE * sizeof(uint16_t));
             }
@@ -132,7 +137,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         if (!need_skipping)
 #endif
         {
-            my_memcpy_from_param(model, buffer_a, A, i, tile_channels * sizeof(uint16_t));
+            my_memcpy_from_param(model, buffer_a, A, tile_channel_offset, tile_channels * sizeof(uint16_t));
         }
 
 #if STATEFUL
@@ -150,10 +155,10 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         my_printf_debug("Tile for A" NEWLINE);
         dump_matrix_debug(buffer_a, 1, extended_tile_channels, ValueInfo(A, model));
 
-        int16_t output_offset = tile * output_len + j_with_footprints;
+        int16_t output_offset = tile_channel_idx * output_len + extended_tile_b_col_offset;
 
-        for (; j < B->dims[1]; j += node_flags->gemm.tile_b_cols) {
-            int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B->dims[1] - j);
+        for (; tile_b_col_offset < B->dims[1]; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
+            int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B->dims[1] - tile_b_col_offset);
             int16_t values_to_preserve = tile_b_cols,
                     full_tile_b_cols = tile_b_cols;
 #if JAPARI
@@ -167,7 +172,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             for (uint16_t row = 0; row < tile_b_cols; row++) {
                 MY_ASSERT(tile_channels <= OP_BUFFER_LEN);
                 my_memcpy_from_param(model, weights_tmp,
-                          B, (j + row) * B->dims[0] + i,
+                          B, (tile_b_col_offset + row) * B->dims[0] + tile_channel_offset,
                           tile_channels * sizeof(uint16_t));
 #if JAPARI
                 my_interleave_q15(weights_tmp, extend_for_footprints(row), full_tile_b_cols, filter_ptr, tile_channels);
@@ -185,8 +190,8 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                     processed_biases = 0;
                     filter_ptr[idx] = param_state_bit(model, output, output_offset + idx);
                 } else {
-                    if (tile == 0) {
-                        filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, bias_offset + j)) / A->scale.toFloat();
+                    if (tile_channel_idx == 0) {
+                        filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, bias_offset + tile_b_col_offset)) / A->scale.toFloat();
                     }
                     bias_offset++;
                     processed_biases++;
@@ -194,9 +199,13 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
             stop_cpu_counter();
 #else
-            if (tile == 0) {
+            if (tile_channel_idx == 0) {
                 for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
-                    filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, idx + j)) / A->scale.toFloat();
+                    if (matC) {
+                        filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, idx + tile_b_col_offset)) / A->scale.toFloat();
+                    } else {
+                        filter_ptr[idx] = 0;
+                    }
                 }
             }
 #endif
@@ -229,7 +238,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
             output_offset += values_to_preserve;
         }
-        j = j_with_footprints = 0;
+        tile_b_col_offset = extended_tile_b_col_offset = 0;
     }
 
 #if INDIRECT_RECOVERY
@@ -323,4 +332,12 @@ void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
 
     my_printf_debug("handle_gemmmerge output" NEWLINE);
     dump_params_debug(model, output, node->output_name);
+}
+
+void alloc_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    alloc_gemm(model, input, output, node, node_flags, orig_node_flags);
+}
+
+void handle_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    handle_gemm(model, input, output, node, node_flags, orig_node_flags);
 }
