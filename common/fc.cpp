@@ -245,6 +245,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
             tile_b_col_offset = extended_tile_b_col_offset = 0;
         }
+        tile_a_row_offset = 0;
     }
 
 #if INDIRECT_RECOVERY
