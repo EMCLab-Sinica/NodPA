@@ -28,7 +28,7 @@ from onnx_utils import (
 logger = logging.getLogger('intermittent-cnn.utils')
 
 INPLACE_UPDATE_OPS = ['Reshape', 'Softmax', 'Squeeze', 'Unsqueeze']
-OPS_WITH_MERGE = ['Conv', 'Gemm']
+OPS_WITH_MERGE = ['Conv', 'Gemm', 'MatMul']
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
 
@@ -390,7 +390,7 @@ def run_model(model, model_data, limit, verbose=True, save_file=None):
         for layer_name, op_type, layer_out in onnxruntime_get_intermediate_tensor(model, images):
             if verbose:
                 print(f'{op_type} layer: {layer_name}')
-                print_tensor(layer_out, op_type in ('Conv', 'Gemm'))
+                print_tensor(layer_out, op_type in ('Conv', 'Gemm', 'MatMul'))
             if save_file:
                 layer_out_obj = model_output_pb2.LayerOutput()
                 layer_out_obj.name = layer_name

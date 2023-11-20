@@ -257,6 +257,7 @@ def replace_nodes():
 
 def transpose_gemm(onnx_model: onnx.ModelProto):
     for node in onnx_model.graph.node:
+        # Only Gemm has transB, MatMul doesn't
         if node.op_type != 'Gemm':
             continue
         transB = get_attr(node, 'transB')
@@ -486,7 +487,7 @@ for params in parameters:
                 params_data = nchw2nhwc(params_data, params.dims)
             used_node = find_node_by_input(onnx_model.graph.node, params.name)
 
-            if used_node.op_type == 'Gemm':
+            if used_node.op_type in ('Gemm', 'MatMul'):
                 params_data = np.reshape(params_data, params.dims)
                 params_data = np.transpose(params_data)
 
@@ -596,7 +597,7 @@ for idx, n in enumerate(nodes):
     if n.op_type == 'Conv':
         cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.JAPARI, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n,  node_flags[idx].conv)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
-    if n.op_type == 'Gemm':
+    if n.op_type in ('Gemm', 'MatMul'):
         cur_output_tile_c = determine_gemm_tile_sizes(onnx_model, config, Constants.BATCH_SIZE, args.target, n, node_flags[idx].gemm)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
 

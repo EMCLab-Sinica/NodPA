@@ -55,12 +55,15 @@ def dims_from_value_info(value_info: onnx.ValueInfoProto):
 def get_param_limit(model: onnx.ModelProto, node: onnx.NodeProto):
     param_limit = 1
     for input_idx, input_ in enumerate(node.input[1:]):  # weights & possibly biases
-        param_limit = max(param_limit, np.max(np.abs(onnx.numpy_helper.to_array(find_initializer(model, input_)))))
+        initializer = find_initializer(model, input_)
+        if initializer is None:
+            continue
+        param_limit = max(param_limit, np.max(np.abs(onnx.numpy_helper.to_array(initializer))))
     return param_limit
 
 def compute_parameter_scales(onnx_model: onnx.ModelProto):
     for node in onnx_model.graph.node:
-        if node.op_type not in ('Conv', 'Gemm'):
+        if node.op_type not in ('Conv', 'Gemm', 'MatMul'):
             continue
         add_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=node.output[0],
                               data_type=onnx.TensorProto.DataType.FLOAT, vals=get_param_limit(onnx_model, node))

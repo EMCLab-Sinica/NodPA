@@ -133,12 +133,22 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: dict[str, Any
 
     A = find_tensor_value_info(onnx_model, node.input[0])
     B = find_initializer(onnx_model, node.input[1])
-    B_rows = B.dims[0]
-    B_cols = B.dims[1]
+    if B is not None:
+        B_rows = B.dims[0]
+        B_cols = B.dims[1]
+    else:
+        B = find_tensor_value_info(onnx_model, node.input[1])
+        B_shape = B.type.tensor_type.shape
+        B_rows = B_shape.dim[0].dim_value
+        B_cols = B_shape.dim[1].dim_value
+
+    B_rows += B_rows % 2
+    B_cols += B_cols % 2
 
     # writing a batch at a time is simpler and faster
     tile_size_unit = config['op_filters']
 
+    gemm_flags.tile_a_rows = 1
     gemm_flags.tile_b_cols = tile_size_unit
 
     # LEA wants addresses to be 4 byte-aligned, or 2 Q15-aligned
