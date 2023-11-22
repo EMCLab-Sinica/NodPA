@@ -341,18 +341,49 @@ void handle_softmax(Model*, const ParameterInfo*[], ParameterInfo*, const Node*,
     // Just let run_model determine the max value
 }
 
-void alloc_transpose(struct Model *model, const struct ParameterInfo **input, struct ParameterInfo *output, const struct Node *node, NodeFlags*, const NodeFlags*) {
+void alloc_transpose(struct Model *model, const struct ParameterInfo **input, struct ParameterInfo *output, const struct Node *node, NodeFlags* node_flags, const NodeFlags*) {
+    const ParameterInfo *X = input[0];
+
+    uint8_t* perm = node_flags->transpose.perm;
+    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+        output->dims[dim_idx] = X->dims[perm[dim_idx]];
+    }
+
+    output->slot = get_next_slot(model, input[0]);
 }
 
-void handle_transpose(Model*, const ParameterInfo *input[], ParameterInfo *output, const Node*, NodeFlags*, const NodeFlags*) {
+void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
     my_printf_debug("Transpose!" NEWLINE);
 
     const ParameterInfo *X = input[0];
+
+    uint8_t* perm = node_flags->transpose.perm;
+
+    uint16_t input_indices[4], output_indices[4];
+    for (input_indices[0] = 0; input_indices[0] < X->dims[0]; input_indices[0]++) {
+        for (input_indices[1] = 0; input_indices[1] < X->dims[1]; input_indices[1]++) {
+            for (input_indices[2] = 0; input_indices[2] < X->dims[2]; input_indices[2]++) {
+                for (input_indices[3] = 0; input_indices[3] < X->dims[3]; input_indices[3]++) {
+                    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+                        output_indices[dim_idx] = input_indices[perm[dim_idx]];
+                    }
+                    uint32_t input_offset = input_indices[0] * X->dims[1] * X->dims[2] * X->dims[3] +
+                                            input_indices[1] * X->dims[2] * X->dims[3] +
+                                            input_indices[2] * X->dims[3] +
+                                            input_indices[3];
+                    uint32_t output_offset = output_indices[0] * output->dims[1] * output->dims[2] * output->dims[3] +
+                                             output_indices[1] * output->dims[2] * output->dims[3] +
+                                             output_indices[2] * output->dims[3] +
+                                             output_indices[3];
+                    int16_t val = get_q15_param(model, X, input_offset);
+                    put_q15_param(output, output_offset, val, /*is_linear=*/false);
+                }
+            }
+        }
+    }
+
     // not actually transpose data as we happen to need NHWC
-    // XXX: assume NHWC -> NCHW
-    output->dims[1] = X->dims[3];
-    output->dims[2] = X->dims[1];
-    output->dims[3] = X->dims[2];
+    dump_params_debug(model, output, node->output_name);
 }
 
 void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, NodeFlags*, const NodeFlags*) {

@@ -342,6 +342,10 @@ for idx, n in enumerate(nodes):
         node_flags[idx].gemmmerge.tile_length = config['gemm_tile_length']
     if n.op_type == 'Concat':
         node_flags[idx].concat.axis = get_attr(n, 'axis')
+    if n.op_type == 'Transpose':
+        perm = get_attr(n, 'perm')
+        assert len(perm) == 4
+        node_flags[idx].transpose.perm = perm
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
