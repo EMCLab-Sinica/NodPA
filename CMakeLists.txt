@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.12)
+cmake_minimum_required(VERSION 3.1)  # for CMAKE_CXX_STANDARD
 
 project(intermittent-cnn)
 
@@ -15,16 +15,53 @@ if (${MY_DEBUG} GREATER 1)
 else ()
     set(COMMON_FLAGS "${COMMON_FLAGS} -O3")
 endif ()
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_FLAGS} -Wstrict-prototypes -std=c11")
-# Don't use something that require C++17 or newer, which are not supported by MSP-CGT yet
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMMON_FLAGS} -std=c++14 -Wold-style-cast -Wsuggest-override -Wnon-virtual-dtor")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${COMMON_FLAGS} -Wstrict-prototypes")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMMON_FLAGS} -Wold-style-cast -Wsuggest-override -Wnon-virtual-dtor")
 endif ()
 
 if (USE_PROTOBUF)
-    find_package(Protobuf REQUIRED)
-    protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/exp/model_output.proto)
-    protobuf_generate_python(PROTO_PY ${CMAKE_CURRENT_SOURCE_DIR}/exp/model_output.proto)
-    add_custom_target(model_output_pb2 ALL DEPENDS ${PROTO_PY})
+    # 'CONFIG' is needed for newer Protobuf https://github.com/protocolbuffers/protobuf/issues/12292
+    find_package(Protobuf REQUIRED CONFIG)
+
+    # Generate C++ and Python codes from Protobuf
+    # https://github.com/protocolbuffers/protobuf/blob/main/docs/cmake_protobuf_generate.md
+    add_library(proto-objects OBJECT
+        ${CMAKE_CURRENT_SOURCE_DIR}/exp/model_output.proto)
+
+    protobuf_generate(
+        LANGUAGE cpp
+        TARGET proto-objects
+        IMPORT_DIRS "${CMAKE_CURRENT_LIST_DIR}/exp"
+        PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+
+    set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+
+    target_include_directories(proto-objects
+        PUBLIC
+            "$<BUILD_INTERFACE:${PROTO_BINARY_DIR}>"
+    )
+
+    target_link_libraries(proto-objects
+        PUBLIC
+            protobuf::libprotobuf
+    )
+
+    protobuf_generate(
+        LANGUAGE python
+        TARGET proto-objects
+        IMPORT_DIRS "${CMAKE_CURRENT_LIST_DIR}/exp"
+        PROTOC_OUT_DIR "${PROTO_BINARY_DIR}")
+endif ()
+
+set (CMAKE_C_EXTENSIONS OFF)
+set (CMAKE_CXX_EXTENSIONS OFF)
+set (CMAKE_C_STANDARD 11)
+if (NOT USE_PROTOBUF)
+    # Don't use something that require C++17 or newer, which are not supported by MSP-CGT yet
+    set(CMAKE_CXX_STANDARD 14)
+else ()
+    # However, the latest protobuf & absl on Arch Linux require C++17
+    set(CMAKE_CXX_STANDARD 17)
 endif ()
 
 set(COMMON_SRC_PATH ${CMAKE_CURRENT_SOURCE_DIR}/common)
@@ -110,9 +147,6 @@ set (intermittent_cnn_SOURCES
     ${COMMON_SRC_PATH}/layers.cpp
     ${CMAKE_BINARY_DIR}/data.cpp
 )
-if (USE_PROTOBUF)
-    list(APPEND intermittent_cnn_SOURCES ${PROTO_SRCS})
-endif ()
 add_executable(intermittent-cnn ${intermittent_cnn_SOURCES})
 
 target_compile_definitions(intermittent-cnn
@@ -137,7 +171,7 @@ if (USE_PROTOBUF)
     target_include_directories(intermittent-cnn
         PRIVATE ${CMAKE_CURRENT_BINARY_DIR}  # for *.pb.h files
     )
-    target_link_libraries(intermittent-cnn protobuf::libprotobuf)
+    target_link_libraries(intermittent-cnn proto-objects)
 endif ()
 
 # Below is not actually used for the build on PC. I added it here so that
