@@ -346,6 +346,8 @@ for idx, n in enumerate(nodes):
         perm = get_attr(n, 'perm')
         assert len(perm) == 4
         node_flags[idx].transpose.perm = perm
+    if n.op_type == 'Softmax':
+        node_flags[idx].softmax.axis = get_attr(n, 'axis')
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 

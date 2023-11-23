@@ -360,11 +360,6 @@ void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *ou
     }
 }
 
-void handle_softmax(Model*, const ParameterInfo*[], ParameterInfo*, const Node*, NodeFlags*, const NodeFlags*) {
-    // Do nothing - softmax does not change the relative order of values.
-    // Just let run_model determine the max value
-}
-
 void alloc_transpose(struct Model *model, const struct ParameterInfo **input, struct ParameterInfo *output, const struct Node *node, NodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *X = input[0];
 
