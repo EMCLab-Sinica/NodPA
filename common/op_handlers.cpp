@@ -233,20 +233,19 @@ void handle_unsqueeze(Model* model, const ParameterInfo* input[], ParameterInfo*
 }
 
 void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
-    // Only channel concatenation is supported for now
-    MY_ASSERT(node_flags->concat.axis == 1);
+    int8_t axis = node_flags->concat.axis;
 
-    output->dims[1] = 0;
+    output->dims[axis] = 0;
     for (uint8_t input_idx = 0; input_idx < node->inputs_len; input_idx++) {
         const ParameterInfo* inp = input[input_idx];
-        MY_ASSERT(inp->dims[1] <= LEA_BUFFER_SIZE);
+        MY_ASSERT(inp->dims[axis] <= LEA_BUFFER_SIZE);
 #if JAPARI
         // Only support simple cases for now
-        MY_ASSERT(inp->dims[1] % (BATCH_SIZE + 1) == 0);
+        MY_ASSERT(inp->dims[axis] % (BATCH_SIZE + 1) == 0);
 #elif STATEFUL
-        MY_ASSERT(inp->dims[1] % BATCH_SIZE == 0);
+        MY_ASSERT(inp->dims[axis] % BATCH_SIZE == 0);
 #endif
-        output->dims[1] += inp->dims[1];
+        output->dims[axis] += inp->dims[axis];
         output->scale = (inp->scale > output->scale) ? inp->scale : output->scale;
     }
 
@@ -258,9 +257,7 @@ void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* out
     output->slot = get_next_slot(model, input[0]);
 }
 
-void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags*, const NodeFlags*) {
-    my_printf_debug("Concat!" NEWLINE);
-
+static void handle_concat_channels(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags*, const NodeFlags*) {
     uint32_t output_offset = 0;
     uint16_t hw = 0;
 #if INTERMITTENT
@@ -334,6 +331,33 @@ void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *ou
     flip_state_bit(model, output);
     stop_cpu_counter();
 #endif
+}
+
+static void handle_concat_batch(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+    uint32_t part_len = input[0]->params_len;
+    for (uint8_t input_idx = 0; input_idx < node->inputs_len; input_idx++) {
+        for (uint32_t copy_offset = 0; copy_offset < part_len; copy_offset += LEA_BUFFER_SIZE) {
+            uint32_t cur_copy_len = MIN_VAL(LEA_BUFFER_SIZE, part_len - copy_offset);
+            my_memcpy_from_param(model, lea_buffer, input[input_idx], copy_offset/sizeof(int16_t), cur_copy_len);
+            my_memcpy_to_param(output, (input_idx * part_len + copy_offset)/sizeof(int16_t), lea_buffer, cur_copy_len, /*timer_delay=*/0, /*is_linear=*/false);
+        }
+    }
+
+    dump_params_debug(model, output, node->output_name);
+}
+
+void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    my_printf_debug("Concat!" NEWLINE);
+
+    // Only batch or channel concatenation is supported for now
+    uint8_t axis = node_flags->concat.axis;
+    if (axis == 0) {
+        handle_concat_batch(model, input, output, node, node_flags, orig_node_flags);
+    } else if (axis == 1) {
+        handle_concat_channels(model, input, output, node, node_flags, orig_node_flags);
+    } else {
+        MY_ASSERT(false);
+    }
 }
 
 void handle_softmax(Model*, const ParameterInfo*[], ParameterInfo*, const Node*, NodeFlags*, const NodeFlags*) {
