@@ -26,15 +26,6 @@ configs = {
         'n_all_samples': 10000,
         'op_filters': 2,
     },
-    'cifar10-cnn': {
-        'onnx_model': 'cifar10-cnn',
-        'scale': 2,
-        'input_scale': 10,
-        'num_slots': 2,
-        'data_loader': load_data_cifar10,
-        'n_all_samples': 10000,
-        'op_filters': 2,
-    },
     'kws': {
         'onnx_model': 'KWS-DNN_S',
         'scale': 1,
