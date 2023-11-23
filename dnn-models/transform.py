@@ -30,6 +30,7 @@ from utils import (
     find_initializer,
     find_node_by_input,
     find_node_and_idx_by_output,
+    find_tensor_value_info,
     get_model_ops,
     infer_auto_pad,
     load_model,
@@ -359,7 +360,18 @@ for idx, n in enumerate(nodes):
         assert len(perm) == 4
         node_flags[idx].transpose.perm = perm
     if n.op_type == 'Softmax':
-        node_flags[idx].softmax.axis = get_attr(n, 'axis')
+        axis = get_attr(n, 'axis')
+        if axis is None:
+            # The default value for 'axis' is changed in opset 13
+            # https://onnx.ai/onnx/operators/onnx__Softmax.html
+            if get_model_opset_version(onnx_model) >= 13:
+                input_value_info = find_tensor_value_info(onnx_model, n.input[0])
+                input_shape = input_value_info.type.tensor_type.shape
+                # The default axis is -1, which means the last dimension
+                axis = len(input_shape.dim) - 1
+            else:
+                axis = 1
+        node_flags[idx].softmax.axis = axis
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
