@@ -471,15 +471,15 @@ def import_model_output_pb2():
         sys.path = orig_sys_path
 
 def split2slice(model):
-    # Slice: start, and, axis are inputs since opset 10
-    # Split: split is an input since opset 13
-    assert get_model_opset_version(model) >= 13
-
     new_nodes = []
     for node in model.graph.node:
         if node.op_type != 'Split':
             new_nodes.append(node)
             continue
+
+        # Slice: start, and, axis are inputs since opset 10
+        # Split: split is an input since opset 13
+        assert get_model_opset_version(model) >= 13
 
         axis = get_attr(node, 'axis')
         if axis is None:
