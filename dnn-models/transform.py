@@ -485,6 +485,7 @@ for params in parameters:
     else:
         assert len(params.dims) <= 4
         params_data = onnx.numpy_helper.to_array(params)
+        param_flags = 0
         model_parameters_info.write(to_bytes(parameters_slot.offset, size=32))  # params_offset
         if params.data_type == onnx.TensorProto.FLOAT:
             param_size = 2
@@ -496,6 +497,7 @@ for params in parameters:
             if used_node.op_type in ('Gemm', 'MatMul'):
                 params_data = np.reshape(params_data, params.dims)
                 params_data = np.transpose(params_data)
+                param_flags |= 1 << other_flags.index('TRANSPOSED')
 
             param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=params.name) or config['scale']
             parameters_slot.target.write(to_bytes(_Q15(params_data / param_scale, 'Parameter')))
@@ -509,7 +511,7 @@ for params in parameters:
         parameters_slot.offset += data_len * param_size
         model_parameters_info.write(to_bytes(data_len * param_size, size=32))
         model_parameters_info.write(to_bytes(parameters_slot.slot_id, size=8))  # slot
-        model_parameters_info.write(to_bytes(0, size=8))  # param_flags
+        model_parameters_info.write(to_bytes(param_flags, size=8))  # param_flags
         if len(params.dims) == 4:
             channels = params.dims[1]
         else:

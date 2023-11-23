@@ -176,9 +176,16 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 my_fill_q15(0, filter_ptr, extended_tile_channels * full_tile_b_cols);
                 for (uint16_t row = 0; row < tile_b_cols; row++) {
                     MY_ASSERT(tile_channels <= OP_BUFFER_LEN);
-                    my_memcpy_from_param(model, weights_tmp,
+                    if (B->param_flags & TRANSPOSED) {
+                        my_memcpy_from_param(model, weights_tmp,
                               B, (tile_b_col_offset + row) * B->dims[0] + tile_channel_offset,
                               tile_channels * sizeof(uint16_t));
+                    } else {
+                        // XXX: copy and interleave might be merged
+                        for (uint16_t tile_channel_copy_idx = 0; tile_channel_copy_idx < tile_channels; tile_channel_copy_idx++) {
+                            weights_tmp[tile_channel_copy_idx] = get_q15_param(model, B, (tile_channel_offset + tile_channel_copy_idx) * B->dims[1] + (tile_b_col_offset + row));
+                        }
+                    }
 #if JAPARI
                     my_interleave_q15(weights_tmp, extend_for_footprints(row), full_tile_b_cols, filter_ptr, tile_channels);
 #else
