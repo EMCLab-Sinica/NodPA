@@ -39,6 +39,7 @@ from utils import (
 from onnx_utils import (
     compute_parameter_scales,
     find_tensor_annotation,
+    get_model_opset_version,
     get_sample_size,
     list_tensors_for_annotations,
 )
@@ -334,7 +335,18 @@ for idx, n in enumerate(nodes):
         if prev_node and prev_node.op_type == 'MaxPool':
             node_flags[prev_node_idx].maxpool.nhwc2nchw = 1
     if n.op_type in ('Squeeze', 'Unsqueeze'):
-        axes = get_attr(n, 'axes') or []
+        # axes is an input fo Squeeze and Unsqueeze since opset 13
+        # https://onnx.ai/onnx/operators/onnx__Squeeze.html
+        # https://onnx.ai/onnx/operators/onnx__Unsqueeze.html
+        if get_model_opset_version(onnx_model) >= 13:
+            axes_initializer = find_initializer(onnx_model, n.input[1])
+            axes = onnx.numpy_helper.to_array(axes_initializer)
+        else:
+            axes = get_attr(n, 'axes')
+        if n.op_type == 'Unsqueeze':
+            assert axes is not None
+        else:
+            axes = axes or []
         node_flags[idx].squeeze.axes = 0
         for axis in axes:
             node_flags[idx].squeeze.axes |= (1 << axis)
