@@ -15,6 +15,7 @@ from urllib.request import urlretrieve
 import filelock
 import numpy as np
 import onnx
+import onnx.numpy_helper
 import onnxoptimizer
 import onnxruntime
 import onnxruntime.backend as backend
@@ -23,6 +24,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from onnx_utils import (
     find_initializer,
+    get_model_opset_version,
 )
 
 logger = logging.getLogger('intermittent-cnn.utils')
@@ -205,6 +207,7 @@ def load_model(config, model_variant):
         'fuse_matmul_add_bias_into_gemm',
     ])
 
+    split2slice(onnx_model_single)
     onnx.checker.check_model(onnx_model_single)
 
     return {
@@ -466,3 +469,50 @@ def import_model_output_pb2():
         return model_output_pb2
     finally:
         sys.path = orig_sys_path
+
+def split2slice(model):
+    # Slice: start, and, axis are inputs since opset 10
+    # Split: split is an input since opset 13
+    assert get_model_opset_version(model) >= 13
+
+    new_nodes = []
+    for node in model.graph.node:
+        if node.op_type != 'Split':
+            new_nodes.append(node)
+            continue
+
+        axis = get_attr(node, 'axis')
+        if axis is None:
+            axis = 0
+
+        # Lengths of the parts can be specified using input ‘split’. Otherwise, the tensor is split to equal sized parts.
+        if len(node.input) == 2:
+            split = onnx.numpy_helper.to_array(find_initializer(model, node.input[1]))
+        else:
+            input_value_info = find_tensor_value_info(model, node.input[0])
+            input_shape = input_value_info.type.tensor_type.shape
+            output_split_dim_size, remaining = divmod(input_shape.dim[axis].dim_value, len(node.output))
+            assert remaining == 0
+            split = [output_split_dim_size] * len(node.output)
+
+        cur_start = 0
+        cur_end = split[0]
+        for idx, output in enumerate(node.output):
+            output_node = find_node_by_input(model.graph.node, output)
+            model.graph.initializer.extend([
+                onnx.helper.make_tensor(f'{node.name}_start{idx}', onnx.TensorProto.INT64, dims=[1], vals=[cur_start]),
+                onnx.helper.make_tensor(f'{node.name}_end{idx}', onnx.TensorProto.INT64, dims=[1], vals=[cur_end]),
+                onnx.helper.make_tensor(f'{node.name}_axis{idx}', onnx.TensorProto.INT64, dims=[1], vals=[axis]),
+            ])
+            cur_start = cur_end
+            if idx < len(node.output) - 1:
+                cur_end += split[idx+1]
+            new_node_inputs = [node.input[0], f'{node.name}_start{idx}', f'{node.name}_end{idx}', f'{node.name}_axis{idx}']
+            new_node_output = f'{node.name}_output{idx}'
+            new_nodes.append(onnx.helper.make_node('Slice', inputs=new_node_inputs, outputs=[new_node_output], name=f'{node.name}_slice{idx}'))
+            replaced_inputs = [new_node_output if inp == output else inp for inp in output_node.input]
+            del output_node.input[:]
+            output_node.input.extend(replaced_inputs)
+
+    del model.graph.node[:]
+    model.graph.node.extend(new_nodes)
