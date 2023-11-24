@@ -529,6 +529,7 @@ for params in parameters:
             param_size = 8
             for param in params_data:
                 parameters_slot.target.write(to_bytes(param, size=64))
+            param_scale = 1
         else:
             assert False
         data_len = np.prod(params.dims)
