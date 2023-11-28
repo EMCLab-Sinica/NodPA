@@ -36,49 +36,19 @@ void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 
 int16_t* const weights_tmp = op_buffer;
 
-void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
+static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags,
+                          // loop indices
+                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
+                          // for state representation
+                          int16_t* offset, uint16_t* next_output_turning_point, uint8_t* output_turning_point_idx, SlotInfo** output_slot_info) {
+    const ParameterInfo *A = input[0], *B = input[1];
 
-    MY_ASSERT(node_flags->gemm.tile_a_rows == 1);
-
-#ifdef OpGemm
-    // OpMatMul does not have a bias
-    if (node->op_type == OpGemm) {
-        matC = input[2];
-    }
-#endif
-
-    my_printf_debug("Gemm! A: (%dx%d), B: (%dx%d)" NEWLINE,
-              A->dims[0], A->dims[1], B->dims[0], B->dims[1]);
-
-    int16_t A_len = A->dims[0] * A->dims[1] + 2,
-            output_len = output->dims[0] * output->dims[1];
-
-    int16_t *buffer_a = lea_buffer,
-            *buffer_temp = buffer_a + (A_len + 1) / 2 * 2; // guarantee even addresses, making check_buffer_address happy
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    buffer_temp += 2;
-    int16_t* buffer_b = buffer_temp + extend_for_footprints(node_flags->gemm.tile_b_cols);
-    stop_cpu_counter();
-#else
-    int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_b_cols;
-#endif
-    make_buffer_aligned(&buffer_b);
-
-    uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_a_row_offset = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0;
-
-#if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_value_offset = job_index_to_offset(output, run_recovery(model, output));
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, state_query));
-    int16_t offset;
-    uint16_t next_output_turning_point;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info, first_unfinished_value_offset, model, output);
+    find_initial_state_bit(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, first_unfinished_value_offset, model, output);
     stop_cpu_counter();
 #endif
 
@@ -86,16 +56,17 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
-    tile_channel_idx = first_unfinished_value_offset / output_len;
-    tile_channel_offset = tile_channel_idx * node_flags->gemm.tile_channel;
-    extended_tile_b_col_offset = first_unfinished_value_offset % output_len;
+    uint32_t output_len = output->dims[0] * output->dims[1];
+    *tile_channel_idx = first_unfinished_value_offset / output_len;
+    *tile_channel_offset = (*tile_channel_idx) * node_flags->gemm.tile_channel;
+    *extended_tile_b_col_offset = first_unfinished_value_offset % output_len;
 
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
-    tile_b_col_offset = extended_tile_b_col_offset / (BATCH_SIZE + 1) * BATCH_SIZE;
+    *tile_b_col_offset = *extended_tile_b_col_offset / (BATCH_SIZE + 1) * BATCH_SIZE;
     stop_cpu_counter();
 #else
-    tile_b_col_offset = extended_tile_b_col_offset;
+    *tile_b_col_offset = *extended_tile_b_col_offset;
 #endif
 
     stop_cpu_counter();
@@ -119,6 +90,48 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     output->params_len = output_len * upper_gauss(B->dims[0], node_flags->gemm.tile_channel) * sizeof(int16_t);
     MY_ASSERT(node_flags->gemm.tile_b_cols / BATCH_SIZE * BATCH_SIZE == node_flags->gemm.tile_b_cols);
 
+}
+
+void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
+
+    MY_ASSERT(node_flags->gemm.tile_a_rows == 1);
+
+#ifdef OpGemm
+    // OpMatMul does not have a bias
+    if (node->op_type == OpGemm) {
+        matC = input[2];
+    }
+#endif
+
+    my_printf_debug("Gemm! A: (%dx%d), B: (%dx%d)" NEWLINE,
+              A->dims[0], A->dims[1], B->dims[0], B->dims[1]);
+
+    int16_t A_len = A->dims[0] * A->dims[1] + 2;
+
+    int16_t *buffer_a = lea_buffer,
+            *buffer_temp = buffer_a + (A_len + 1) / 2 * 2; // guarantee even addresses, making check_buffer_address happy
+#if JAPARI
+    start_cpu_counter(offsetof(Counters, embedding));
+    buffer_temp += 2;
+    int16_t* buffer_b = buffer_temp + extend_for_footprints(node_flags->gemm.tile_b_cols);
+    stop_cpu_counter();
+#else
+    int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_b_cols;
+#endif
+    make_buffer_aligned(&buffer_b);
+
+    uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_a_row_offset = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0;
+
+#if INTERMITTENT
+    int16_t offset;
+    uint16_t next_output_turning_point;
+    uint8_t output_turning_point_idx;
+    SlotInfo *output_slot_info;
+
+    gemm_recovery(model, input, output, node, node_flags, orig_node_flags,
+                  &tile_channel_offset, &tile_channel_idx, &tile_b_col_offset, &extended_tile_b_col_offset,
+                  &offset, &next_output_turning_point, &output_turning_point_idx, &output_slot_info);
 #endif
 
     for (; tile_channel_offset < B->dims[0]; tile_channel_offset += node_flags->gemm.tile_channel, tile_channel_idx++) {
@@ -158,6 +171,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             my_printf_debug("Tile for A" NEWLINE);
             dump_matrix_debug(buffer_a, node_flags->gemm.tile_a_rows, extended_tile_channels, ValueInfo(A, model));
 
+            uint32_t output_len = output->dims[0] * output->dims[1];
             int16_t output_offset = tile_channel_idx * output_len + tile_a_row_offset * output->dims[1] + extended_tile_b_col_offset;
 
             for (; tile_b_col_offset < B->dims[1]; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
