@@ -36,6 +36,7 @@ void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 
 int16_t* const weights_tmp = op_buffer;
 
+#if INTERMITTENT
 static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags,
                           // loop indices
                           uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
@@ -91,6 +92,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
     MY_ASSERT(node_flags->gemm.tile_b_cols / BATCH_SIZE * BATCH_SIZE == node_flags->gemm.tile_b_cols);
 
 }
+#endif
 
 void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
@@ -107,10 +109,12 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     my_printf_debug("Gemm! A: (%dx%d), B: (%dx%d)" NEWLINE,
               A->dims[0], A->dims[1], B->dims[0], B->dims[1]);
 
-    int16_t A_len = A->dims[0] * A->dims[1] + 2;
+    // Use original tile sizes here, as tile sizes might be dynamically reconfigured, while
+    // the reconfigured size is never larger than the original size
+    int16_t buffer_a_size = orig_node_flags->gemm.tile_a_rows * orig_node_flags->gemm.tile_channel + 2;
 
     int16_t *buffer_a = lea_buffer,
-            *buffer_temp = buffer_a + (A_len + 1) / 2 * 2; // guarantee even addresses, making check_buffer_address happy
+            *buffer_temp = buffer_a + (buffer_a_size + 1) / 2 * 2; // guarantee even addresses, making check_buffer_address happy
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
     buffer_temp += 2;
@@ -294,7 +298,8 @@ void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
 
     int16_t output_tile_size = node_flags->gemmmerge.tile_length;
     if (!output_tile_size) {
-        output_tile_size = output_len;
+        // buffer_temp and buffer_gemm have the same size, and they occupy LEA buffer, so divide by 2
+        output_tile_size = MIN_VAL(LIMIT_DMA_SIZE(output_len), LEA_BUFFER_SIZE / 2);
     }
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));

@@ -77,12 +77,11 @@ def find_min_range(onnx_model: onnx.ModelProto, nodes: list, node_flags, config:
 
             # find tile input channel
             wrapped_node_idx, wrapped_node = find_node_and_idx_by_output(nodes, node.output[0])
-            cur_node_flags = getattr(node_flags[wrapped_node_idx], node.op_type.lower())
 
             if node.op_type == 'Conv':
-                tile_channel = cur_node_flags.input_tile_c
+                tile_channel = node_flags[wrapped_node_idx].conv.input_tile_c
             elif node.op_type in ('Gemm', 'MatMul'):
-                tile_channel = cur_node_flags.tile_channel
+                tile_channel = node_flags[wrapped_node_idx].gemm.tile_channel
 
             n_tiles = math.ceil(input_dims[0] / tile_channel)
             ofm_sizes[next_slot_id].append(n_tiles * output_len)

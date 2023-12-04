@@ -207,7 +207,7 @@ def load_model(config, model_variant):
         'fuse_matmul_add_bias_into_gemm',
     ])
 
-    split2slice(onnx_model_single)
+    onnx_model_single = split2slice(onnx_model_single)
     onnx.checker.check_model(onnx_model_single)
 
     return {
@@ -470,7 +470,10 @@ def import_model_output_pb2():
     finally:
         sys.path = orig_sys_path
 
-def split2slice(model):
+def split2slice(orig_model: onnx.ModelProto):
+    model = onnx.ModelProto()
+    model.CopyFrom(orig_model)
+
     new_nodes = []
     for node in model.graph.node:
         if node.op_type != 'Split':
@@ -516,3 +519,8 @@ def split2slice(model):
 
     del model.graph.node[:]
     model.graph.node.extend(new_nodes)
+
+    # Run shape inference for newly-added Slice node outputs
+    model = onnx.shape_inference.infer_shapes(model)
+
+    return model
