@@ -119,6 +119,7 @@ void update_progress_indicator_fc(const Node* node, NodeFlags* node_flags, const
     const UsageSpanFc usage_span(layer_dims, orig_flags->gemm.tile_channel, orig_flags->gemm.tile_b_cols, stats->power_cycle_energy);
 
     if (first_unfinished_value_offset == 0) {
+#if RuntimeConfiguration == DynBal
         if (!read_gpio_flag(GPIOFlag::DisableDynBalSearch)) {
             // Starting a new layer
             if (stats->power_cycle_energy) {
@@ -128,6 +129,7 @@ void update_progress_indicator_fc(const Node* node, NodeFlags* node_flags, const
                 my_printf_debug("Skipping runtime reconfiguration!" NEWLINE);
             }
         }
+#endif
         // Cleanup stats from the previous layer
         stats->last_progress_indicator = 0;
         commit_inference_stats(InferenceStatsOpType::FC);

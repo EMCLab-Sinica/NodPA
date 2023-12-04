@@ -2,11 +2,7 @@
 
 #include <cstdint>
 #include "data_structures.h"
-
-#define Fixed 0
-#define DynBal 1
-#define Exhaustive 2
-#define RuntimeConfiguration DynBal
+#include "dynbal-config.h"
 
 #define DYNBAL_REPORT_PARAMETERS 0
 

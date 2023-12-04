@@ -648,6 +648,8 @@ with open(f'{args.data_output_dir}/data.cpp', 'w') as output_c, open(f'{args.dat
 #pragma once
 
 #include <stdint.h>
+#include "dynbal-config.h"
+#include "layer-defs.h"
 
 struct ParameterInfo;
 struct Model;
@@ -688,7 +690,7 @@ struct NodeFlags;
         'const struct ParameterInfo *input[]',
         'struct ParameterInfo *output',
         'const struct Node* node',
-        'struct NodeFlags* node_flags',
+        'CurNodeFlags* node_flags',
         'const struct NodeFlags* orig_node_flags',
     ))
     # ops

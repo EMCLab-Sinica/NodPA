@@ -105,7 +105,7 @@ void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, 
 
 static void handle_node(Model *model, uint16_t node_idx) {
     const Node *cur_node = get_node(node_idx);
-    NodeFlags* cur_node_flags = get_node_flags(node_idx);
+    CurNodeFlags* cur_node_flags = get_node_flags(node_idx);
     const NodeFlags* cur_orig_node_flags = get_node_orig_flags(node_idx);
 #if MY_DEBUG >= MY_DEBUG_LAYERS
     my_printf("Current node: %d, ", node_idx);

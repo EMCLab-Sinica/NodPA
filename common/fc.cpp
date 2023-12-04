@@ -15,7 +15,7 @@
  * For fully-connected layers, which are implemented via Gemm in ONNX.
  */
 
-void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *A = input[0], *B = input[1];
 
     output->dims[0] = A->dims[0];
@@ -37,7 +37,7 @@ void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 int16_t* const weights_tmp = op_buffer;
 
 #if INTERMITTENT
-static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags,
+static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags,
                           // loop indices
                           uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
                           // for state representation
@@ -94,7 +94,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 }
 #endif
 
-void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
 
     MY_ASSERT(node_flags->gemm.tile_a_rows == 1);
@@ -283,13 +283,13 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, NodeFlags*, const NodeFlags*) {
+void alloc_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     output->slot = get_next_slot(model, input[0]);
     int16_t output_len = output->dims[0] * output->dims[1];
     output->params_len = output_len * sizeof(int16_t);
 }
 
-void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *X = input[0];
 
     my_printf_debug("GemmMerge!" NEWLINE);
@@ -367,18 +367,18 @@ void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
     dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void alloc_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     alloc_gemm(model, input, output, node, node_flags, orig_node_flags);
 }
 
-void handle_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     handle_gemm(model, input, output, node, node_flags, orig_node_flags);
 }
 
-void alloc_matmulmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void alloc_matmulmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     alloc_gemmmerge(model, input, output, node, node_flags, orig_node_flags);
 }
 
-void handle_matmulmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_matmulmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     handle_gemmmerge(model, input, output, node, node_flags, orig_node_flags);
 }

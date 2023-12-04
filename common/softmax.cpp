@@ -8,7 +8,7 @@
 #include "op_utils.h"
 #include "platform.h"
 
-void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     int axis = node_flags->softmax.axis;
 
     if (axis == 1) {

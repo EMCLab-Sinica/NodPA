@@ -14,12 +14,12 @@
 const uint8_t RELU_TILE_SIZE = 16;
 static_assert(RELU_TILE_SIZE % BATCH_SIZE == 0, "Incorrect tile size for ReLU");
 
-void alloc_relu(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, NodeFlags*, const NodeFlags*) {
+void alloc_relu(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *data = input[0];
     output->slot = get_next_slot(model, data);
 }
 
-void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags*, const NodeFlags*) {
+void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("ReLu!" NEWLINE);
 
     const ParameterInfo *X = input[0];
@@ -133,7 +133,7 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     dump_params_nhwc_debug(model, output, node->output_name);
 }
 
-void handle_reshape(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags*, const NodeFlags*) {
+void handle_reshape(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("Reshape!" NEWLINE);
 
     const ParameterInfo *data = input[0], *shape = input[1];
@@ -187,7 +187,7 @@ void handle_reshape(Model *model, const ParameterInfo *input[], ParameterInfo *o
     dump_params_debug(model, output, node->output_name);
 }
 
-void handle_squeeze(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void handle_squeeze(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     my_printf_debug("Squeeze!" NEWLINE);
 
     uint8_t axes = node_flags->squeeze.axes;
@@ -218,7 +218,7 @@ void handle_squeeze(Model *model, const ParameterInfo *input[], ParameterInfo *o
     }
 }
 
-void handle_unsqueeze(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void handle_unsqueeze(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     my_printf_debug("Unsqueeze!" NEWLINE);
     uint8_t axes = node_flags->squeeze.axes;
     uint8_t input_dim_offset = 0, output_dim_offset = 0;
@@ -234,7 +234,7 @@ void handle_unsqueeze(Model* model, const ParameterInfo* input[], ParameterInfo*
     }
 }
 
-void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     int8_t axis = node_flags->concat.axis;
 
     output->dims[axis] = 0;
@@ -259,7 +259,7 @@ void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* out
     output->slot = get_next_slot(model, input[0]);
 }
 
-static void handle_concat_channels(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags*, const NodeFlags*) {
+static void handle_concat_channels(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     uint32_t output_offset = 0;
     uint16_t hw = 0;
 #if INTERMITTENT
@@ -335,7 +335,7 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
 #endif
 }
 
-static void handle_concat_batch(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+static void handle_concat_batch(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     uint32_t part_len = input[0]->params_len;
     for (uint8_t input_idx = 0; input_idx < node->inputs_len; input_idx++) {
         for (uint32_t copy_offset = 0; copy_offset < part_len; copy_offset += LEA_BUFFER_SIZE) {
@@ -348,7 +348,7 @@ static void handle_concat_batch(Model *model, const ParameterInfo *input[], Para
     dump_params_debug(model, output, node->output_name);
 }
 
-void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     my_printf_debug("Concat!" NEWLINE);
 
     // Only batch or channel concatenation is supported for now
@@ -362,10 +362,10 @@ void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *ou
     }
 }
 
-void alloc_transpose(struct Model *model, const struct ParameterInfo **input, struct ParameterInfo *output, const struct Node *node, NodeFlags* node_flags, const NodeFlags*) {
+void alloc_transpose(struct Model *model, const struct ParameterInfo **input, struct ParameterInfo *output, const struct Node *node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *X = input[0];
 
-    uint8_t* perm = node_flags->transpose.perm;
+    const uint8_t* perm = node_flags->transpose.perm;
     for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
         output->dims[dim_idx] = X->dims[perm[dim_idx]];
     }
@@ -373,12 +373,12 @@ void alloc_transpose(struct Model *model, const struct ParameterInfo **input, st
     output->slot = get_next_slot(model, input[0]);
 }
 
-void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, NodeFlags* node_flags, const NodeFlags*) {
+void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     my_printf_debug("Transpose!" NEWLINE);
 
     const ParameterInfo *X = input[0];
 
-    uint8_t* perm = node_flags->transpose.perm;
+    const uint8_t* perm = node_flags->transpose.perm;
 
     uint16_t input_indices[4], output_indices[4];
     for (input_indices[0] = 0; input_indices[0] < X->dims[0]; input_indices[0]++) {
@@ -407,11 +407,11 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
     dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, NodeFlags*, const NodeFlags*) {
+void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
     output->slot = get_next_slot(model, input[0]);
 }
 
-void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, NodeFlags*, const NodeFlags*) {
+void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("Add!" NEWLINE);
 
     const ParameterInfo *X = input[0], *Y = input[1];

@@ -1,7 +1,7 @@
 #include "cnn_common.h"
 #include "my_debug.h"
 
-void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, NodeFlags*, const NodeFlags*) {
+void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *X = input[0], *start = input[1], *end = input[2], *axes = input[3];
 
     uint16_t input_start = get_int64_param(start, 0);
@@ -23,7 +23,7 @@ void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struc
     }
 }
 
-void handle_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, NodeFlags*, const NodeFlags*) {
+void handle_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("Slice!" NEWLINE);
 
     const ParameterInfo *X = input[0], *start = input[1], *end = input[2];

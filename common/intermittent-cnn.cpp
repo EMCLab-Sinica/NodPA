@@ -162,7 +162,7 @@ uint32_t job_index_to_offset(const ParameterInfo *output, uint16_t job_index) {
 #endif
 
     const Node* node = get_node(output);
-    NodeFlags* node_flags = get_node_flags(output->parameter_info_idx - N_INPUT);
+    const NodeFlags* node_flags = get_node_flags(output->parameter_info_idx - N_INPUT);
 #ifdef OpConv
     uint8_t is_conv = (node->op_type == OpConv);
 #else
