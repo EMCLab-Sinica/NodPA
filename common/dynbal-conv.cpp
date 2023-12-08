@@ -88,6 +88,7 @@ uint16_t UsageSpanConv::nearest_value(uint8_t dim_idx, uint16_t dim_value, bool 
     return ret;
 }
 
+#if RuntimeConfiguration == DynBal
 static void adapt_conv_dynbal(const Node* node, NodeFlags* node_flags, const NodeFlags* orig_flags, const ConvLayerDimensions* layer_dims, const UsageSpanConv* usage_span, uint32_t power_cycle_energy) {
     uint16_t output_tile_c_upper = orig_flags->conv.output_tile_c, output_tile_c_lower = 2;
     /*
@@ -121,6 +122,7 @@ static void adapt_conv_dynbal(const Node* node, NodeFlags* node_flags, const Nod
         }
     }
 }
+#endif
 
 void update_progress_indicator_conv(const Node* node, NodeFlags* node_flags, const NodeFlags* orig_flags, const ConvLayerDimensions& layer_dims, uint32_t first_unfinished_job_idx) {
     if (read_gpio_flag(GPIOFlag::DisableDynBalTracking)) {

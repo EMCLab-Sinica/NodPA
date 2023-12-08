@@ -80,6 +80,7 @@ uint16_t UsageSpanFc::nearest_value(uint8_t dim_idx, uint16_t dim_value, bool no
     return ret;
 }
 
+#if RuntimeConfiguration == DynBal
 static void adapt_fc_dynbal(const Node* node, NodeFlags* node_flags, const NodeFlags* orig_flags, const UsageSpanFc* usage_span, const FcLayerDimensions& layer_dims, uint32_t jobs_in_a_power_cycle) {
     uint32_t output_len = layer_dims.A_rows * layer_dims.B_cols;
     uint16_t tile_channel_upper = orig_flags->gemm.tile_channel,
@@ -108,6 +109,7 @@ static void adapt_fc_dynbal(const Node* node, NodeFlags* node_flags, const NodeF
         }
     }
 }
+#endif
 
 void update_progress_indicator_fc(const Node* node, NodeFlags* node_flags, const NodeFlags* orig_flags, const FcLayerDimensions& layer_dims, uint32_t first_unfinished_value_offset) {
     if (read_gpio_flag(GPIOFlag::DisableDynBalTracking)) {

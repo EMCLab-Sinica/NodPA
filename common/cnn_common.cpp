@@ -217,7 +217,7 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
 #if MY_DEBUG >= MY_DEBUG_NORMAL
     int16_t max = INT16_MIN;
     uint16_t u_ans;
-    uint8_t ans_len = sizeof(first_sample_outputs) / sizeof(float);
+    uint16_t ans_len = sizeof(first_sample_outputs) / sizeof(float);
 #if JAPARI
     ans_len = extend_for_footprints(ans_len);
 #endif
