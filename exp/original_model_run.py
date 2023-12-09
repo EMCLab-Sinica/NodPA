@@ -6,7 +6,7 @@ TOPDIR = pathlib.Path(__file__).absolute().parents[1]
 sys.path.append(str(TOPDIR / 'dnn-models'))
 
 from configs import configs
-from utils import load_model, run_model
+from utils import load_model, run_model_single, run_model_batched
 from onnx_utils import get_sample_size
 
 def main():
@@ -27,8 +27,10 @@ def main():
     else:
         model = models['batched']
     model_data = config['data_loader'](train=False, target_size=get_sample_size(model))
-    run_model(model, model_data, args.limit,
-              verbose=not args.save_file, save_file=args.save_file)
+    if args.limit == 1:
+        run_model_single(model, model_data, verbose=not args.save_file, save_file=args.save_file)
+    else:
+        run_model_batched(model, model_data)
 
 if __name__ == '__main__':
     main()

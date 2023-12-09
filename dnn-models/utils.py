@@ -9,7 +9,7 @@ import struct
 import sys
 import tarfile
 import zipfile
-from typing import Callable, Iterable, NamedTuple, Optional
+from typing import Callable, Iterator, NamedTuple, Optional
 from urllib.request import urlretrieve
 
 import filelock
@@ -55,12 +55,12 @@ def extract_archive(archive_path: pathlib.Path, subdir: str):
     if not archive_dir.exists():
         if '.tar' in str(archive_path):
             with tarfile.open(archive_path) as tar:
-                members = [member for member in tar.getmembers() if member.name.startswith(subdir)]
-                tar.extractall(archive_path.parent, members=members)
+                tar_members = [member for member in tar.getmembers() if member.name.startswith(subdir)]
+                tar.extractall(archive_path.parent, members=tar_members)
         elif str(archive_path).endswith('.zip'):
             with zipfile.ZipFile(archive_path) as zip_f:
-                members = [member for member in zip_f.namelist() if member.startswith(subdir)]
-                zip_f.extractall(archive_path.parent, members=members)
+                zip_members = [member for member in zip_f.namelist() if member.startswith(subdir)]
+                zip_f.extractall(archive_path.parent, members=zip_members)
     return archive_dir
 
 def kws_dnn_model():
@@ -113,11 +113,13 @@ def find_node_by_output(nodes: list[onnx.NodeProto], output_name: str) -> Option
     _, node = find_node_and_idx_by_output(nodes, output_name)
     return node
 
-def find_node_by_input(nodes: list[onnx.NodeProto], input_name: str) -> onnx.NodeProto:
+def find_node_by_input(nodes: list[onnx.NodeProto], input_name: str) -> Optional[onnx.NodeProto]:
     for node in nodes:
         for input_ in node.input:
             if input_ == input_name:
                 return node
+
+    return None
 
 def get_attr(node, attr_name):
     for attr in node.attribute:
@@ -242,7 +244,7 @@ def onnxruntime_prepare_model(model):
         providers=["CPUExecutionProvider"],
     ))
 
-def onnxruntime_get_intermediate_tensor(model, image):
+def onnxruntime_get_intermediate_tensor(model, image) -> Iterator[tuple[str, str, np.ndarray]]:
     # Creating a new model with all nodes as outputs
     # https://github.com/microsoft/onnxruntime/issues/1455#issuecomment-979901463
     tmp_model = onnx.ModelProto()
@@ -282,49 +284,6 @@ def change_batch_size(onnx_model_batched: onnx.ModelProto):
     onnx.shape_inference.infer_shapes(onnx_model_single)
 
     return onnx_model_single
-
-def dynamic_shape_inference(onnx_model: onnx.ModelProto, sample_size: Iterable[int]) -> None:
-    for node in itertools.chain(onnx_model.graph.input, onnx_model.graph.output):
-        if not node.type.tensor_type.shape.dim:
-            continue
-        node.type.tensor_type.shape.dim[0].dim_param = 'N'
-
-    del onnx_model.graph.value_info[:]
-
-    BATCH_SIZE = 2  # Any number larger than 1 is OK. Here I pick the smallest one for performance considerations
-
-    dummy_images = np.expand_dims(np.zeros(sample_size, dtype=np.float32), axis=0)
-    shapes = {
-        layer_name: np.shape(layer_out)
-        for layer_name, _, layer_out in onnxruntime_get_intermediate_tensor(onnx_model, dummy_images)
-    }
-    dummy_images = np.concatenate([
-        np.expand_dims(np.random.rand(*sample_size).astype(np.float32), axis=0) for _ in range(BATCH_SIZE)
-    ], axis=0)
-
-    value_infos = []
-    for layer_name, layer_type, layer_out in onnxruntime_get_intermediate_tensor(onnx_model, dummy_images):
-        larger_shape = np.shape(layer_out)
-        smaller_shape = shapes[layer_name]
-        if larger_shape[1:] != smaller_shape[1:]:
-            logger.info('Skipping OFM %s for %s node with mismatched shapes: %r, %r', layer_name, layer_type, larger_shape, smaller_shape)
-            continue
-
-        new_shape = list(larger_shape)
-        if larger_shape:
-            if larger_shape[0] == smaller_shape[0] * BATCH_SIZE:
-                new_shape[0] = 'N'
-            elif larger_shape[0] == smaller_shape[0]:
-                pass
-            else:
-                logger.info('Skipping OFM %s for %s node with mismatched batch sizes: %d, %d', layer_name, layer_type, larger_shape[0], smaller_shape[0])
-                continue
-
-        elem_type = numpy_type_to_onnx_elem_type(layer_out.dtype)
-        value_info = onnx.helper.make_tensor_value_info(layer_name, elem_type, new_shape)
-        value_infos.append(value_info)
-
-    onnx_model.graph.value_info.extend(value_infos)
 
 def print_float(val):
     print('%13.6f' % val, end='')
@@ -383,54 +342,59 @@ def print_tensor(tensor, print_histogram):
                 threshold *= 2
         print(f'Max={np.max(tensor)}, min={np.min(tensor)}')
 
-def run_model(model, model_data, limit, verbose=True, save_file=None):
+def run_model_single(model: onnx.ModelProto, model_data: ModelData, verbose: bool = True, save_file: Optional[os.PathLike[str]] = None) -> np.ndarray:
     # Testing
-    images, labels = next(iter(model_data.data_loader(limit)))
+    images, labels = next(iter(model_data.data_loader(limit=1)))
     images = images.numpy()
-    if limit == 1:
-        last_layer_out = None
+
+    last_layer_out = None
+    if verbose:
+        print('Input')
+        print_tensor(images, False)
+    if save_file:
+        model_output_pb2 = import_model_output_pb2()
+        model_output = model_output_pb2.ModelOutput()
+    for layer_name, op_type, layer_out in onnxruntime_get_intermediate_tensor(model, images):
         if verbose:
-            print('Input')
-            print_tensor(images, False)
+            print(f'{op_type} layer: {layer_name}')
+            print_tensor(layer_out, op_type in ('Conv', 'Gemm', 'MatMul'))
         if save_file:
-            model_output_pb2 = import_model_output_pb2()
-            model_output = model_output_pb2.ModelOutput()
-        for layer_name, op_type, layer_out in onnxruntime_get_intermediate_tensor(model, images):
+            layer_out_obj = model_output_pb2.LayerOutput()
+            layer_out_obj.name = layer_name
+            layer_out_obj.dims.extend(layer_out.shape)
+            if layer_out.shape:
+                linear_shape = [np.prod(layer_out.shape)]
+                layer_out_obj.value.extend(np.reshape(layer_out, linear_shape))
+            else:
+                # zero-dimension tensor -> scalar
+                layer_out_obj.value.append(layer_out)
+            model_output.layer_out.append(layer_out_obj)
+        # Softmax is not implemented yet - return the layer before Softmax
+        if op_type != 'Softmax':
+            last_layer_out = layer_out
+    if save_file:
+        with open(save_file, 'wb') as f:
+            f.write(model_output.SerializeToString())
+    assert last_layer_out is not None
+    return last_layer_out
+
+def run_model_batched(model: onnx.ModelProto, model_data: ModelData, verbose: bool = True) -> float:
+    images, labels = next(iter(model_data.data_loader(limit=None)))
+    images = images.numpy()
+
+    correct = 0
+    layer_outs = onnxruntime_prepare_model(model).run(images)[0]
+    for idx, layer_out in enumerate(layer_outs):
+        predicted = np.argmax(layer_out)
+        if predicted == labels[idx]:
             if verbose:
-                print(f'{op_type} layer: {layer_name}')
-                print_tensor(layer_out, op_type in ('Conv', 'Gemm', 'MatMul'))
-            if save_file:
-                layer_out_obj = model_output_pb2.LayerOutput()
-                layer_out_obj.name = layer_name
-                layer_out_obj.dims.extend(layer_out.shape)
-                if layer_out.shape:
-                    linear_shape = [np.prod(layer_out.shape)]
-                    layer_out_obj.value.extend(np.reshape(layer_out, linear_shape))
-                else:
-                    # zero-dimension tensor -> scalar
-                    layer_out_obj.value.append(layer_out)
-                model_output.layer_out.append(layer_out_obj)
-            # Softmax is not implemented yet - return the layer before Softmax
-            if op_type != 'Softmax':
-                last_layer_out = layer_out
-        if save_file:
-            with open(save_file, 'wb') as f:
-                f.write(model_output.SerializeToString())
-        return last_layer_out
-    else:
-        correct = 0
-        layer_outs = onnxruntime_prepare_model(model).run(images)[0]
-        for idx, layer_out in enumerate(layer_outs):
-            predicted = np.argmax(layer_out)
-            if predicted == labels[idx]:
-                if verbose:
-                    print(f'Correct at idx={idx}')
-                correct += 1
-        total = len(labels)
-        accuracy = correct/total
-        if verbose:
-            print(f'correct={correct} total={total} rate={accuracy}')
-        return accuracy
+                print(f'Correct at idx={idx}')
+            correct += 1
+    total = len(labels)
+    accuracy = correct/total
+    if verbose:
+        print(f'correct={correct} total={total} rate={accuracy}')
+    return accuracy
 
 def remap_inputs(model: onnx.ModelProto, input_mapping: dict[str, str]):
     new_inputs = list(input_mapping.values())
@@ -490,7 +454,9 @@ def split2slice(orig_model: onnx.ModelProto):
 
         # Lengths of the parts can be specified using input ‘split’. Otherwise, the tensor is split to equal sized parts.
         if len(node.input) == 2:
-            split = onnx.numpy_helper.to_array(find_initializer(model, node.input[1]))
+            split_data = find_initializer(model, node.input[1])
+            assert split_data is not None
+            split = list(onnx.numpy_helper.to_array(split_data))
         else:
             input_value_info = find_tensor_value_info(model, node.input[0])
             input_shape = input_value_info.type.tensor_type.shape
@@ -502,6 +468,7 @@ def split2slice(orig_model: onnx.ModelProto):
         cur_end = split[0]
         for idx, output in enumerate(node.output):
             output_node = find_node_by_input(model.graph.node, output)
+            assert output_node is not None
             model.graph.initializer.extend([
                 onnx.helper.make_tensor(f'{node.name}_start{idx}', onnx.TensorProto.INT64, dims=[1], vals=[cur_start]),
                 onnx.helper.make_tensor(f'{node.name}_end{idx}', onnx.TensorProto.INT64, dims=[1], vals=[cur_end]),

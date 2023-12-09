@@ -6,6 +6,7 @@ import logging
 import os.path
 import pathlib
 import textwrap
+from typing import Optional
 import warnings
 
 import cffi
@@ -19,6 +20,7 @@ from configs import (
     configs,
     vm_size,
     OUTPUT_LEN,
+    ConfigType,
 )
 from utils import (
     DataLayout,
@@ -34,7 +36,8 @@ from utils import (
     get_model_ops,
     infer_auto_pad,
     load_model,
-    run_model,
+    run_model_batched,
+    run_model_single,
     to_bytes,
 )
 from onnx_utils import (
@@ -83,7 +86,7 @@ class Constants:
     LEA_BUFFER_SIZE = 0
     OUTPUT_LEN = OUTPUT_LEN
     USE_ARM_CMSIS = 0
-    CONFIG = None
+    CONFIG: Optional[str] = None
 
     BATCH_SIZE = 1
     STATEFUL = 0
@@ -92,11 +95,13 @@ class Constants:
     INTERMITTENT = 0
     INDIRECT_RECOVERY = 0
     METHOD = "Baseline"
-    FIRST_SAMPLE_OUTPUTS = []
+    FIRST_SAMPLE_OUTPUTS: list[float] = []
     USE_STATES_ARRAY = 0
     ENABLE_PER_LAYER_COUNTERS = 0
     ENABLE_DEMO_COUNTERS = 0
     COUNTERS_LEN = 0
+
+    FP32_ACCURACY: float = 0.0  # will be filled
 
 # Some demo codes assume counters are accumulated across layers
 assert not Constants.ENABLE_PER_LAYER_COUNTERS or not Constants.ENABLE_DEMO_COUNTERS, 'ENABLE_PER_LAYER_COUNTERS and ENABLE_DEMO_COUNTERS are mutually exclusive'
@@ -152,7 +157,7 @@ class ONNXNodeWrapper:
         self.orig_node = orig_node
         self.max_output_id = 0
         self.name = orig_node.name or orig_node.output[0] or orig_node.op_type
-        self.inputs = []
+        self.inputs: list[int] = []
         self.parameters_by_importance = [-1, -1]
 
     def __getattr__(self, name):
@@ -182,14 +187,14 @@ if args.debug:
 else:
     logging.getLogger('intermittent-cnn').setLevel(logging.INFO)
 
-config = configs[args.config]
+config: ConfigType = configs[args.config]
 onnx_models = load_model(config, model_variant=args.model_variant)
 onnx_model = onnx_models['single']
 onnx_model_batched = onnx_models['batched']
 
 sample_size = get_sample_size(onnx_model)
 
-config['total_sample_size'] = np.prod(sample_size)
+config['total_sample_size'] = int(np.prod(sample_size))
 if 'gemm_tile_length' not in config:
     config['gemm_tile_length'] = 0
 Constants.CONFIG = args.config
@@ -200,8 +205,8 @@ model_data = config['data_loader'](train=False, target_size=sample_size)
 images, labels = next(iter(model_data.data_loader(limit=Constants.N_SAMPLES)))
 images = images.numpy()
 
-Constants.FIRST_SAMPLE_OUTPUTS = list(run_model(onnx_model, model_data, limit=1, verbose=False)[0])
-Constants.FP32_ACCURACY = run_model(onnx_model_batched, model_data, limit=None, verbose=False)
+Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])
+Constants.FP32_ACCURACY = run_model_batched(onnx_model_batched, model_data, verbose=False)
 add_merge_nodes(onnx_model)
 
 Constants.BATCH_SIZE = args.batch_size
@@ -223,7 +228,7 @@ Constants.LEA_BUFFER_SIZE = vm_size[args.target]
 names = {}
 
 # Remove Squeeze and Reshape nodes with constants as the input
-replaced_nodes_map = {}
+replaced_nodes_map: dict[str, str] = {}
 
 def replace_squeeze(node, inp):
     # Since opset 13, axes is an input instead of an attribute
@@ -341,7 +346,8 @@ for idx, n in enumerate(nodes):
         # https://onnx.ai/onnx/operators/onnx__Unsqueeze.html
         if get_model_opset_version(onnx_model) >= 13:
             axes_initializer = find_initializer(onnx_model, n.input[1])
-            axes = onnx.numpy_helper.to_array(axes_initializer)
+            assert axes_initializer is not None
+            axes = list(onnx.numpy_helper.to_array(axes_initializer))
         else:
             axes = get_attr(n, 'axes')
         if n.op_type == 'Unsqueeze':
@@ -400,20 +406,23 @@ def nchw2nhwc(arr, dims):
     arr = np.transpose(arr, axes=(0, 2, 3, 1))  # NCHW -> NHWC
     return arr.flatten()  # Change it back to flattened
 
-outputs = {
+outputs: dict[str, io.BytesIO] = {
     'parameters': io.BytesIO(),
     'samples': io.BytesIO(),
     'model': io.BytesIO(),
     'nodes': io.BytesIO(),
-    'node_flags': [],
-    'node_orig_flags': [],
-    'footprints': [],
-    'inference_stats': [],
     'model_parameters_info': io.BytesIO(),
     'intermediate_parameters_info': io.BytesIO(),
     'labels': io.BytesIO(),
     'exhaustive_lookup_table': io.BytesIO(),
     'counters': io.BytesIO(),
+}
+
+ffi_objects: dict[str, list] = {
+    'node_flags': [],
+    'node_orig_flags': [],
+    'footprints': [],
+    'inference_stats': [],
 }
 
 Constants.MODEL_NODES_LEN = len(nodes)
@@ -467,16 +476,16 @@ for node in nodes:
         output_nodes.write(to_bytes(parameter_idx))
 
 footprints_arr = ffi.new('struct Footprint[]', 2 * len(nodes))
-outputs['footprints'].append(footprints_arr)
+ffi_objects['footprints'].append(footprints_arr)
 
 inference_stats_arr = ffi.new('struct InferenceStats[]', 2 * 2)
-outputs['inference_stats'].append(inference_stats_arr)
+ffi_objects['inference_stats'].append(inference_stats_arr)
 
-outputs['node_orig_flags'].append(node_flags)
+ffi_objects['node_orig_flags'].append(node_flags)
 
 # Two copies for shadowing
 for _ in range(2):
-    outputs['node_flags'].append(node_flags)
+    ffi_objects['node_flags'].append(node_flags)
 
 parameter_info_idx = 0
 
@@ -608,10 +617,10 @@ def nvm_layout():
     nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'counters', 'parameters']
     remaining_size = Constants.ORIG_NVM_SIZE - 256
     for data_name in nvm_data_names:
-        if isinstance(outputs[data_name], io.BytesIO):
+        if data_name in outputs:
             cur_data_size = outputs[data_name].tell()
         else:
-            cur_data_size = sum(ffi.sizeof(item) for item in outputs[data_name])
+            cur_data_size = sum(ffi.sizeof(item) for item in ffi_objects[data_name])
         logger.debug('Data size for %s: %d', data_name, cur_data_size)
         remaining_size -= cur_data_size
     # Size for samples are different for plat-pc and plat-mcu
@@ -762,19 +771,21 @@ const uint8_t * const {var_name} = _{var_name};
 
     for var_name, data_obj in outputs.items():
         full_var_name = var_name + '_data'
-        if isinstance(data_obj, io.BytesIO):
-            data_obj.seek(0)
-            if full_var_name == 'samples_data':
-                data = data_obj.read(2*config['total_sample_size'])
-            else:
-                data = data_obj.read()
-        else:  # a list of ffi objects
-            data = b''
-            for item in data_obj:
-                data += ffi.buffer(item)
+        data_obj.seek(0)
+        if full_var_name == 'samples_data':
+            data = data_obj.read(2*config['total_sample_size'])
+        else:
+            data = data_obj.read()
         define_var(full_var_name, data)
 
-with open('samples.bin', 'wb') as f:
+    for var_name, ffi_data in ffi_objects.items():
+        full_var_name = var_name + '_data'
+        data = b''
+        for item in ffi_data:
+            data += ffi.buffer(item)
+        define_var(full_var_name, data)
+
+with open('samples.bin', 'wb') as sample_file:
     samples = outputs['samples']
     samples.seek(0)
-    f.write(samples.read())
+    sample_file.write(samples.read())

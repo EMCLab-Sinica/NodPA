@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import math
 import os
-from typing import Any
 
 import onnx
 
@@ -15,6 +14,7 @@ from configs import (
     ARM_PSTATE_LEN,
     OUTPUT_LEN,
     vm_size,
+    ConfigType,
 )
 
 logger = logging.getLogger('intermittent-cnn.layer_utils')
@@ -22,11 +22,12 @@ logger = logging.getLogger('intermittent-cnn.layer_utils')
 def extend_for_footprints(batch_size, n):
     return n + n // batch_size
 
-def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: dict[str, Any], is_japari, intermediate_values_size, target, node, conv_flags):
+def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_japari, intermediate_values_size, target, node, conv_flags):
     logger.debug('Determine tile size for Conv node %s', node.name)
 
     output_value_info = find_tensor_value_info(onnx_model, node.output[0])
     filter_info = find_initializer(onnx_model, node.input[1])
+    assert filter_info is not None
 
     shape = output_value_info.type.tensor_type.shape
     OUTPUT_CHANNEL = shape.dim[1].dim_value
@@ -128,7 +129,7 @@ def check_gemm_vm_usage(A, tile_channel, tile_b_cols, batch_size, target):
 
     return ret
 
-def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: dict[str, Any], batch_size, target, node, gemm_flags):
+def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, batch_size, target, node, gemm_flags):
     logger.debug('Determine tile size for Gemm node %s', node.name)
 
     A = find_tensor_value_info(onnx_model, node.input[0])

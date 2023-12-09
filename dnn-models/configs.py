@@ -1,8 +1,17 @@
+from typing import Protocol, TypedDict
+import sys
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
+
 from datasets import (
     load_data_cifar10,
     load_data_google_speech,
     load_har,
 )
+from utils import ModelData
 
 ARM_PSTATE_LEN = 8704
 # Acceleration output buffer size
@@ -16,7 +25,24 @@ vm_size = {
     'msp432': 26704,  # includes space for pState
 }
 
-configs = {
+class DataLoader(Protocol):
+    def __call__(self, train: bool, target_size: tuple[int, int]) ->  ModelData:
+        ...
+
+class ConfigType(TypedDict):
+    onnx_model: str
+    onnx_model_single: NotRequired[str]
+    scale: float
+    input_scale: float
+    num_slots: int
+    data_loader: DataLoader
+    n_all_samples: int
+    op_filters: int
+    # Filled by transform.py
+    total_sample_size: NotRequired[int]
+    gemm_tile_length: NotRequired[int]
+
+configs: dict[str, ConfigType] = {
     'cifar10': {
         'onnx_model': 'squeezenet_cifar10',
         'scale': 2,

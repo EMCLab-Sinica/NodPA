@@ -19,6 +19,7 @@ from utils import (
 from onnx_utils import (
     dims_from_value_info,
 )
+from configs import ConfigType
 
 logger = logging.getLogger('intermittent-cnn.model_utils')
 
@@ -47,7 +48,7 @@ def get_next_slot(onnx_model: onnx.ModelProto, slots: list[SlotInfo], nodes: lis
     slots[next_slot_id].user = layer_idx
     return next_slot_id
 
-def find_min_range(onnx_model: onnx.ModelProto, nodes: list, node_flags, config: dict[str, Any], N_INPUT: int):
+def find_min_range(onnx_model: onnx.ModelProto, nodes: list, node_flags, config: ConfigType, N_INPUT: int):
     slots = [SlotInfo(user=-1) for _ in range(config['num_slots'])]
     layer_slots = [None] * len(nodes)
     ofm_sizes = [[] for _ in range(config['num_slots'])]
