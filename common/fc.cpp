@@ -42,7 +42,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
                           uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
                           // for state representation
                           int16_t* offset, uint16_t* next_output_turning_point, uint8_t* output_turning_point_idx, SlotInfo** output_slot_info) {
-    const ParameterInfo *A = input[0], *B = input[1];
+    const ParameterInfo *B = input[1];
 
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_value_offset = job_index_to_offset(output, run_recovery(model, output));
@@ -74,6 +74,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 
 #if RuntimeConfiguration == DynBal
     FcLayerDimensions layer_dims;
+    const ParameterInfo *A = input[0];
     layer_dims.A_rows = A->dims[0];
     layer_dims.A_cols = A->dims[1];
     layer_dims.B_cols = B->dims[1];
