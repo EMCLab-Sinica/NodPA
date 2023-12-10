@@ -36,6 +36,10 @@ THIS_DIR = pathlib.Path(__file__).absolute().parent
 
 audio_ops = ['DecodeWav', 'AudioSpectrogram', 'Mfcc']
 
+# MSP432 DMA controller only allows 1024 transfers for a DMA command. For external FRAM,
+# 1024 transfers = 1024 bytes = 512 Q-15 values
+DMA_Q15_LIMIT = 512
+
 class DataLayout(enum.Enum):
     NEUTRAL = 0
     NCW = 1

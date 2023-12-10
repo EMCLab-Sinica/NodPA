@@ -175,7 +175,7 @@ static void handle_node(Model *model, uint16_t node_idx) {
 const float first_sample_outputs[] = FIRST_SAMPLE_OUTPUTS;
 #endif
 
-static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
+static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
     my_printf_debug("N_INPUT = %d" NEWLINE, N_INPUT);
 
     Model *model = get_model();
@@ -221,11 +221,11 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
 #if JAPARI
     ans_len = extend_for_footprints(ans_len);
 #endif
-    uint8_t buffer_len = MIN_VAL(output_node->dims[1], ans_len);
+    uint16_t buffer_len = MIN_VAL(output_node->dims[1], ans_len);
     my_memcpy_from_param(model, lea_buffer, output_node, 0, buffer_len * sizeof(int16_t));
 
 #if STATEFUL
-    for (uint8_t idx = BATCH_SIZE - 1; idx < buffer_len; idx += BATCH_SIZE) {
+    for (uint16_t idx = BATCH_SIZE - 1; idx < buffer_len; idx += BATCH_SIZE) {
         strip_state(lea_buffer + idx);
     }
 #endif
@@ -233,7 +233,7 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
 #if CHECK_OUTPUT
     if (sample_idx == 0) {
         float output_max = 0;
-        for (uint8_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
+        for (uint16_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
 #if JAPARI
             if (offset_has_state(buffer_idx)) {
                 continue;
@@ -243,7 +243,7 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
             output_max = MAX_VAL(std::fabs(first_sample_outputs[buffer_idx]), output_max);
 #endif
         }
-        for (uint8_t buffer_idx = 0, ofm_idx = 0; buffer_idx < buffer_len; buffer_idx++) {
+        for (uint16_t buffer_idx = 0, ofm_idx = 0; buffer_idx < buffer_len; buffer_idx++) {
             int16_t got_q15 = lea_buffer[buffer_idx];
 #if JAPARI
             if (offset_has_state(buffer_idx)) {
@@ -272,15 +272,15 @@ static void run_model(int8_t *ansptr, const ParameterInfo **output_node_ptr) {
 }
 
 uint8_t run_cnn_tests(uint16_t n_samples) {
-    int8_t predicted = -1;
+    uint16_t predicted = -1;
     const ParameterInfo *output_node;
 #if MY_DEBUG >= MY_DEBUG_NORMAL
-    int8_t label = -1;
+    uint16_t label = -1;
     uint32_t correct = 0, total = 0;
     if (!n_samples) {
         n_samples = LABELS_DATA_LEN;
     }
-    const uint8_t *labels = labels_data;
+    const uint16_t *labels = reinterpret_cast<const uint16_t*>(labels_data);
 #endif
     for (uint16_t i = 0; i < n_samples; i++) {
         sample_idx = i;

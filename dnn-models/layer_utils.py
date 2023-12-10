@@ -7,6 +7,7 @@ import os
 import onnx
 
 from utils import (
+    DMA_Q15_LIMIT,
     find_initializer,
     find_tensor_value_info,
 )
@@ -155,9 +156,7 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
     # LEA wants addresses to be 4 byte-aligned, or 2 Q15-aligned
     gemm_flags.tile_channel = min([B_rows,
                                    (config['gemm_tile_length'] or float('inf')),
-                                   # MSP432 DMA controller only allows 1024 transfers for a DMA command. For external FRAM,
-                                   # 1024 transfers = 1024 bytes = 512 Q-15 values
-                                   512]) // tile_size_unit * tile_size_unit
+                                   DMA_Q15_LIMIT]) // tile_size_unit * tile_size_unit
     while True:
         if check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_b_cols, batch_size, target):
             break

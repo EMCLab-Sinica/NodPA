@@ -24,6 +24,7 @@ from configs import (
 )
 from utils import (
     DataLayout,
+    DMA_Q15_LIMIT,
     INPLACE_UPDATE_OPS,
     THIS_DIR,
     add_merge_nodes,
@@ -205,7 +206,7 @@ model_data = config['data_loader'](train=False, target_size=sample_size)
 images, labels = next(iter(model_data.data_loader(limit=Constants.N_SAMPLES)))
 images = images.numpy()
 
-Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])
+Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])[:DMA_Q15_LIMIT]
 Constants.FP32_ACCURACY = run_model_batched(onnx_model_batched, model_data, verbose=False)
 add_merge_nodes(onnx_model)
 
@@ -600,7 +601,7 @@ for idx in range(images.shape[0]):
         cv2.imwrite(f'images/test{idx:02d}.png', im)
 
 for label in labels:
-    outputs['labels'].write(to_bytes(label, size=8))
+    outputs['labels'].write(to_bytes(label, size=16))
 
 if args.write_images:
     with open('images/ans.txt', 'w') as f:
