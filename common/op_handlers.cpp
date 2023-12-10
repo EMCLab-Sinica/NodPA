@@ -338,8 +338,9 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
 static void handle_concat_batch(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     uint32_t part_len = input[0]->params_len;
     for (uint8_t input_idx = 0; input_idx < node->inputs_len; input_idx++) {
-        for (uint32_t copy_offset = 0; copy_offset < part_len; copy_offset += LEA_BUFFER_SIZE) {
-            uint32_t cur_copy_len = LIMIT_DMA_SIZE(MIN_VAL(LEA_BUFFER_SIZE, part_len - copy_offset));
+        const uint32_t copy_len = LIMIT_DMA_SIZE(LEA_BUFFER_SIZE);
+        for (uint32_t copy_offset = 0; copy_offset < part_len; copy_offset += copy_len) {
+            const uint32_t cur_copy_len = MIN_VAL(copy_len, part_len - copy_offset);
             my_memcpy_from_param(model, lea_buffer, input[input_idx], copy_offset/sizeof(int16_t), cur_copy_len);
             my_memcpy_to_param(output, (input_idx * part_len + copy_offset)/sizeof(int16_t), lea_buffer, cur_copy_len, /*timer_delay=*/0, /*is_linear=*/false);
         }
