@@ -24,7 +24,6 @@ from configs import (
 )
 from utils import (
     DataLayout,
-    DMA_Q15_LIMIT,
     INPLACE_UPDATE_OPS,
     THIS_DIR,
     add_merge_nodes,
@@ -206,7 +205,7 @@ model_data = config['data_loader'](train=False, target_size=sample_size)
 images, labels = next(iter(model_data.data_loader(limit=Constants.N_SAMPLES)))
 images = images.numpy()
 
-Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])[:DMA_Q15_LIMIT]
+Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])
 Constants.FP32_ACCURACY = run_model_batched(onnx_model_batched, model_data, verbose=False)
 add_merge_nodes(onnx_model)
 

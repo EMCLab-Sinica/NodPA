@@ -221,18 +221,11 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
 #if JAPARI
     ans_len = extend_for_footprints(ans_len);
 #endif
-    uint16_t buffer_len = MIN_VAL(output_node->dims[1], ans_len);
-    my_memcpy_from_param(model, lea_buffer, output_node, 0, buffer_len * sizeof(int16_t));
-
-#if STATEFUL
-    for (uint16_t idx = BATCH_SIZE - 1; idx < buffer_len; idx += BATCH_SIZE) {
-        strip_state(lea_buffer + idx);
-    }
-#endif
+    ans_len = MIN_VAL(output_node->dims[1], ans_len);
 
 #if CHECK_OUTPUT
+    float output_max = 0;
     if (sample_idx == 0) {
-        float output_max = 0;
         for (uint16_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
 #if JAPARI
             if (offset_has_state(buffer_idx)) {
@@ -243,27 +236,64 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
             output_max = MAX_VAL(std::fabs(first_sample_outputs[buffer_idx]), output_max);
 #endif
         }
-        for (uint16_t buffer_idx = 0, ofm_idx = 0; buffer_idx < buffer_len; buffer_idx++) {
-            int16_t got_q15 = lea_buffer[buffer_idx];
-#if JAPARI
-            if (offset_has_state(buffer_idx)) {
-                check_footprint(got_q15);
-            } else
-#endif
-            {
-                float got_real = q15_to_float(got_q15, ValueInfo(output_node), nullptr, false);
-                float expected = first_sample_outputs[ofm_idx];
-                float error = fabs((got_real - expected) / output_max);
-                // Errors in CIFAR-10/Stateful are quite large...
-                MY_ASSERT(error <= 0.1,
-                          "Value error too large at index %d: got=%f, expected=%f" NEWLINE, buffer_idx, got_real, expected);
-                ofm_idx++;
-            }
-        }
     }
 #endif
 
-    my_max_q15(lea_buffer, buffer_len, &max, &u_ans);
+    uint16_t buffer_len = LIMIT_DMA_SIZE(ans_len);
+
+    // Align buffers with footprints for easier address calculation
+#if JAPARI
+    buffer_len = buffer_len / (BATCH_SIZE + 1) * (BATCH_SIZE + 1);
+#elif STATEFUL
+    buffer_len = buffer_len / BATCH_SIZE * BATCH_SIZE;
+#endif
+
+    for (uint16_t buffer_offset = 0; buffer_offset < ans_len; buffer_offset += buffer_len) {
+        uint16_t cur_buffer_len = MIN_VAL(buffer_len, ans_len - buffer_offset);
+
+        my_memcpy_from_param(model, lea_buffer, output_node, buffer_offset, cur_buffer_len * sizeof(int16_t));
+
+#if STATEFUL
+        for (uint16_t idx = BATCH_SIZE - 1; idx < cur_buffer_len; idx += BATCH_SIZE) {
+            strip_state(lea_buffer + idx);
+        }
+#endif
+
+#if CHECK_OUTPUT
+        if (sample_idx == 0) {
+            uint16_t ofm_idx = buffer_offset;
+#if JAPARI
+            ofm_idx = offset_without_footprints(ofm_idx);
+#endif
+            for (uint16_t buffer_idx = 0; buffer_idx < cur_buffer_len; buffer_idx++) {
+                int16_t got_q15 = lea_buffer[buffer_idx];
+#if JAPARI
+                if (offset_has_state(buffer_idx)) {
+                    check_footprint(got_q15);
+                } else
+#endif
+                {
+                    float got_real = q15_to_float(got_q15, ValueInfo(output_node), nullptr, false);
+                    float expected = first_sample_outputs[ofm_idx];
+                    float error = fabs((got_real - expected) / output_max);
+                    // Errors in CIFAR-10/Stateful are quite large...
+                    MY_ASSERT(error <= 0.1,
+                              "Value error too large at index %d: got=%f, expected=%f" NEWLINE, buffer_offset + buffer_idx, got_real, expected);
+                    ofm_idx++;
+                }
+            }
+        }
+#endif
+
+        int16_t cur_max = INT16_MIN;
+        uint16_t cur_ans = 0;
+        my_max_q15(lea_buffer, cur_buffer_len, &cur_max, &cur_ans);
+        if (cur_max > max) {
+            max = cur_max;
+            u_ans = buffer_offset + cur_ans;
+        }
+    }
+
 #if JAPARI
     u_ans = offset_without_footprints(u_ans);
 #endif
