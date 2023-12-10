@@ -278,7 +278,7 @@ uint8_t run_cnn_tests(uint16_t n_samples) {
     uint16_t label = -1;
     uint32_t correct = 0, total = 0;
     if (!n_samples) {
-        n_samples = LABELS_DATA_LEN;
+        n_samples = LABELS_DATA_LEN / sizeof(int16_t);
     }
     const uint16_t *labels = reinterpret_cast<const uint16_t*>(labels_data);
 #endif
