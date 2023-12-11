@@ -8,6 +8,20 @@
 #include "op_utils.h"
 #include "platform.h"
 
+void alloc_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+    int axis = node_flags->softmax.axis;
+    if (axis == 1) {
+        SlotInfo *cur_slot_info = get_slot_info(model, output->slot);
+        if (cur_slot_info) {
+            cur_slot_info->user = model->layer_idx;
+        }
+    } else if (axis == 2) {
+        output->slot = get_next_slot(model, input[0]);
+    } else {
+        MY_ASSERT(false);
+    }
+}
+
 void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     int axis = node_flags->softmax.axis;
 

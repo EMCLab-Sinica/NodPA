@@ -39,7 +39,7 @@ int16_t* const weights_tmp = op_buffer;
 #if INTERMITTENT
 static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags,
                           // loop indices
-                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
+                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_a_row_offset, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
                           // for state representation
                           int16_t* offset, uint16_t* next_output_turning_point, uint8_t* output_turning_point_idx, SlotInfo** output_slot_info) {
     const ParameterInfo *B = input[1];
@@ -58,9 +58,13 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
     uint32_t output_len = output->dims[0] * output->dims[1];
+
     *tile_channel_idx = first_unfinished_value_offset / output_len;
     *tile_channel_offset = (*tile_channel_idx) * node_flags->gemm.tile_channel;
-    *extended_tile_b_col_offset = first_unfinished_value_offset % output_len;
+    first_unfinished_value_offset %= output_len;
+
+    *tile_a_row_offset = first_unfinished_value_offset / output->dims[1];
+    *extended_tile_b_col_offset = first_unfinished_value_offset % output->dims[1];
 
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
@@ -135,7 +139,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     SlotInfo *output_slot_info;
 
     gemm_recovery(model, input, output, node, node_flags, orig_node_flags,
-                  &tile_channel_offset, &tile_channel_idx, &tile_b_col_offset, &extended_tile_b_col_offset,
+                  &tile_channel_offset, &tile_channel_idx, &tile_a_row_offset, &tile_b_col_offset, &extended_tile_b_col_offset,
                   &offset, &next_output_turning_point, &output_turning_point_idx, &output_slot_info);
 #endif
 
