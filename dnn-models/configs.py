@@ -10,6 +10,7 @@ from datasets import (
     load_data_cifar10,
     load_data_google_speech,
     load_har,
+    load_attention_input_sequence,
 )
 from utils import ModelData
 
@@ -70,5 +71,17 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 2947,
         'op_filters': 4,
     },
+    'transformers': {
+        # TODO: use the single model in both onnx_model and onnx_model_single for now,
+        # as I cannot get two working models with the identical weights
+        'onnx_model': 'transformers_single',
+        'onnx_model_single': 'transformers_single',
+        'scale': 1,
+        'input_scale': 1,
+        'num_slots': 10,
+        'data_loader': load_attention_input_sequence,
+        'n_all_samples': 1,
+        'op_filters': 2,
+    }
 }
 

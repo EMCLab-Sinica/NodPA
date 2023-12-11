@@ -72,7 +72,7 @@ Indexing policy:
 class Constants:
     SLOT_PARAMETERS = 0xfe
     SLOT_TEST_SET = 0xff
-    NODE_NAME_LEN = 60
+    NODE_NAME_LEN = 0  # will be filled later
     TURNING_POINTS_LEN = 8
     MODEL_NODES_LEN = 0
     INPUTS_DATA_LEN = 0
@@ -458,8 +458,10 @@ ops = get_model_ops(onnx_model)
 
 parameter_importance(onnx_model, nodes)
 
+for node in nodes:
+    Constants.NODE_NAME_LEN = max(Constants.NODE_NAME_LEN, len(node.name), len(node.output[0]))
+
 def write_str(buffer: io.BytesIO, data: str):
-    assert Constants.NODE_NAME_LEN >= len(data), f'String too long: {data}'
     buffer.write(data.encode('ascii') + b'\0' * (Constants.NODE_NAME_LEN - len(data)))
 
 for node in nodes:

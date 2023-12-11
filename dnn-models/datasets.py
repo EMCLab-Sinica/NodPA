@@ -3,6 +3,7 @@ import sys
 
 import filelock
 import numpy as np
+import onnx
 import platformdirs
 import torch
 import torchaudio
@@ -17,6 +18,7 @@ from utils import (
     download_file,
     extract_archive,
     kws_dnn_model,
+    onnxruntime_prepare_model,
 )
 
 def load_data_cifar10(train: bool, target_size: tuple[int, int]) -> ModelData:
@@ -110,3 +112,22 @@ def load_har(train: bool, target_size: tuple[int, int]):
     finally:
         sys.path = orig_sys_path
 
+def load_attention_input_sequence(train: bool, target_size: tuple[int, int]) -> ModelData:
+    np.random.seed(0)
+
+    S = 80
+    E = 60
+    X = np.random.rand(1, S, E).astype(np.float32)
+    X_torch = torch.Tensor(X)
+
+    model = onnx.load_model(THIS_DIR / 'transformers_single.onnx')
+
+    output = onnxruntime_prepare_model(model).run(X)[0]
+
+    label = np.argmax(output)
+
+    labels_torch = torch.Tensor([[label]]).to(dtype=torch.int64)
+
+    dataset = TensorDataset(X_torch, labels_torch)
+
+    return ModelData(dataset=dataset, data_layout=DataLayout.NWC)
