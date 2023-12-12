@@ -177,7 +177,7 @@ SECTIONS
 #ifndef __LARGE_DATA_MODEL__
     .const            : {} > FRAM           /* Constant data                     */
 #else
-    .const            : {} >> FRAM | FRAM2  /* Constant data                     */
+    .const            : {} >> FRAM2 | FRAM  /* Constant data                     */
 #endif
 
 #ifndef __LARGE_CODE_MODEL__

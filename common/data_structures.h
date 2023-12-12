@@ -75,6 +75,14 @@ struct Footprint {
     uint8_t dummy;
 };
 
+struct SoftmaxLoopIndices {
+    uint16_t idx0;
+    uint16_t idx1;
+    uint16_t idx3;
+    uint8_t version;
+    uint8_t dummy;
+};
+
 struct InferenceStats {
     uint32_t last_progress_indicator;
     uint32_t power_cycle_energy;

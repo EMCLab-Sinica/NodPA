@@ -26,6 +26,7 @@
 #define NODES_OFFSET (NODE_FLAGS_OFFSET - NODES_DATA_LEN)
 #define FOOTPRINTS_OFFSET (NODES_OFFSET - FOOTPRINTS_DATA_LEN)
 #define COUNTERS_OFFSET (FOOTPRINTS_OFFSET - COUNTERS_DATA_LEN)
+#define SOFTMAX_LOOP_INDICES_OFFSET (COUNTERS_OFFSET - SOFTMAX_LOOP_INDICES_DATA_LEN)
 
 #define DISABLE_FEATURE_MAP_NVM_ACCESS 0
 
@@ -71,3 +72,7 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
 uint16_t read_hawaii_layer_footprint(uint16_t layer_idx);
 void reset_hawaii_layer_footprint(uint16_t layer_idx);
 #endif
+
+void write_softmax_loop_indices(uint16_t idx0, uint16_t idx1, uint16_t idx3);
+void read_softmax_loop_indices(uint16_t* pIdx0, uint16_t* pIdx1, uint16_t* pIdx3);
+void reset_softmax_loop_indices();

@@ -416,6 +416,7 @@ outputs: dict[str, io.BytesIO] = {
     'labels': io.BytesIO(),
     'exhaustive_lookup_table': io.BytesIO(),
     'counters': io.BytesIO(),
+    'softmax_loop_indices': io.BytesIO(),
 }
 
 ffi_objects: dict[str, list] = {
@@ -614,9 +615,11 @@ else:
     Constants.COUNTERS_LEN = 1
 outputs['counters'].write(b'\0' * ffi.sizeof('struct Counters') * Constants.COUNTERS_LEN)
 
+outputs['softmax_loop_indices'].write(b'\0' * ffi.sizeof('struct SoftmaxLoopIndices') * 2)
+
 def nvm_layout():
     # See common/platform.h; some items are duplicated for double buffering
-    nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'counters', 'parameters']
+    nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'counters', 'softmax_loop_indices', 'parameters']
     remaining_size = Constants.ORIG_NVM_SIZE - 256
     for data_name in nvm_data_names:
         if data_name in outputs:

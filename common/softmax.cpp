@@ -32,9 +32,14 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
         const ParameterInfo* X = input[0];
         const uint16_t softmax_length = X->dims[axis];
 
-        for (uint16_t idx0 = 0; idx0 < X->dims[0]; idx0++) {
-            for (uint16_t idx1 = 0; idx1 < X->dims[1]; idx1++) {
-                for (uint16_t idx3 = 0; idx3 < X->dims[3]; idx3++) {
+        uint16_t idx0 = 0, idx1 = 0, idx3 = 0;
+#if HAWAII
+        read_softmax_loop_indices(&idx0, &idx1, &idx3);
+#endif
+
+        for (; idx0 < X->dims[0];) {
+            for (; idx1 < X->dims[1];) {
+                for (; idx3 < X->dims[3];) {
                     uint32_t softmax_vector_base_offset = idx0 * X->dims[1] * X->dims[2] * X->dims[3] + idx1 * X->dims[2] * X->dims[3] + idx3;
                     float softmax_sum = 0.0f; // the denominator in softmax equation
 
@@ -68,12 +73,24 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
                         uint32_t softmax_value_offset = softmax_vector_base_offset + softmax_idx * X->dims[3];
                         put_q15_param(output, softmax_value_offset, lea_buffer[softmax_idx], /*is_linear=*/false);
                     }
+                    idx3++;
+#if HAWAII
+                    write_softmax_loop_indices(idx0, idx1, idx3);
+#endif
                 }
+                idx3 = 0;
+                idx1++;
             }
+            idx1 = 0;
+            idx0++;
         }
     } else {
         MY_ASSERT(false);
     }
 
     dump_params_debug(model, output, node->output_name);
+
+#if HAWAII
+    reset_softmax_loop_indices();
+#endif
 }
