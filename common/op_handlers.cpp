@@ -337,13 +337,27 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
 
 static void handle_concat_batch(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     uint32_t part_len = input[0]->params_len;
-    for (uint8_t input_idx = 0; input_idx < node->inputs_len; input_idx++) {
-        const uint32_t copy_len = LIMIT_DMA_SIZE(LEA_BUFFER_SIZE);
-        for (uint32_t copy_offset = 0; copy_offset < part_len; copy_offset += copy_len) {
+
+    uint8_t input_idx = 0;
+    uint32_t copy_offset = 0;
+#if INTERMITTENT
+    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+    uint32_t data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
+    input_idx = data_offset / part_len;
+    copy_offset = data_offset % part_len;
+#endif
+
+    for (; input_idx < node->inputs_len; input_idx++) {
+        const uint32_t copy_len = MIN_VAL(LIMIT_DMA_SIZE(LEA_BUFFER_SIZE), 32);
+        for (; copy_offset < part_len; copy_offset += copy_len) {
             const uint32_t cur_copy_len = MIN_VAL(copy_len, part_len - copy_offset);
             my_memcpy_from_param(model, lea_buffer, input[input_idx], copy_offset/sizeof(int16_t), cur_copy_len);
             my_memcpy_to_param(output, (input_idx * part_len + copy_offset)/sizeof(int16_t), lea_buffer, cur_copy_len, /*timer_delay=*/0, /*is_linear=*/false);
+#if HAWAII
+            write_hawaii_layer_footprint(model->layer_idx, cur_copy_len/sizeof(int16_t));
+#endif
         }
+        copy_offset = 0;
     }
 
     dump_params_debug(model, output, node->output_name);
@@ -379,15 +393,33 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 
     const ParameterInfo *X = input[0];
 
-    const uint8_t* perm = node_flags->transpose.perm;
+    const uint8_t* inverse_perm = node_flags->transpose.inverse_perm;
+
+    uint32_t data_offset = 0;
+#if INTERMITTENT
+    start_cpu_counter(offsetof(Counters, progress_seeking));
+    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+    data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
+    stop_cpu_counter();
+#endif
 
     uint16_t input_indices[4], output_indices[4];
-    for (input_indices[0] = 0; input_indices[0] < X->dims[0]; input_indices[0]++) {
-        for (input_indices[1] = 0; input_indices[1] < X->dims[1]; input_indices[1]++) {
-            for (input_indices[2] = 0; input_indices[2] < X->dims[2]; input_indices[2]++) {
-                for (input_indices[3] = 0; input_indices[3] < X->dims[3]; input_indices[3]++) {
+
+    output_indices[3] = data_offset % output->dims[3];
+    data_offset /= output->dims[3];
+    output_indices[2] = data_offset % output->dims[2];
+    data_offset /= output->dims[2];
+    output_indices[1] = data_offset % output->dims[1];
+    data_offset /= output->dims[1];
+    output_indices[0] = data_offset;
+    my_printf_debug("output_indices: [%d, %d, %d, %d]" NEWLINE, output_indices[0], output_indices[1], output_indices[2], output_indices[3]);
+
+    for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
+        for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
+            for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
+                for (; output_indices[3] < output->dims[3]; output_indices[3]++) {
                     for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
-                        output_indices[dim_idx] = input_indices[perm[dim_idx]];
+                        input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
                     }
                     uint32_t input_offset = input_indices[0] * X->dims[1] * X->dims[2] * X->dims[3] +
                                             input_indices[1] * X->dims[2] * X->dims[3] +
@@ -399,9 +431,15 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
                                              output_indices[3];
                     int16_t val = get_q15_param(model, X, input_offset);
                     put_q15_param(output, output_offset, val, /*is_linear=*/false);
+#if HAWAII
+                    write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
+#endif
                 }
+                output_indices[3] = 0;
             }
+            output_indices[2] = 0;
         }
+        output_indices[1] = 0;
     }
 
     // not actually transpose data as we happen to need NHWC

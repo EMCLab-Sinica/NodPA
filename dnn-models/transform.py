@@ -364,7 +364,13 @@ for idx, n in enumerate(nodes):
     if n.op_type == 'Transpose':
         perm = get_attr(n, 'perm')
         assert len(perm) == 4
+        inverse_mapping = {
+            mapped_index: original_index
+            for original_index, mapped_index in enumerate(perm)
+        }
+        inverse_perm = [inverse_mapping[mapped_index] for mapped_index in range(len(perm))]
         node_flags[idx].transpose.perm = perm
+        node_flags[idx].transpose.inverse_perm = inverse_perm
     if n.op_type == 'Softmax':
         axis = get_attr(n, 'axis')
         if axis is None:

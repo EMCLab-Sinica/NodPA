@@ -1,4 +1,6 @@
 #include "cnn_common.h"
+#include "counters.h"
+#include "intermittent-cnn.h"
 #include "my_debug.h"
 
 void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, CurNodeFlags*, const NodeFlags*) {
@@ -32,14 +34,35 @@ void handle_slice(struct Model *model, const struct ParameterInfo *input[], stru
 
     uint32_t output_offset = 0;
 
-    for (uint16_t idx0 = input_start; idx0 < input_end; idx0++) {
-        for (uint16_t idx1 = 0; idx1 < X->dims[1]; idx1++) {
-            for (uint16_t idx2 = 0; idx2 < X->dims[2]; idx2++) {
+    uint16_t idx0 = input_start, idx1 = 0, idx2 = 0;
+#if INTERMITTENT
+    start_cpu_counter(offsetof(Counters, progress_seeking));
+    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+    output_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
+    stop_cpu_counter();
+#endif
+    uint32_t tmp = output_offset;
+    idx2 = tmp % X->dims[2];
+    tmp /= X->dims[2];
+    idx1 = tmp % X->dims[1];
+    tmp /= X->dims[1];
+    idx0 += tmp;
+    my_printf_debug("output_offset=%d, idx0=%d, idx1=%d, idx2=%d" NEWLINE, output_offset, idx0, idx1, idx2);
+
+    for (; idx0 < input_end; idx0++) {
+        for (; idx1 < X->dims[1]; idx1++) {
+            for (; idx2 < X->dims[2]; idx2++) {
                 uint32_t input_offset = idx0 * X->dims[1] * X->dims[2] + idx1 * X->dims[2] + idx2;
                 int16_t input_val = get_q15_param(model, X, input_offset);
                 put_q15_param(output, output_offset, input_val, /*is_linear=*/false);
                 output_offset++;
+#if HAWAII
+                my_printf_debug("output_offset=%d, idx0=%d, idx1=%d, idx2=%d" NEWLINE, output_offset, idx0, idx1, idx2);
+                write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
+#endif
             }
+            idx2 = 0;
         }
+        idx1 = 0;
      }
 }

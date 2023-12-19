@@ -42,6 +42,7 @@ struct ConcatNodeFlags {
 
 struct TransposeNodeFlags {
     uint8_t perm[4];
+    uint8_t inverse_perm[4];
 };
 
 struct SoftmaxNodeFlags {
