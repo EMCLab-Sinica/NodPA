@@ -162,26 +162,6 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
     enable_counters();
 }
 
-void dump_model(Model *model) {
-    uint16_t i, j;
-    for (i = 0; i < MODEL_NODES_LEN; i++) {
-        const Node *cur_node = get_node(i);
-        if (model->layer_idx > i) {
-            my_printf("scheduled     ");
-        } else {
-            my_printf("not scheduled ");
-        }
-        my_printf("(");
-        for (j = 0; j < cur_node->inputs_len; j++) {
-            my_printf("%d", cur_node->inputs[j]);
-            if (j != cur_node->inputs_len - 1) {
-                my_printf(", ");
-            }
-        }
-        my_printf(")" NEWLINE);
-    }
-}
-
 // dump in NCHW format
 void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer_name) {
     uint16_t NUM, H, W, CHANNEL;

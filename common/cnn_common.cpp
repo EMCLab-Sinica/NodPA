@@ -195,8 +195,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         commit_model();
     }
 
-    dump_model_debug(model);
-
     for (uint16_t node_idx = model->layer_idx; node_idx < MODEL_NODES_LEN; node_idx++) {
         handle_node(model, node_idx);
         model->layer_idx++;
@@ -204,8 +202,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         commit_model();
 
         notify_layer_finished();
-
-        dump_model_debug(model);
     }
 
     // the parameter info for the last node should also be refreshed when MY_DEBUG == 0
