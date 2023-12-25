@@ -33,6 +33,7 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
         const uint16_t softmax_length = X->dims[axis];
 
         uint16_t idx0 = 0, idx1 = 0, idx3 = 0;
+        const uint16_t idx3_tile_size = 2; // TODO: make the tile size configurable
 #if HAWAII
         read_softmax_loop_indices(&idx0, &idx1, &idx3);
 #endif
@@ -41,39 +42,49 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
             for (; idx1 < X->dims[1];) {
                 for (; idx3 < X->dims[3];) {
                     uint32_t softmax_vector_base_offset = idx0 * X->dims[1] * X->dims[2] * X->dims[3] + idx1 * X->dims[2] * X->dims[3] + idx3;
-                    float softmax_sum = 0.0f; // the denominator in softmax equation
 
                     for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
                         uint32_t softmax_value_offset = softmax_vector_base_offset + softmax_idx * X->dims[3];
-                        lea_buffer[softmax_idx] = get_q15_param(model, X, softmax_value_offset);
+                        my_memcpy_from_param(model, op_buffer, X, softmax_value_offset, idx3_tile_size * sizeof(int16_t));
+                        for (uint16_t intra_tile_idx3 = 0; intra_tile_idx3 < idx3_tile_size; intra_tile_idx3++) {
+                            lea_buffer[intra_tile_idx3 * softmax_length + softmax_idx] = op_buffer[intra_tile_idx3];
+                        }
                     }
 
-                    // avoid exponential overflow and underflow
-                    // https://www.cnblogs.com/guoyaohua/p/8900683.html
-                    int16_t max_val = 0;
-                    uint16_t max_val_idx = 0;
-                    my_max_q15(lea_buffer, softmax_length, &max_val, &max_val_idx);
-                    my_offset_q15(lea_buffer, -(max_val), lea_buffer, softmax_length);
+                    for (uint16_t intra_tile_idx3 = 0; intra_tile_idx3 < idx3_tile_size; intra_tile_idx3++) {
+                        int16_t* softmax_buffer = lea_buffer + intra_tile_idx3 * softmax_length;
 
-                    for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
-                        // exponentials
-                        float val = q15_to_float(lea_buffer[softmax_idx], ValueInfo(output));
-                        val = std::exp(val);
-                        lea_buffer[softmax_idx] = _Q15(val / output->scale.toFloat());
-                        softmax_sum += val;
+                        float softmax_sum = 0.0f; // the denominator in softmax equation
+                        // avoid exponential overflow and underflow
+                        // https://www.cnblogs.com/guoyaohua/p/8900683.html
+                        int16_t max_val = 0;
+                        uint16_t max_val_idx = 0;
+                        my_max_q15(softmax_buffer, softmax_length, &max_val, &max_val_idx);
+                        my_offset_q15(softmax_buffer, -(max_val), softmax_buffer, softmax_length);
+
+                        for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
+                            // exponentials
+                            float val = q15_to_float(softmax_buffer[softmax_idx], ValueInfo(output));
+                            val = std::exp(val);
+                            softmax_buffer[softmax_idx] = _Q15(val / output->scale.toFloat());
+                            softmax_sum += val;
+                        }
+
+                        // normalize the row
+                        int16_t scaleFract;
+                        uint8_t shift;
+                        float_to_scale_params(&scaleFract, &shift, 1.0f/softmax_sum);
+                        my_scale_q15(softmax_buffer, scaleFract, shift, softmax_buffer, softmax_length);
                     }
-
-                    // normalize the row
-                    int16_t scaleFract;
-                    uint8_t shift;
-                    float_to_scale_params(&scaleFract, &shift, 1.0f/softmax_sum);
-                    my_scale_q15(lea_buffer, scaleFract, shift, lea_buffer, softmax_length);
 
                     for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
                         uint32_t softmax_value_offset = softmax_vector_base_offset + softmax_idx * X->dims[3];
-                        put_q15_param(output, softmax_value_offset, lea_buffer[softmax_idx], /*is_linear=*/false);
+                        for (uint16_t intra_tile_idx3 = 0; intra_tile_idx3 < idx3_tile_size; intra_tile_idx3++) {
+                            op_buffer[intra_tile_idx3] = lea_buffer[intra_tile_idx3 * softmax_length + softmax_idx];
+                        }
+                        my_memcpy_to_param(output, softmax_value_offset, op_buffer, idx3_tile_size * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/false);
                     }
-                    idx3++;
+                    idx3 += idx3_tile_size;
 #if HAWAII
                     write_softmax_loop_indices(idx0, idx1, idx3);
 #endif
