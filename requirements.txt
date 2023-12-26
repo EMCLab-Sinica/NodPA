@@ -1,17 +1,17 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 cffi==1.15.1
 filelock==3.4.2
-numpy==1.24.3
+numpy==1.26.2
 onnx==1.13.1
 onnxoptimizer==0.3.13
-onnxruntime==1.15.0
-tensorflow==2.13.0
+onnxruntime==1.17.0
+tensorflow==2.15.0
 # Versions of torchaudio and torchvision should match torch
 # https://github.com/pytorch/vision#installation
 # https://pytorch.org/audio/main/installation.html#compatibility-matrix
-torch==2.1.2+cpu
-torchaudio==2.1.2+cpu
-torchvision==0.16.2+cpu
+torch==2.2.0+cpu
+torchaudio==2.2.0+cpu
+torchvision==0.17.0+cpu
 # pandas needed for deep-learning-HAR
 pandas==1.5.3
 platformdirs==2.5.0
