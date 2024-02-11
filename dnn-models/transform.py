@@ -363,14 +363,14 @@ for idx, n in enumerate(nodes):
         node_flags[idx].concat.axis = get_attr(n, 'axis')
     if n.op_type == 'Transpose':
         perm = get_attr(n, 'perm')
-        assert len(perm) == 4
+        assert len(perm) <= 4
         inverse_mapping = {
             mapped_index: original_index
             for original_index, mapped_index in enumerate(perm)
         }
         inverse_perm = [inverse_mapping[mapped_index] for mapped_index in range(len(perm))]
-        node_flags[idx].transpose.perm = perm
-        node_flags[idx].transpose.inverse_perm = inverse_perm
+        node_flags[idx].transpose.perm = perm + [-1]*(4-len(perm))
+        node_flags[idx].transpose.inverse_perm = inverse_perm + [-1]*(4-len(perm))
     if n.op_type == 'Softmax':
         axis = get_attr(n, 'axis')
         if axis is None:
@@ -384,6 +384,9 @@ for idx, n in enumerate(nodes):
             else:
                 axis = 1
         node_flags[idx].softmax.axis = axis
+    if n.op_type == 'Add':
+        if len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):
+            n.input = [n.input[1], n.input[0]]
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 

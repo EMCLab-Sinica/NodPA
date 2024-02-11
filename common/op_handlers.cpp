@@ -380,8 +380,11 @@ void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *ou
 void alloc_transpose(struct Model *model, const struct ParameterInfo **input, struct ParameterInfo *output, const struct Node *node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *X = input[0];
 
-    const uint8_t* perm = node_flags->transpose.perm;
+    const int8_t* perm = node_flags->transpose.perm;
     for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+        if (perm[dim_idx] < 0) {
+            break;
+        }
         output->dims[dim_idx] = X->dims[perm[dim_idx]];
     }
 
@@ -393,7 +396,7 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 
     const ParameterInfo *X = input[0];
 
-    const uint8_t* inverse_perm = node_flags->transpose.inverse_perm;
+    const int8_t* inverse_perm = node_flags->transpose.inverse_perm;
 
     uint32_t data_offset = 0;
 #if INTERMITTENT
@@ -405,37 +408,30 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 
     uint16_t input_indices[4], output_indices[4];
 
-    output_indices[3] = data_offset % output->dims[3];
-    data_offset /= output->dims[3];
     output_indices[2] = data_offset % output->dims[2];
     data_offset /= output->dims[2];
     output_indices[1] = data_offset % output->dims[1];
     data_offset /= output->dims[1];
     output_indices[0] = data_offset;
-    my_printf_debug("output_indices: [%d, %d, %d, %d]" NEWLINE, output_indices[0], output_indices[1], output_indices[2], output_indices[3]);
+    my_printf_debug("output_indices: [%d, %d, %d]" NEWLINE, output_indices[0], output_indices[1], output_indices[2]);
 
     for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
         for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
             for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
-                for (; output_indices[3] < output->dims[3]; output_indices[3]++) {
-                    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+                    for (uint8_t dim_idx = 0; dim_idx < 3; dim_idx++) {
                         input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
                     }
-                    uint32_t input_offset = input_indices[0] * X->dims[1] * X->dims[2] * X->dims[3] +
-                                            input_indices[1] * X->dims[2] * X->dims[3] +
-                                            input_indices[2] * X->dims[3] +
-                                            input_indices[3];
-                    uint32_t output_offset = output_indices[0] * output->dims[1] * output->dims[2] * output->dims[3] +
-                                             output_indices[1] * output->dims[2] * output->dims[3] +
-                                             output_indices[2] * output->dims[3] +
-                                             output_indices[3];
+                    uint32_t input_offset = input_indices[0] * X->dims[1] * X->dims[2] +
+                                            input_indices[1] * X->dims[2] +
+                                            input_indices[2];
+                    uint32_t output_offset = output_indices[0] * output->dims[1] * output->dims[2] +
+                                             output_indices[1] * output->dims[2] +
+                                             output_indices[2];
                     int16_t val = get_q15_param(model, X, input_offset);
                     put_q15_param(output, output_offset, val, /*is_linear=*/false);
 #if HAWAII
                     write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
 #endif
-                }
-                output_indices[3] = 0;
             }
             output_indices[2] = 0;
         }

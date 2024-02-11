@@ -18,18 +18,45 @@
 void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *A = input[0], *B = input[1];
 
-    output->dims[0] = A->dims[0];
+    uint8_t input_dims = 0, weight_dims = 0;
+    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+        if (A->dims[dim_idx] != 0) {
+            input_dims = dim_idx + 1;
+        }
+        if (B->dims[dim_idx] != 0) {
+            weight_dims = dim_idx + 1;
+        }
+    }
+
+    uint8_t output_dims = MAX_VAL(input_dims, weight_dims);
+    for (uint8_t dim_idx = 0; dim_idx < output_dims - 2; dim_idx++) {
+        if (dim_idx >= output_dims - input_dims && dim_idx >= output_dims - weight_dims) {
+            MY_ASSERT(A->dims[output_dims - input_dims] == B->dims[output_dims - weight_dims]);
+            output->dims[dim_idx] = A->dims[output_dims - input_dims];
+        } else if (dim_idx >= output_dims - input_dims) {
+            output->dims[dim_idx] = A->dims[output_dims - input_dims];
+        } else if (dim_idx >= output_dims - weight_dims) {
+            output->dims[dim_idx] = B->dims[output_dims - weight_dims];
+        } else {
+            MY_ASSERT(false);
+        }
+    }
+
+    output->dims[output_dims-2] = A->dims[input_dims-2];
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
-    output->dims[1] = B->dims[1] / BATCH_SIZE * (BATCH_SIZE + 1) + B->dims[1] % BATCH_SIZE;
+    output->dims[output_dims-1] = B->dims[weight_dims-1] / BATCH_SIZE * (BATCH_SIZE + 1) + B->dims[1] % BATCH_SIZE;
     stop_cpu_counter();
 #else
-    output->dims[1] = B->dims[1];
+    output->dims[output_dims-1] = B->dims[weight_dims-1];
 #endif
     output->slot = get_next_slot(model, A);
     output->scale = A->scale * B->scale;
 
-    uint16_t output_len = output->dims[0] * output->dims[1];
+    uint16_t output_len = 1;
+    for (uint8_t dim_idx = 0; dim_idx < input_dims; dim_idx++) {
+        output_len *= output->dims[dim_idx];
+    }
 
     output->params_len = output_len * upper_gauss(B->dims[0], node_flags->gemm.tile_channel) * sizeof(int16_t);
 }
@@ -57,7 +84,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
-    uint32_t output_len = output->dims[0] * output->dims[1];
+    uint32_t output_len = output->params_len / sizeof(int16_t);
 
     *tile_channel_idx = first_unfinished_value_offset / output_len;
     *tile_channel_offset = (*tile_channel_idx) * node_flags->gemm.tile_channel;
@@ -111,8 +138,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     }
 #endif
 
-    my_printf_debug("Gemm! A: (%dx%d), B: (%dx%d)" NEWLINE,
-              A->dims[0], A->dims[1], B->dims[0], B->dims[1]);
+    my_printf_debug("Gemm!" NEWLINE);
 
     // Use original tile sizes here, as tile sizes might be dynamically reconfigured, while
     // the reconfigured size is never larger than the original size
@@ -290,7 +316,13 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 void alloc_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     output->slot = get_next_slot(model, input[0]);
-    int16_t output_len = output->dims[0] * output->dims[1];
+    int16_t output_len = 1;
+    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+        if (!output->dims[dim_idx]) {
+            break;
+        }
+        output_len *= output->dims[dim_idx];
+    }
     output->params_len = output_len * sizeof(int16_t);
 }
 
@@ -325,7 +357,7 @@ void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
 
     int16_t n_tiles = X->params_len / output_len / sizeof(int16_t);
     my_printf_debug("n_tiles=%d" NEWLINE, n_tiles);
-    MY_ASSERT(n_tiles);
+    MY_ASSERT(n_tiles > 0);
 
     for (; merge_offset < output_len; merge_offset += output_tile_size) {
         int16_t cur_tile_size = MIN_VAL(output_tile_size, output_len - merge_offset);
