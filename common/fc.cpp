@@ -84,7 +84,13 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
-    uint32_t output_len = output->params_len / sizeof(int16_t);
+    uint32_t output_len = 1;
+    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+        if (!output->dims[dim_idx]) {
+            break;
+        }
+        output_len *= output->dims[dim_idx];
+    }
 
     *tile_channel_idx = first_unfinished_value_offset / output_len;
     *tile_channel_offset = (*tile_channel_idx) * node_flags->gemm.tile_channel;
