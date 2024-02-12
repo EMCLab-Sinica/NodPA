@@ -28,6 +28,7 @@ from utils import (
     THIS_DIR,
     add_merge_nodes,
     get_attr,
+    get_parameter_dims,
     find_kernel_shape,
     find_initializer,
     find_node_by_input,
@@ -357,7 +358,12 @@ for idx, n in enumerate(nodes):
         node_flags[idx].squeeze.axes = 0
         for axis in axes:
             node_flags[idx].squeeze.axes |= (1 << axis)
-    if n.op_type == 'GemmMerge':
+    if n.op_type in ('Gemm', 'MatMul'):
+        node_flags[idx].gemm.input_dims = get_parameter_dims(onnx_model, n.input[0])
+        node_flags[idx].gemm.weight_dims = get_parameter_dims(onnx_model, n.input[1])
+        print(f'{n.name}: input_dims={node_flags[idx].gemm.input_dims} weight_dims={node_flags[idx].gemm.weight_dims}')
+    if n.op_type in ('GemmMerge', 'MatMulMerge'):
+        node_flags[idx].gemmmerge.input_dims = get_parameter_dims(onnx_model, n.input[0])
         node_flags[idx].gemmmerge.tile_length = config['gemm_tile_length']
     if n.op_type == 'Concat':
         node_flags[idx].concat.axis = get_attr(n, 'axis')

@@ -495,3 +495,12 @@ def split2slice(orig_model: onnx.ModelProto):
     model = onnx.shape_inference.infer_shapes(model)
 
     return model
+
+def get_parameter_dims(onnx_model: onnx.ModelProto, parameter_name):
+    initializer = find_initializer(onnx_model, parameter_name)
+    if initializer:
+        return len(initializer.dims)
+
+    input_value_info = find_tensor_value_info(onnx_model, parameter_name)
+    input_shape = input_value_info.type.tensor_type.shape
+    return len(input_shape.dim)

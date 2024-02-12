@@ -25,10 +25,13 @@ struct GemmNodeFlags {
     uint16_t tile_channel;
     uint16_t tile_b_cols;
     uint16_t pState_len;
+    uint8_t input_dims;
+    uint8_t weight_dims;
 };
 
 struct GemmMergeNodeFlags {
     uint16_t tile_length;
+    uint8_t input_dims;
 };
 
 struct SqueezeNodeFlags {

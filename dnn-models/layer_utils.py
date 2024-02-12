@@ -5,6 +5,7 @@ import math
 import os
 
 import onnx
+import numpy as np
 
 from utils import (
     DMA_Q15_LIMIT,
@@ -108,13 +109,13 @@ def get_gemm_pState_usage(tile_channel, tile_b_cols, target):
         return (tile_channel + 2) * (tile_b_cols * 2)
     return 0
 
-def check_gemm_vm_usage(A, tile_channel, tile_b_cols, batch_size, target):
+def check_gemm_vm_usage(A, tile_channel, tile_a_rows, tile_b_cols, batch_size, target):
     A_shape = A.type.tensor_type.shape
-    A_rows = 1  # Not using A_shape.dim[0] here, as it's a symbol "N"
-    A_cols = A_shape.dim[1].dim_value
+    input_dims = len(A_shape.dim)
+    A_cols = A_shape.dim[input_dims-1].dim_value
 
     full_tile_b_cols = (extend_for_footprints(batch_size, tile_b_cols)+1)/2*2
-    tile_input_usage = (A_rows * A_cols + 2) + (tile_channel + 2) * full_tile_b_cols + A_rows * full_tile_b_cols
+    tile_input_usage = (tile_a_rows * A_cols + 2) + (tile_channel + 2) * full_tile_b_cols + tile_a_rows * full_tile_b_cols
     pState_usage = get_gemm_pState_usage(tile_channel, tile_b_cols, target)
     total_vm_usage = tile_input_usage + pState_usage
 
@@ -136,13 +137,15 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
     A = find_tensor_value_info(onnx_model, node.input[0])
     B = find_initializer(onnx_model, node.input[1])
     if B is not None:
-        B_rows = B.dims[0]
-        B_cols = B.dims[1]
+        weight_dims = len(B.dims)
+        B_rows = int(np.prod(B.dims[:weight_dims-1]))
+        B_cols = B.dims[weight_dims-1]
     else:
         B = find_tensor_value_info(onnx_model, node.input[1])
         B_shape = B.type.tensor_type.shape
-        B_rows = B_shape.dim[0].dim_value
-        B_cols = B_shape.dim[1].dim_value
+        weight_dims = len(B_shape.dim)
+        B_rows = int(np.prod([dim.dim_value for dim in B_shape.dim[:weight_dims-1]]))
+        B_cols = B_shape.dim[weight_dims-1].dim_value
 
     B_rows += B_rows % 2
     B_cols += B_cols % 2
@@ -158,7 +161,7 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
                                    (config['gemm_tile_length'] or float('inf')),
                                    DMA_Q15_LIMIT]) // tile_size_unit * tile_size_unit
     while True:
-        if check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_b_cols, batch_size, target):
+        if check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_a_rows, gemm_flags.tile_b_cols, batch_size, target):
             break
         assert gemm_flags.tile_channel > gemm_flags.tile_b_cols
         gemm_flags.tile_channel -= gemm_flags.tile_b_cols
@@ -169,7 +172,7 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
         new_tile_b_cols = gemm_flags.tile_b_cols + tile_size_unit
         if new_tile_b_cols > B_cols:
             break
-        if not check_gemm_vm_usage(A, gemm_flags.tile_channel, new_tile_b_cols, batch_size, target):
+        if not check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_a_rows, new_tile_b_cols, batch_size, target):
             break
         gemm_flags.tile_b_cols = new_tile_b_cols
 
