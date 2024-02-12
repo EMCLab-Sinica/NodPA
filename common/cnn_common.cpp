@@ -130,8 +130,19 @@ static void handle_node(Model *model, uint16_t node_idx) {
     my_memcpy(output, input[0], sizeof(ParameterInfo) - sizeof(uint16_t)); // don't overwrite parameter_info_idx
     output->params_offset = 0;
     allocators[cur_node->op_type](model, input, output, cur_node, cur_node_flags, cur_orig_node_flags);
-    my_printf_debug("Needed mem = %d" NEWLINE, output->params_len);
-    MY_ASSERT(output->params_len <= INTERMEDIATE_VALUES_SIZE);
+#if MY_DEBUG >= MY_DEBUG_NORMAL
+    my_printf_debug("Needed mem = %d, dims=(", output->params_len);
+    uint32_t minimum_params_len = sizeof(int16_t);
+    for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+        if (!output->dims[dim_idx]) {
+            break;
+        }
+        my_printf_debug("%d, ", output->dims[dim_idx]);
+        minimum_params_len *= output->dims[dim_idx];
+    }
+    my_printf_debug(")" NEWLINE);
+    MY_ASSERT(minimum_params_len <= output->params_len && output->params_len <= INTERMEDIATE_VALUES_SIZE);
+#endif
 
 #if STATEFUL
     my_printf_debug("Old output state bit=%d" NEWLINE, get_state_bit(model, output->slot));
