@@ -119,6 +119,8 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 #endif
 
     my_printf_debug("tile_channel=%d, tile_b_cols=%d" NEWLINE, node_flags->gemm.tile_channel, node_flags->gemm.tile_b_cols);
+
+    uint8_t weight_dims = node_flags->gemm.weight_dims;
     output->params_len = output_len * upper_gauss(B->dims[weight_dims-2], node_flags->gemm.tile_channel) * sizeof(int16_t);
     MY_ASSERT(node_flags->gemm.tile_b_cols / BATCH_SIZE * BATCH_SIZE == node_flags->gemm.tile_b_cols);
 
