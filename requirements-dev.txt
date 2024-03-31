@@ -1,12 +1,7 @@
-matplotlib==3.7.0
+matplotlib==3.8.3
 jupyterlab==4.0.8
 odfpy==1.4.1
-pillow==9.4.0
 pyqt5==5.15.9
-scipy==1.10.1
 tf2onnx==1.15.1
 xlsxwriter==3.1.2
-nbdime==4.0.1
-mypy==1.7.1
-types-cffi==1.15.1.15
 opencv-python==4.8.1.78
