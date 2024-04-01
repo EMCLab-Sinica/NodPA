@@ -59,7 +59,7 @@ int16_t* const weights_tmp = op_buffer;
 #if INTERMITTENT
 static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags,
                           // loop indices
-                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_a_row_offset, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset,
+                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_a_row_offset, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset, uint32_t* part_idx,
                           // for state representation
                           int16_t* offset, uint16_t* next_output_turning_point, uint8_t* output_turning_point_idx, SlotInfo** output_slot_info) {
     const ParameterInfo *B = input[1];
@@ -157,7 +157,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
     make_buffer_aligned(&buffer_b);
 
-    uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_a_row_offset = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0;
+    uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_a_row_offset = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0, part_idx = 0;
 
 #if INTERMITTENT
     int16_t offset;
@@ -166,17 +166,22 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     SlotInfo *output_slot_info;
 
     gemm_recovery(model, input, output, node, node_flags, orig_node_flags,
-                  &tile_channel_offset, &tile_channel_idx, &tile_a_row_offset, &tile_b_col_offset, &extended_tile_b_col_offset,
+                  &tile_channel_offset, &tile_channel_idx, &tile_a_row_offset, &tile_b_col_offset, &extended_tile_b_col_offset, &part_idx,
                   &offset, &next_output_turning_point, &output_turning_point_idx, &output_slot_info);
 #endif
 
     uint8_t input_dims = node_flags->gemm.input_dims,
             weight_dims = node_flags->gemm.weight_dims;
     uint8_t output_dims = MAX_VAL(input_dims, weight_dims);
+    bool weights_broadcasted = weight_dims < output_dims;
 
-    uint32_t A_rows = 1, A_cols = A->dims[input_dims-1];
-    for (uint8_t dim_idx = 0; dim_idx < input_dims-1; dim_idx++) {
-        A_rows *= A->dims[dim_idx];
+    uint16_t A_rows = A->dims[input_dims-2], A_cols = A->dims[input_dims-1],
+             B_rows = B->dims[weight_dims-2], B_cols = B->dims[weight_dims-1],
+             output_rows = output->dims[output_dims-2], output_cols = output->dims[output_dims-1];
+
+    uint16_t parts = 1;
+    for (uint8_t dim_idx = 0; dim_idx < input_dims-2; dim_idx++) {
+        parts *= A->dims[dim_idx];
     }
 
     uint32_t output_len = 1;
@@ -184,11 +189,12 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         output_len *= output->dims[dim_idx];
     }
 
-    for (; tile_channel_offset < B->dims[weight_dims-2]; tile_channel_offset += node_flags->gemm.tile_channel, tile_channel_idx++) {
-        const uint16_t tile_channels = MIN_VAL(node_flags->gemm.tile_channel, B->dims[weight_dims-2] - tile_channel_offset);
+    for (; tile_channel_offset < B_rows; tile_channel_offset += node_flags->gemm.tile_channel, tile_channel_idx++) {
+        const uint16_t tile_channels = MIN_VAL(node_flags->gemm.tile_channel, B_rows - tile_channel_offset);
         const uint16_t extended_tile_channels = tile_channels + 2;
 
-        for (; tile_a_row_offset < A_rows; tile_a_row_offset += node_flags->gemm.tile_a_rows) {
+        for (; part_idx < parts; part_idx++) {
+          for (; tile_a_row_offset < A_rows; tile_a_row_offset += node_flags->gemm.tile_a_rows) {
 #if JAPARI
             start_cpu_counter(offsetof(Counters, stripping));
             bool need_skipping = has_footprints(A);
@@ -203,7 +209,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             if (!need_skipping)
 #endif
             {
-                my_memcpy_from_param(model, buffer_a, A, tile_a_row_offset * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
+                my_memcpy_from_param(model, buffer_a, A, (part_idx * A_rows + tile_a_row_offset) * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
             }
 
 #if STATEFUL
@@ -221,10 +227,10 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             my_printf_debug("Tile for A" NEWLINE);
             dump_matrix_debug(buffer_a, node_flags->gemm.tile_a_rows, extended_tile_channels, ValueInfo(A, model));
 
-            int16_t output_offset = tile_channel_idx * output_len + tile_a_row_offset * output->dims[output_dims-1] + extended_tile_b_col_offset;
+            int16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
 
-            for (; tile_b_col_offset < B->dims[weight_dims-1]; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
-                int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B->dims[weight_dims-1] - tile_b_col_offset);
+            for (; tile_b_col_offset < B_cols; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
+                int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B_cols - tile_b_col_offset);
                 int16_t values_to_preserve = tile_b_cols,
                         full_tile_b_cols;
 #if JAPARI
@@ -239,14 +245,20 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 my_fill_q15(0, filter_ptr, extended_tile_channels * full_tile_b_cols);
                 for (uint16_t row = 0; row < tile_b_cols; row++) {
                     MY_ASSERT(tile_channels <= OP_BUFFER_LEN);
+
+                    uint32_t part_offset = 0;
+                    if (!weights_broadcasted) {
+                        part_offset += part_idx * B_rows * B_cols;
+                    }
+
                     if (B->param_flags & TRANSPOSED) {
                         my_memcpy_from_param(model, weights_tmp,
-                              B, (tile_b_col_offset + row) * B->dims[weight_dims-2] + tile_channel_offset,
+                              B, part_offset + (tile_b_col_offset + row) * B_rows + tile_channel_offset,
                               tile_channels * sizeof(uint16_t));
                     } else {
                         // XXX: copy and interleave might be merged
                         for (uint16_t tile_channel_copy_idx = 0; tile_channel_copy_idx < tile_channels; tile_channel_copy_idx++) {
-                            weights_tmp[tile_channel_copy_idx] = get_q15_param(model, B, (tile_channel_offset + tile_channel_copy_idx) * B->dims[weight_dims-1] + (tile_b_col_offset + row));
+                            weights_tmp[tile_channel_copy_idx] = get_q15_param(model, B, part_offset + (tile_channel_offset + tile_channel_copy_idx) * B_cols + (tile_b_col_offset + row));
                         }
                     }
 #if JAPARI
@@ -314,8 +326,10 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 output_offset += values_to_preserve;
             }
             tile_b_col_offset = extended_tile_b_col_offset = 0;
+          }
+          tile_a_row_offset = 0;
         }
-        tile_a_row_offset = 0;
+        part_idx = 0;
     }
 
 #if INDIRECT_RECOVERY
