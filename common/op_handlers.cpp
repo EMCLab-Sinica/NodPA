@@ -9,6 +9,14 @@
 #include "my_dsplib.h"
 #include "platform.h"
 
+static inline uint8_t count_dims(const ParameterInfo* data) {
+    uint8_t dim_idx = 0;
+    while (dim_idx < 4 && data->dims[dim_idx]) {
+        dim_idx++;
+    }
+    return dim_idx;
+}
+
 #define RESHAPE_AUTO_DIM static_cast<uint16_t>(-1)
 
 const uint8_t RELU_TILE_SIZE = 16;
@@ -408,16 +416,55 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 
     uint16_t input_indices[4], output_indices[4];
 
+    uint8_t N_dims = count_dims(X);
+
+    if (N_dims == 4) {
+        output_indices[3] = data_offset % output->dims[3];
+        data_offset /= output->dims[3];
+    }
     output_indices[2] = data_offset % output->dims[2];
     data_offset /= output->dims[2];
     output_indices[1] = data_offset % output->dims[1];
     data_offset /= output->dims[1];
     output_indices[0] = data_offset;
-    my_printf_debug("output_indices: [%d, %d, %d]" NEWLINE, output_indices[0], output_indices[1], output_indices[2]);
+    if (N_dims == 4) {
+        my_printf_debug("output_indices: [%d, %d, %d, %d]" NEWLINE, output_indices[0], output_indices[1], output_indices[2], output_indices[3]);
+    } else if (N_dims == 3) {
+        my_printf_debug("output_indices: [%d, %d, %d]" NEWLINE, output_indices[0], output_indices[1], output_indices[2]);
+    }
 
-    for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
-        for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
-            for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
+    if (N_dims == 4) {
+        for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
+            for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
+                for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
+                    for (; output_indices[3] < output->dims[3]; output_indices[3]++) {
+                        for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
+                            input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
+                        }
+                        uint32_t input_offset = input_indices[0] * X->dims[1] * X->dims[2] * X->dims[3]+
+                                                input_indices[1] * X->dims[2] * X->dims[3] +
+                                                input_indices[2] * X->dims[3] +
+                                                input_indices[3];
+                        uint32_t output_offset = output_indices[0] * output->dims[1] * output->dims[2] * output->dims[3] +
+                                                 output_indices[1] * output->dims[2] * output->dims[3] +
+                                                 output_indices[2] * output->dims[3] +
+                                                 output_indices[3];
+                        int16_t val = get_q15_param(model, X, input_offset);
+                        put_q15_param(output, output_offset, val, /*is_linear=*/false);
+#if HAWAII
+                        write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
+#endif
+                    }
+                    output_indices[3] = 0;
+                }
+                output_indices[2] = 0;
+            }
+            output_indices[1] = 0;
+        }
+    } else if (N_dims == 3) {
+        for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
+            for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
+                for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
                     for (uint8_t dim_idx = 0; dim_idx < 3; dim_idx++) {
                         input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
                     }
@@ -432,13 +479,13 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 #if HAWAII
                     write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
 #endif
+                }
+                output_indices[2] = 0;
             }
-            output_indices[2] = 0;
+            output_indices[1] = 0;
         }
-        output_indices[1] = 0;
     }
 
-    // not actually transpose data as we happen to need NHWC
     dump_params_debug(model, output, node->output_name);
 }
 
@@ -474,11 +521,7 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     if (X->param_flags & CHANNEL_LAST) {
         buffer_size = Y->dims[1];
     } else {
-        uint8_t dim_idx = 0;
-        while (dim_idx < 4 && Y->dims[dim_idx]) {
-            dim_idx++;
-        }
-        buffer_size = Y->dims[dim_idx-1];
+        buffer_size = Y->dims[count_dims(Y) - 1];
     }
     original_buffer_size = buffer_size;
 #if JAPARI
