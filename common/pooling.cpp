@@ -75,7 +75,7 @@ void alloc_maxpool(Model *model, const ParameterInfo *input[], ParameterInfo *ou
     output->dims[2] = maxpool_params->new_H;
     output->dims[3] = maxpool_params->new_W;
     if (maxpool_params->need_nhwc2nchw) {
-        output->param_flags |= CHANNEL_FIRST;
+        output->param_flags &= (~CHANNEL_LAST);
     }
 }
 

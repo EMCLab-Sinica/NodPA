@@ -27,6 +27,7 @@ from utils import (
     INPLACE_UPDATE_OPS,
     THIS_DIR,
     add_merge_nodes,
+    broadcast_add,
     get_attr,
     get_parameter_dims,
     find_kernel_shape,
@@ -109,7 +110,7 @@ assert not Constants.ENABLE_PER_LAYER_COUNTERS or not Constants.ENABLE_DEMO_COUN
 
 other_flags = [
     # parameter flags
-    'CHANNEL_FIRST',
+    'CHANNEL_LAST',
     'TRANSPOSED',
 ]
 
@@ -391,8 +392,14 @@ for idx, n in enumerate(nodes):
                 axis = 1
         node_flags[idx].softmax.axis = axis
     if n.op_type == 'Add':
+        # Make sure constants are in the second input is one of inputs contain constants
         if len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):
             n.input = [n.input[1], n.input[0]]
+
+        weights_broadcasted_dims = broadcast_add(onnx_model, n)
+        weights_broadcasted_dim = weights_broadcasted_dims[0] if weights_broadcasted_dims else -1
+        node_flags[idx].add.weights_broadcasted_dim = weights_broadcasted_dim
+        print(f'{n.name}: weights_broadcasted_dim={weights_broadcasted_dim}')
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
@@ -519,13 +526,18 @@ def write_scale(dest, scale):
 model_parameters_info = outputs['model_parameters_info']
 total_params = 0
 for params in parameters:
+    param_flags = 0
+
     if params is None:  # input
+        if model_data.data_layout != DataLayout.NEUTRAL:
+            param_flags |= 1 << other_flags.index('CHANNEL_LAST')
+
         # Actual data for test samples are added last
         dims = images[0].shape
         model_parameters_info.write(to_bytes(parameters_slot.offset, size=32))  # params_offset
         model_parameters_info.write(to_bytes(np.prod(dims) * 2, size=32))  # A _q15 is 16-bit
         model_parameters_info.write(to_bytes(Constants.SLOT_TEST_SET, size=8))     # slot
-        model_parameters_info.write(to_bytes(0, size=8))     # param_flags
+        model_parameters_info.write(to_bytes(param_flags, size=8))     # param_flags
         # extend_dims
         model_parameters_info.write(to_bytes(1))
         for dim in dims:
@@ -536,7 +548,6 @@ for params in parameters:
     else:
         assert len(params.dims) <= 4
         params_data = onnx.numpy_helper.to_array(params)
-        param_flags = 0
         model_parameters_info.write(to_bytes(parameters_slot.offset, size=32))  # params_offset
         if params.data_type == onnx.TensorProto.FLOAT:
             param_size = 2

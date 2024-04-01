@@ -130,4 +130,4 @@ def load_attention_input_sequence(train: bool, target_size: tuple[int, int]) -> 
 
     dataset = TensorDataset(X_torch, labels_torch)
 
-    return ModelData(dataset=dataset, data_layout=DataLayout.NWC)
+    return ModelData(dataset=dataset, data_layout=DataLayout.NEUTRAL)

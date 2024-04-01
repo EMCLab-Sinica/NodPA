@@ -504,3 +504,47 @@ def get_parameter_dims(onnx_model: onnx.ModelProto, parameter_name):
     input_value_info = find_tensor_value_info(onnx_model, parameter_name)
     input_shape = input_value_info.type.tensor_type.shape
     return len(input_shape.dim)
+
+def broadcast_add(onnx_model: onnx.ModelProto, node: onnx.NodeProto) -> list[int]:
+    '''Handle broadcasting following NumPy rules
+       https://numpy.org/doc/stable/user/basics.broadcasting.html
+
+       Currently, this function only supports the case where weights may be
+       broadcasted in one dimension. Weights should be in an initializer, as
+       data may be rewritten to make sure weights and IFM/OFM have the same
+       number of dimensions.
+
+       Return value: dimension indices to broadcast
+    '''
+
+    input_value_info = find_tensor_value_info(onnx_model, node.input[0])
+    input_shape = [dim.dim_value for dim in input_value_info.type.tensor_type.shape.dim]
+    weights = find_initializer(onnx_model, node.input[1])
+    weights_shape = list(onnx.numpy_helper.to_array(weights).shape)
+    # The resulting array will have the same number of dimensions as the input array with the greatest number of dimensions
+    output_shape = [0] * max(len(input_shape), len(weights_shape))
+
+    # Broadcasting starts with the trailing (i.e. rightmost) dimension and works its way left.
+    assert len(input_shape) == len(output_shape), "This function only supports broadcasting weights"
+    weights_dims_diff = len(output_shape) - len(weights_shape)
+    weights_shape = [1] * weights_dims_diff + weights_shape
+
+    # Rewrite weights data
+    weights_data = onnx.numpy_helper.to_array(weights)
+    weights_data = np.expand_dims(weights_data, tuple(range(weights_dims_diff)))
+    weights.CopyFrom(onnx.helper.make_tensor(weights.name, weights.data_type, weights_shape, weights_data))
+
+    weights_broadcasted_dim = -1
+    for dim_idx, (input_dim, weights_dim) in enumerate(zip(input_shape, weights_shape)):
+        # Two dimensions are compatible when they are equal, or one of them is 1.
+        assert input_dim == weights_dim or input_dim == 1 or weights_dim == 1, "Invalid broadcasting"
+        if input_dim != weights_dim:
+            assert input_dim != 1, "This function only supports broadcasting weights"
+            # Only consider cases where at most one dimension is broadcasted
+            assert weights_broadcasted_dim == -1, "This function only supports broadcasting weights in one dimension"
+            weights_broadcasted_dim = dim_idx
+
+    if weights_broadcasted_dim != -1:
+        return [weights_broadcasted_dim]
+    else:
+        return []

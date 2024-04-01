@@ -52,6 +52,10 @@ struct SoftmaxNodeFlags {
     int8_t axis;
 };
 
+struct AddNodeFlags {
+    int8_t weights_broadcasted_dim;
+};
+
 #define NODE_FLAGS_SIZE 16
 
 struct NodeFlags {
@@ -64,6 +68,7 @@ struct NodeFlags {
         struct ConcatNodeFlags concat;
         struct TransposeNodeFlags transpose;
         struct SoftmaxNodeFlags softmax;
+        struct AddNodeFlags add;
         uint8_t as_bytes[NODE_FLAGS_SIZE];
     };
     // `canary` contains some non-zero value for detecting whether data are already in VM or not

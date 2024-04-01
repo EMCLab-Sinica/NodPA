@@ -446,7 +446,7 @@ void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output
     output->slot = get_next_slot(model, input[0]);
 }
 
-void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
+void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags* node_flags, const NodeFlags*) {
     my_printf_debug("Add!" NEWLINE);
 
     const ParameterInfo *X = input[0], *Y = input[1];
@@ -470,16 +470,27 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     stop_cpu_counter();
 #endif
 
-    uint16_t buffer_size = Y->dims[1];
+    uint16_t original_buffer_size, buffer_size;
+    if (X->param_flags & CHANNEL_LAST) {
+        buffer_size = Y->dims[1];
+    } else {
+        uint8_t dim_idx = 0;
+        while (dim_idx < 4 && Y->dims[dim_idx]) {
+            dim_idx++;
+        }
+        buffer_size = Y->dims[dim_idx-1];
+    }
+    original_buffer_size = buffer_size;
 #if JAPARI
     buffer_size = extend_for_footprints(buffer_size);
 #endif
+
     int16_t *buffer_x = lea_buffer,
             *buffer_y = buffer_x + buffer_size;
-    my_memcpy_from_param(model, buffer_y, Y, 0, Y->dims[1] * sizeof(int16_t));
+    my_memcpy_from_param(model, buffer_y, Y, 0, original_buffer_size * sizeof(int16_t));
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
-    move_weights(buffer_y, false, buffer_size, Y->dims[1]);
+    move_weights(buffer_y, false, buffer_size, original_buffer_size);
     stop_cpu_counter();
 #endif
     my_printf_debug("Y" NEWLINE);
@@ -492,7 +503,7 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 
     uint16_t idx = data_offset / buffer_size;
     uint16_t cur_buffer_size = buffer_size - (data_offset - idx * buffer_size);
-    for (; idx < X->dims[2]; idx++) {
+    for (; idx < X->dims[node_flags->add.weights_broadcasted_dim]; idx++) {
         my_printf_debug("data_offset=%d" NEWLINE, data_offset);
         my_memcpy_from_param(model, buffer_x, X, data_offset, cur_buffer_size * sizeof(int16_t));
 #if STATEFUL
@@ -536,5 +547,9 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     stop_cpu_counter();
 #endif
 
-    dump_params_nhwc_debug(model, output, node->output_name);
+    if (X->param_flags & CHANNEL_LAST) {
+        dump_params_nhwc_debug(model, output, node->output_name);
+    } else {
+        dump_params_debug(model, output, node->output_name);
+    }
 }
