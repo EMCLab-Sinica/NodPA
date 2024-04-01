@@ -36,8 +36,7 @@ void handle_mul(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
         dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(output), false);
 
         my_memcpy_to_param(output, data_offset, buffer_x, cur_buffer_size * sizeof(int16_t), 0, true);
-        data_offset += cur_buffer_size;
     }
 
-    dump_params_nhwc_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name);
 }
