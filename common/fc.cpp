@@ -58,6 +58,8 @@ int16_t* const weights_tmp = op_buffer;
 
 #if INTERMITTENT
 static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags,
+                          // layer dimensions
+                          uint16_t output_rows, uint16_t output_cols,
                           // loop indices
                           uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_a_row_offset, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset, uint16_t* part_idx,
                           // for state representation
@@ -91,8 +93,11 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
     *tile_channel_offset = (*tile_channel_idx) * node_flags->gemm.tile_channel;
     first_unfinished_value_offset %= output_len;
 
-    *tile_a_row_offset = first_unfinished_value_offset / output->dims[1];
-    *extended_tile_b_col_offset = first_unfinished_value_offset % output->dims[1];
+    *part_idx = first_unfinished_value_offset / (output_rows * output_cols);
+    first_unfinished_value_offset %= (output_rows * output_cols);
+
+    *tile_a_row_offset = first_unfinished_value_offset / output_cols;
+    *extended_tile_b_col_offset = first_unfinished_value_offset % output_cols;
 
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
@@ -161,25 +166,26 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_a_row_offset = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0, part_idx = 0;
 
+    uint8_t input_dims = node_flags->gemm.input_dims,
+            weight_dims = node_flags->gemm.weight_dims;
+    uint8_t output_dims = MAX_VAL(input_dims, weight_dims);
+
+    uint16_t A_rows = A->dims[input_dims-2], A_cols = A->dims[input_dims-1],
+             B_rows = B->dims[weight_dims-2], B_cols = B->dims[weight_dims-1],
+             output_rows = output->dims[output_dims-2], output_cols = output->dims[output_dims-1];
+
 #if INTERMITTENT
     int16_t offset;
     uint16_t next_output_turning_point;
     uint8_t output_turning_point_idx;
     SlotInfo *output_slot_info;
 
-    gemm_recovery(model, input, output, node, node_flags, orig_node_flags,
+    gemm_recovery(model, input, output, node, node_flags, orig_node_flags, output_rows, output_cols,
                   &tile_channel_offset, &tile_channel_idx, &tile_a_row_offset, &tile_b_col_offset, &extended_tile_b_col_offset, &part_idx,
                   &offset, &next_output_turning_point, &output_turning_point_idx, &output_slot_info);
 #endif
 
-    uint8_t input_dims = node_flags->gemm.input_dims,
-            weight_dims = node_flags->gemm.weight_dims;
-    uint8_t output_dims = MAX_VAL(input_dims, weight_dims);
     bool weights_broadcasted = weight_dims < output_dims;
-
-    uint16_t A_rows = A->dims[input_dims-2], A_cols = A->dims[input_dims-1],
-             B_rows = B->dims[weight_dims-2], B_cols = B->dims[weight_dims-1],
-             output_rows = output->dims[output_dims-2], output_cols = output->dims[output_dims-1];
 
     uint16_t parts = 1;
     for (uint8_t dim_idx = 0; dim_idx < input_dims-2; dim_idx++) {
