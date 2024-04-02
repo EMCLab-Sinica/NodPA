@@ -380,16 +380,18 @@ for idx, n in enumerate(nodes):
         node_flags[idx].transpose.inverse_perm = inverse_perm + [-1]*(4-len(perm))
     if n.op_type == 'Softmax':
         axis = get_attr(n, 'axis')
+        input_value_info = find_tensor_value_info(onnx_model, n.input[0])
+        input_shape = input_value_info.type.tensor_type.shape
         if axis is None:
             # The default value for 'axis' is changed in opset 13
             # https://onnx.ai/onnx/operators/onnx__Softmax.html
             if get_model_opset_version(onnx_model) >= 13:
-                input_value_info = find_tensor_value_info(onnx_model, n.input[0])
-                input_shape = input_value_info.type.tensor_type.shape
-                # The default axis is -1, which means the last dimension
-                axis = len(input_shape.dim) - 1
+                axis = - 1
             else:
                 axis = 1
+        # Negative axis means counting back from the last dimension
+        if axis < 0:
+            axis += len(input_shape.dim)
         node_flags[idx].softmax.axis = axis
     if n.op_type == 'Add':
         # Make sure constants are in the second input is one of inputs contain constants
