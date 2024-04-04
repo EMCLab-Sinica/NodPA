@@ -173,7 +173,7 @@ uint32_t job_index_to_offset(const ParameterInfo *output, uint16_t job_index) {
     if (!is_conv) {
         return (job_index + 1) * BATCH_SIZE - 1;
     }
-#else
+#elif defined(OpRelu)
     if (!is_conv) {
         if (node->op_type == OpRelu) {
             uint16_t OUTPUT_CHANNEL = output->dims[1];
