@@ -74,9 +74,7 @@ void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const voi
     }
 #endif
 
-#if !DISABLE_FEATURE_MAP_NVM_ACCESS
     write_to_nvm(src, intermediate_values_offset(param->slot) + total_offset, n, timer_delay);
-#endif
 
     notify_progress();
 }
@@ -89,9 +87,7 @@ void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, 
     }
 #endif
 
-#if !DISABLE_FEATURE_MAP_NVM_ACCESS
     read_from_nvm(dest, intermediate_values_offset(param->slot) + offset_in_word * sizeof(int16_t), n);
-#endif
 }
 
 void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
@@ -102,9 +98,7 @@ void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
     }
 #endif
 
-#if !DISABLE_FEATURE_MAP_NVM_ACCESS
     read_from_nvm(dest, SAMPLES_OFFSET + (sample_idx % LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
-#endif
 }
 
 ParameterInfo* get_intermediate_parameter_info(uint16_t i) {

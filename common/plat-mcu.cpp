@@ -84,9 +84,7 @@ void my_memcpy_from_parameters(void *dest, const ParameterInfo *param, uint32_t 
     }
 #endif
 
-#if !DISABLE_FEATURE_MAP_NVM_ACCESS
     read_from_nvm(dest, PARAMETERS_OFFSET + param->params_offset + offset_in_bytes, n);
-#endif
 }
 
 void read_from_nvm(void* vm_buffer, uint32_t nvm_offset, size_t n) {

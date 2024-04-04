@@ -5,14 +5,6 @@
 #include "data.h"
 #include "data_structures.h"
 
-#define SINGLE_LAYER_MODE 0
-
-#if SINGLE_LAYER_MODE
-#  define CHECK_OUTPUT 0
-#else
-#  define CHECK_OUTPUT 1
-#endif
-
 extern uint16_t inference_layer_idx;
 
 /**********************************

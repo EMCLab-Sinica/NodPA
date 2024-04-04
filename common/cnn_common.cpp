@@ -148,13 +148,7 @@ static void handle_node(Model *model, uint16_t node_idx) {
     my_printf_debug("Old output state bit=%d" NEWLINE, get_state_bit(model, output->slot));
 #endif
 
-#if SINGLE_LAYER_MODE
-    if (node_idx == inference_layer_idx) {
-        handlers[cur_node->op_type](model, input, output, cur_node, cur_node_flags, cur_orig_node_flags);
-    }
-#else
     handlers[cur_node->op_type](model, input, output, cur_node, cur_node_flags, cur_orig_node_flags);
-#endif
 
 #if ENABLE_COUNTERS
     MY_ASSERT(counters_cleared());
@@ -230,7 +224,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
 #endif
     ans_len = MIN_VAL(output_node->dims[1], ans_len);
 
-#if CHECK_OUTPUT
     float output_max = 0;
     if (sample_idx == 0) {
         for (uint16_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
@@ -244,7 +237,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
 #endif
         }
     }
-#endif
 
     uint16_t buffer_len = LIMIT_DMA_SIZE(ans_len);
 
@@ -266,7 +258,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         }
 #endif
 
-#if CHECK_OUTPUT
         if (sample_idx == 0) {
             uint16_t ofm_idx = buffer_offset;
 #if JAPARI
@@ -290,7 +281,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
                 }
             }
         }
-#endif
 
         int16_t cur_max = INT16_MIN;
         uint16_t cur_ans = 0;
