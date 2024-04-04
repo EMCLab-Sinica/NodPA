@@ -1,9 +1,13 @@
+#include <cstddef>
+#include <cstdint>
 #include "cnn_common.h"
 #include "data.h"
 #include "data_structures.h"
 #include "dynbal-config.h"
 #include "double_buffering.h"
 #include "layers.h"
+#include "layer-defs.h"
+#include "platform.h"
 
 const Node* get_node(size_t i) {
     return reinterpret_cast<const Node*>(nodes_data) + i;

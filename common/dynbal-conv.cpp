@@ -1,14 +1,22 @@
 #include <cinttypes>
 #include <cmath>
+#include <cstdint>
 #include "cnn_common.h"
 #include "conv.h"
 #include "counters.h"
 #include "data.h"
+#include "data_structures.h"
+#include "dynbal.h"
 #include "dynbal-conv.h"
+#include "dynbal-config.h"
 #include "layers.h"
 #include "my_debug.h"
 #include "op_utils.h"
 #include "platform.h"
+
+#if defined(__MSP430__) || defined(__MSP432__)
+#include "tools/ext_fram/extfram.h" // for FRAM_FREQ_DIVIDER
+#endif
 
 // output_tile_c: convex
 // input_tile_c: convex

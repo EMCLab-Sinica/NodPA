@@ -6,6 +6,7 @@
 #include "counters.h"
 #include "data_structures.h"
 #include "platform.h"
+#include "my_debug.h"
 
 uint8_t counters_enabled = 1;
 

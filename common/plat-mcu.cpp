@@ -6,6 +6,7 @@
 #elif defined(__MSP432__)
 #include <msp432.h>
 #endif
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include "intermittent-cnn.h"
@@ -17,6 +18,7 @@
 #include "tools/myuart.h"
 #include "tools/our_misc.h"
 #include "tools/dvfs.h"
+#include "tools/ext_fram/extfram.h"
 
 #ifdef __MSP430__
 #define DATA_SECTION_NVM _Pragma("DATA_SECTION(\".nvm\")")

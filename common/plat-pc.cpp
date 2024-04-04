@@ -7,7 +7,9 @@
 #include "platform.h"
 #include "data.h"
 #include <cinttypes>
+#include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #ifdef __linux__
@@ -23,6 +25,7 @@
 #endif
 #include <fstream>
 #include <memory>
+#include <iostream>
 #ifdef USE_PROTOBUF
 #include "model_output.pb.h"
 #endif

@@ -101,7 +101,6 @@ struct InferenceStats {
 
 #define N_PERSISTENT_COUNTERS 1
 struct Counters {
-#if !ENABLE_DEMO_COUNTERS
     uint32_t power_counters;
     uint32_t macs;
 
@@ -131,7 +130,6 @@ struct Counters {
     uint32_t nvm_read_model;
     uint32_t nvm_write_shadow_data;
     uint32_t nvm_write_model;
-#endif
     uint32_t nvm_write_linear_jobs;
     uint32_t nvm_write_non_linear_jobs;
     uint32_t nvm_write_footprints;

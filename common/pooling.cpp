@@ -1,8 +1,10 @@
 #include <cstddef>
 #include <cstdint>
 #include "data.h"
+#include "data_structures.h"
 #include "cnn_common.h"
 #include "counters.h"
+#include "layer-defs.h"
 #include "my_debug.h"
 #include "intermittent-cnn.h"
 #include "op_utils.h"

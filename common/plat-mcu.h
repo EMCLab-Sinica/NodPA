@@ -1,3 +1,4 @@
+// IWYU pragma: private, include "platform.h"
 #pragma once
 
 #include "data.h"

@@ -1,5 +1,6 @@
 #include <cinttypes> // for PRId32
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 #include "cnn_common.h"
@@ -7,6 +8,7 @@
 #include "data.h"
 #include "intermittent-cnn.h"
 #include "layers.h"
+#include "layer-defs.h"
 #include "my_debug.h"
 #include "my_dsplib.h"
 #include "op_utils.h"

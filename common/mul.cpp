@@ -1,7 +1,10 @@
+#include <cstdint>
 #include "cnn_common.h"
+#include "layer-defs.h"
 #include "my_debug.h"
 #include "my_dsplib.h"
 #include "op_utils.h"
+#include "platform.h"
 
 void alloc_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *X = input[0], *Y = input[1];

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include "data.h"
 
 #if defined(__MSP430__) || defined(__MSP432__)
 #  include "plat-mcu.h"

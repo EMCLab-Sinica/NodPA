@@ -1,8 +1,11 @@
 #include <cmath>
+#include <cstdint>
 
 #include "DSPLib.h"
 
 #include "cnn_common.h"
+#include "data.h"
+#include "layer-defs.h"
 #include "my_debug.h"
 #include "my_dsplib.h"
 #include "op_utils.h"

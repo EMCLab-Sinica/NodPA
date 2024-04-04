@@ -1,8 +1,12 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include "counters.h"
+#include "data.h"
+#include "data_structures.h"
+#include "my_debug.h"
 
 // Templates to be filled by users
 template<typename T>

@@ -1,8 +1,10 @@
 #include <cstdint>
 #include <cinttypes>
+#include "data_structures.h"
 #include "double_buffering.h"
 #include "dynbal.h"
 #include "my_debug.h"
+#include "platform.h"
 
 InferenceStats inference_stats_vm[2];
 

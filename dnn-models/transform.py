@@ -145,10 +145,6 @@ def init_cffi():
             if line.startswith(('#include', 'static_assert')):
                 continue
             c_sources += line
-    if Constants.ENABLE_DEMO_COUNTERS:
-        c_sources = c_sources.replace("#if !ENABLE_DEMO_COUNTERS", "/*").replace("#endif", "*/")
-    else:
-        c_sources = c_sources.replace("#if !ENABLE_DEMO_COUNTERS", "").replace("#endif", "")
     ffi.cdef(c_sources)
     return ffi
 

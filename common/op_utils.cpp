@@ -1,4 +1,7 @@
+#include <cstddef>
 #include <cstdint>
+#include <type_traits> // for std::enable_if_t
+#include "counters.h"
 #include "my_debug.h"
 #include "op_utils.h"
 #include "data.h"

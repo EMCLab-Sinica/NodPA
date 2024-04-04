@@ -3,6 +3,7 @@
 #include "cnn_common.h"
 #include "counters.h"
 #include "data.h"
+#include "layer-defs.h"
 #include "op_utils.h"
 #include "my_debug.h"
 #include "intermittent-cnn.h"

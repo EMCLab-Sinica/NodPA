@@ -12,7 +12,9 @@
 #include "platform.h"
 #include "dynbal.h"
 #include "dynbal-conv.h"
+#include "dynbal-config.h"
 #include "layers.h"
+#include "layer-defs.h"
 
 #define ON_DEMAN_TILE_LOADING 1
 

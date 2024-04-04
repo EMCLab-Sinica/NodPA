@@ -1,7 +1,12 @@
+#include <cstddef>
+#include <cstdint>
 #include "cnn_common.h"
 #include "counters.h"
+#include "data.h"
 #include "intermittent-cnn.h"
+#include "layer-defs.h"
 #include "my_debug.h"
+#include "platform.h"
 
 void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *X = input[0], *start = input[1], *end = input[2], *axes = input[3];

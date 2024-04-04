@@ -4,6 +4,7 @@
 #include <cstdint>
 #include "data.h"
 #include "data_structures.h"
+#include "layer-defs.h"
 
 extern uint16_t inference_layer_idx;
 
