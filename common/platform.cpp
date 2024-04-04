@@ -13,7 +13,7 @@
 #include "double_buffering.h"
 
 // put offset checks here as extra headers are used
-static_assert(SOFTMAX_LOOP_INDICES_OFFSET >= PARAMETERS_OFFSET + PARAMETERS_DATA_LEN, "Incorrect NVM layout");
+static_assert(COUNTERS_OFFSET >= PARAMETERS_OFFSET + PARAMETERS_DATA_LEN, "Incorrect NVM layout");
 
 Model model_vm;
 
@@ -237,47 +237,3 @@ void reset_hawaii_layer_footprint(uint16_t layer_idx) {
     my_printf_debug("Reset HAWAII layer footprint for layer %d" NEWLINE, layer_idx);
 }
 #endif
-
-// One data item (still with two copies in NVM for double buffering) can support
-// multiple softmax layers as loop indices are reset at the end of each layer.
-SoftmaxLoopIndices softmax_loop_indices_vm;
-
-template<>
-uint32_t nvm_addr<SoftmaxLoopIndices>(uint8_t copy_id, uint16_t /*layer_idx*/) {
-    return SOFTMAX_LOOP_INDICES_OFFSET + copy_id * sizeof(SoftmaxLoopIndices);
-}
-
-template<>
-SoftmaxLoopIndices* vm_addr<SoftmaxLoopIndices>(uint16_t /*layer_idx*/) {
-    return &softmax_loop_indices_vm;
-}
-
-template<>
-const char* datatype_name<SoftmaxLoopIndices>(void) {
-    return "softmax_loop_index";
-}
-
-void write_softmax_loop_indices(uint16_t idx0, uint16_t idx1, uint16_t idx3) {
-    softmax_loop_indices_vm.idx0 = idx0;
-    softmax_loop_indices_vm.idx1 = idx1;
-    softmax_loop_indices_vm.idx3 = idx3;
-    my_printf_debug("Write Softmax loop indices: idx0=%d, idx1=%d, idx3=%d" NEWLINE, idx0, idx1, idx3);
-    commit_versioned_data<SoftmaxLoopIndices>(/*data_idx=*/0);
-}
-
-void read_softmax_loop_indices(uint16_t* pIdx0, uint16_t* pIdx1, uint16_t* pIdx3) {
-    SoftmaxLoopIndices* softmax_loop_index = get_versioned_data<SoftmaxLoopIndices>(/*data_idx=*/0);
-    *pIdx0 = softmax_loop_index->idx0;
-    *pIdx1 = softmax_loop_index->idx1;
-    *pIdx3 = softmax_loop_index->idx3;
-    my_printf_debug("Read Softmax loop indices: idx0=%d, idx1=%d, idx3=%d" NEWLINE, *pIdx0, *pIdx1, *pIdx3);
-}
-
-void reset_softmax_loop_indices() {
-    softmax_loop_indices_vm.idx0 = 0;
-    softmax_loop_indices_vm.idx1 = 0;
-    softmax_loop_indices_vm.idx3 = 0;
-    softmax_loop_indices_vm.version = 0;
-    write_to_nvm(&softmax_loop_indices_vm, nvm_addr<SoftmaxLoopIndices>(/*copy_id=*/0, /*layer_idx=*/0), sizeof(SoftmaxLoopIndices));
-    write_to_nvm(&softmax_loop_indices_vm, nvm_addr<SoftmaxLoopIndices>(/*copy_id=*/1, /*layer_idx=*/0), sizeof(SoftmaxLoopIndices));
-}

@@ -4,7 +4,9 @@
 #include "DSPLib.h"
 
 #include "cnn_common.h"
+#include "counters.h"
 #include "data.h"
+#include "intermittent-cnn.h"
 #include "layer-defs.h"
 #include "my_debug.h"
 #include "my_dsplib.h"
@@ -36,8 +38,25 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
         const uint16_t softmax_length = X->dims[axis];
 
         uint16_t idx0 = 0, idx1 = 0, idx2 = 0;
-#if HAWAII
-        read_softmax_loop_indices(&idx0, &idx1, &idx2);
+
+        uint32_t data_offset = 0;
+#if INTERMITTENT
+        start_cpu_counter(offsetof(Counters, progress_seeking));
+        uint32_t first_unfinished_job_idx = run_recovery(model, output);
+        data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
+        stop_cpu_counter();
+
+        if (first_unfinished_job_idx * sizeof(int16_t) == output->params_len) {
+            goto finished;
+        }
+
+        MY_ASSERT(data_offset % X->dims[3] == 0);
+        data_offset /= X->dims[3];
+        idx2 = data_offset % X->dims[2];
+        data_offset /= X->dims[2];
+        idx1 = data_offset % X->dims[1];
+        data_offset /= X->dims[1];
+        idx0 = data_offset % X->dims[0];
 #endif
 
         for (; idx0 < X->dims[0];) {
@@ -73,7 +92,7 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
 
                     my_memcpy_to_param(output, softmax_vector_base_offset, lea_buffer, softmax_length * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/false);
 #if HAWAII
-                    write_softmax_loop_indices(idx0, idx1, idx2);
+                    write_hawaii_layer_footprint(model->layer_idx, softmax_length);
 #endif
                     idx2++;
                 }
@@ -83,13 +102,11 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
             idx1 = 0;
             idx0++;
         }
+
+finished:
+
+        dump_params_debug(model, output, node->output_name);
     } else {
         MY_ASSERT(false);
     }
-
-    dump_params_debug(model, output, node->output_name);
-
-#if HAWAII
-    reset_softmax_loop_indices();
-#endif
 }
