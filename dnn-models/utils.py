@@ -298,12 +298,14 @@ def print_tensor(tensor, print_histogram):
     dimensions = np.shape(shape)[0]
     if dimensions == 4:
         N, C, H, W = shape
-        assert N == 1
-        for c in range(C):
-            print(f'Channel {c}')
-            for h in range(H):
-                for w in range(W):
-                    print_float(tensor[0, c, h, w])
+        for n in range(N):
+            print(f'Matrix {n}')
+            for c in range(C):
+                print(f'Channel {c}')
+                for h in range(H):
+                    for w in range(W):
+                        print_float(tensor[n, c, h, w])
+                    print()
                 print()
             print()
     elif dimensions == 3:
