@@ -34,7 +34,7 @@ class Transformer(nn.Module):
 
         out, _ = self.attn(query=query, key=key, value=value, need_weights=False)
 
-        out = out.view(1, self.S * self.P)
+        out = out.view(-1, self.S * self.P)
 
         return out
 
@@ -63,6 +63,13 @@ def main():
             opset_version=14,
             input_names=['input'],
             output_names=['output'],
+            # https://stackoverflow.com/questions/76980330/how-to-get-dynamic-batch-size-in-onnx-model-from-pytorch
+            # Disabled as somehow onnx shape inference does not work with the generated model, and thus some
+            # preprocessing steps in transform.py fail
+            # dynamic_axes={
+            #     'input': [0],
+            #     'output': [0],
+            # },
         )
 
     pytorch_exported_model.seek(0)
