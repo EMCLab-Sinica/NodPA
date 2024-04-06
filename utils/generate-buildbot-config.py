@@ -32,17 +32,17 @@ def config_builder(model: str, batch_size: int, approach: str, target: str) -> d
 def main() -> None:
     all_targets = ['msp430', 'msp432']
     all_approaches = ['hawaii', 'japari', 'stateful']
-    all_batch_sizes = [1, 2]
     ideal_config = {'targets': all_targets, 'approaches': ['ideal'], 'batch_sizes': [1]}
-    complete_config = {'targets': all_targets, 'approaches': all_approaches, 'batch_sizes': all_batch_sizes}
+    complete_config = {'targets': all_targets, 'approaches': all_approaches, 'batch_sizes': [1]}
     model_configs = [
         ModelConfig(model='cifar10', **ideal_config),
         ModelConfig(model='cifar10', **complete_config),
         ModelConfig(model='kws', **ideal_config),
-        ModelConfig(model='kws', **complete_config),
+        ModelConfig(model='kws', targets=all_targets, approaches=all_approaches, batch_sizes=[1, 2]),
         ModelConfig(model='har', **ideal_config),
-        ModelConfig(model='har', targets=all_targets, approaches=all_approaches, batch_sizes=[1]),
+        ModelConfig(model='har', **complete_config),
         ModelConfig(model='transformers', **ideal_config),
+        ModelConfig(model='transformers', targets=all_targets, approaches=['hawaii'], batch_sizes=[1]),
     ]
 
     buildbot_configurations = []
