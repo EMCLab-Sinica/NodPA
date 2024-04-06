@@ -30,7 +30,7 @@ from onnx_utils import (
 logger = logging.getLogger('intermittent-cnn.utils')
 
 INPLACE_UPDATE_OPS = ['Reshape', 'Squeeze', 'Unsqueeze']
-OPS_WITH_MERGE = ['Conv', 'Gemm', 'MatMul']
+OPS_WITH_MERGE = ['Conv', 'Gemm', 'MatMul', 'Softmax']
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
 

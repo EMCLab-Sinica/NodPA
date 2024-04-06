@@ -389,6 +389,7 @@ for idx, n in enumerate(nodes):
         if axis < 0:
             axis += len(input_shape.dim)
         node_flags[idx].softmax.axis = axis
+        node_flags[idx+1].softmax.axis = axis # merge
     if n.op_type == 'Add':
         # Make sure constants are in the second input is one of inputs contain constants
         if len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):

@@ -14,99 +14,99 @@
 #include "platform.h"
 
 void alloc_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
-    int axis = node_flags->softmax.axis;
-    if (axis == 1) {
-        SlotInfo *cur_slot_info = get_slot_info(model, output->slot);
-        if (cur_slot_info) {
-            cur_slot_info->user = model->layer_idx;
-        }
-    } else if (axis == 3) {
         output->slot = get_next_slot(model, input[0]);
-    } else {
-        MY_ASSERT(false);
-    }
 }
 
 void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     int axis = node_flags->softmax.axis;
 
-    if (axis == 1) {
-        // Do nothing - softmax does not change the relative order of values.
-        // Just let run_model determine the max value
-    } else if (axis == 3) {
-        const ParameterInfo* X = input[0];
-        const uint16_t softmax_length = X->dims[axis];
+    const ParameterInfo* X = input[0];
+    const uint16_t softmax_length = X->dims[axis];
 
-        uint16_t idx0 = 0, idx1 = 0, idx2 = 0;
-
-        uint32_t data_offset = 0;
+    uint32_t softmax_vector_idx = 0;
+    uint32_t softmax_num_vectors = output->params_len / sizeof(int16_t) / softmax_length;
+    uint32_t data_offset = 0;
+    uint16_t softmax_idx = 0;
 #if INTERMITTENT
-        start_cpu_counter(offsetof(Counters, progress_seeking));
-        uint32_t first_unfinished_job_idx = run_recovery(model, output);
-        data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
-        stop_cpu_counter();
+    start_cpu_counter(offsetof(Counters, progress_seeking));
+    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+    data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
+    stop_cpu_counter();
 
-        if (first_unfinished_job_idx * sizeof(int16_t) == output->params_len) {
-            goto finished;
-        }
-
-        MY_ASSERT(data_offset % X->dims[3] == 0);
-        data_offset /= X->dims[3];
-        idx2 = data_offset % X->dims[2];
-        data_offset /= X->dims[2];
-        idx1 = data_offset % X->dims[1];
-        data_offset /= X->dims[1];
-        idx0 = data_offset % X->dims[0];
+    softmax_vector_idx = data_offset / softmax_length;
+    softmax_idx = data_offset % softmax_length;
+    // needs to start from the row head
+    data_offset -= softmax_idx;
 #endif
 
-        for (; idx0 < X->dims[0];) {
-            for (; idx1 < X->dims[1];) {
-                for (; idx2 < X->dims[2];) {
-                    uint32_t softmax_vector_base_offset = idx0 * X->dims[1] * X->dims[2] * X->dims[3] + idx1 * X->dims[2] * X->dims[3] + idx2 * X->dims[3];
+    for (; softmax_vector_idx < softmax_num_vectors; softmax_vector_idx++, data_offset += softmax_length) {
+        my_memcpy_from_param(model, lea_buffer, X, data_offset, softmax_length * sizeof(int16_t));
 
-                    my_memcpy_from_param(model, lea_buffer, X, softmax_vector_base_offset, softmax_length * sizeof(int16_t));
+        // avoid exponential overflow and underflow
+        // https://www.cnblogs.com/guoyaohua/p/8900683.html
+        int16_t max_val = 0;
+        uint16_t max_val_idx = 0;
+        my_max_q15(lea_buffer, softmax_length, &max_val, &max_val_idx);
+        my_offset_q15(lea_buffer, -(max_val), lea_buffer, softmax_length);
 
-                        int16_t* softmax_buffer = lea_buffer;
-
-                        float softmax_sum = 0.0f; // the denominator in softmax equation
-                        // avoid exponential overflow and underflow
-                        // https://www.cnblogs.com/guoyaohua/p/8900683.html
-                        int16_t max_val = 0;
-                        uint16_t max_val_idx = 0;
-                        my_max_q15(softmax_buffer, softmax_length, &max_val, &max_val_idx);
-                        my_offset_q15(softmax_buffer, -(max_val), softmax_buffer, softmax_length);
-
-                        for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
-                            // exponentials
-                            float val = q15_to_float(softmax_buffer[softmax_idx], ValueInfo(output));
-                            val = std::exp(val);
-                            softmax_buffer[softmax_idx] = _Q15(val / output->scale.toFloat());
-                            softmax_sum += val;
-                        }
-
-                        // normalize the row
-                        int16_t scaleFract;
-                        uint8_t shift;
-                        float_to_scale_params(&scaleFract, &shift, 1.0f/softmax_sum);
-                        my_scale_q15(softmax_buffer, scaleFract, shift, softmax_buffer, softmax_length);
-
-                    my_memcpy_to_param(output, softmax_vector_base_offset, lea_buffer, softmax_length * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/false);
+        for (; softmax_idx < softmax_length; softmax_idx++) {
+            // exponentials
+            float val = q15_to_float(lea_buffer[softmax_idx], ValueInfo(output));
+            val = std::exp(val);
+            int16_t exp_val = _Q15(val / output->scale.toFloat());
+            put_q15_param(output, data_offset + softmax_idx, exp_val, /*is_linear=*/false);
 #if HAWAII
-                    write_hawaii_layer_footprint(model->layer_idx, softmax_length);
+            write_hawaii_layer_footprint(model->layer_idx, 1);
 #endif
-                    idx2++;
-                }
-                idx2 = 0;
-                idx1++;
-            }
-            idx1 = 0;
-            idx0++;
+        }
+        softmax_idx = 0;
+    }
+
+    dump_params_debug(model, output, node->output_name);
+}
+
+void alloc_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+    output->slot = get_next_slot(model, input[0]);
+}
+
+void handle_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+    int axis = node_flags->softmax.axis;
+
+    const ParameterInfo* X = input[0];
+    const uint16_t softmax_length = X->dims[axis];
+
+    uint32_t softmax_vector_idx = 0;
+    uint32_t softmax_num_vectors = output->params_len / sizeof(int16_t) / softmax_length;
+    uint32_t data_offset = 0;
+#if INTERMITTENT
+    start_cpu_counter(offsetof(Counters, progress_seeking));
+    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+    data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
+    stop_cpu_counter();
+
+    MY_ASSERT(data_offset % softmax_length == 0);
+    softmax_vector_idx = data_offset / softmax_length;
+#endif
+
+    for (; softmax_vector_idx < softmax_num_vectors; softmax_vector_idx++, data_offset += softmax_length) {
+        my_memcpy_from_param(model, lea_buffer, X, data_offset, softmax_length * sizeof(int16_t));
+
+        int32_t softmax_sum = 0; // the denominator in softmax equation
+        for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
+            softmax_sum += lea_buffer[softmax_idx];
         }
 
-finished:
+        // softmax_sum * (2 ** -15) = 1 / (softmax_sum_reciprocal * (2 ** -15))
+        int32_t softmax_sum_reciprocal = (1LL << 30) / softmax_sum;
 
-        dump_params_debug(model, output, node->output_name);
-    } else {
-        MY_ASSERT(false);
+        // normalize the row
+        my_scale_q15(lea_buffer, softmax_sum_reciprocal, /*shift=*/0, lea_buffer, softmax_length);
+
+        my_memcpy_to_param(output, data_offset, lea_buffer, softmax_length * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/false);
+#if HAWAII
+        write_hawaii_layer_footprint(model->layer_idx, softmax_length);
+#endif
     }
+
+    dump_params_debug(model, output, node->output_name);
 }
