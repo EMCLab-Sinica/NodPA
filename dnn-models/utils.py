@@ -214,6 +214,7 @@ def load_model(config, model_variant):
     ])
 
     onnx_model_single = split2slice(onnx_model_single)
+    remove_trailing_softmax(onnx_model_single)
     onnx.checker.check_model(onnx_model_single)
 
     return {
@@ -375,9 +376,7 @@ def run_model_single(model: onnx.ModelProto, model_data: ModelData, verbose: boo
                 # zero-dimension tensor -> scalar
                 layer_out_obj.value.append(layer_out)
             model_output.layer_out.append(layer_out_obj)
-        # Softmax is not implemented yet - return the layer before Softmax
-        if op_type != 'Softmax':
-            last_layer_out = layer_out
+        last_layer_out = layer_out
     if save_file:
         with open(save_file, 'wb') as f:
             f.write(model_output.SerializeToString())
@@ -550,3 +549,23 @@ def broadcast_add(onnx_model: onnx.ModelProto, node: onnx.NodeProto) -> list[int
         return [weights_broadcasted_dim]
     else:
         return []
+
+def remove_trailing_softmax(onnx_model: onnx.ModelProto):
+    '''Modify the model, such that if the last node is Softmax, remove that last node to avoid unnecessary computation.
+    '''
+    output_name = onnx_model.graph.output[0].name
+    output_node = find_node_by_output(onnx_model.graph.node, output_name)
+    assert output_node
+
+    if output_node.op_type == 'Softmax':
+        new_output_name = output_node.input[0]
+        new_output_value_info = find_tensor_value_info(onnx_model, new_output_name)
+
+        # change the desired output node
+        del onnx_model.graph.output[:]
+        onnx_model.graph.output.append(new_output_value_info)
+
+        # remove the last node
+        orig_nodes = onnx_model.graph.node[:]
+        del onnx_model.graph.node[:]
+        onnx_model.graph.node.extend(orig_nodes[:-1])
