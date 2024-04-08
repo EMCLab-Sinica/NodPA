@@ -5,7 +5,6 @@ import math
 import os
 
 import onnx
-import numpy as np
 
 from utils import (
     DMA_Q15_LIMIT,
@@ -138,13 +137,13 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
     B = find_initializer(onnx_model, node.input[1])
     if B is not None:
         weight_dims = len(B.dims)
-        B_rows = int(np.prod(B.dims[:weight_dims-1]))
+        B_rows = B.dims[weight_dims-2]
         B_cols = B.dims[weight_dims-1]
     else:
         B = find_tensor_value_info(onnx_model, node.input[1])
         B_shape = B.type.tensor_type.shape
         weight_dims = len(B_shape.dim)
-        B_rows = int(np.prod([dim.dim_value for dim in B_shape.dim[:weight_dims-1]]))
+        B_rows = B_shape.dim[weight_dims-2].dim_value
         B_cols = B_shape.dim[weight_dims-1].dim_value
 
     B_rows += B_rows % 2
