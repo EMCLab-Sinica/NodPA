@@ -261,3 +261,6 @@ bool read_gpio_flag(GPIOFlag flag) {
     uint8_t idx = static_cast<uint8_t>(flag);
     return !GPIO_getInputPinValue(gpio_flags[idx].port, gpio_flags[idx].pin);
 }
+
+void save_model_output_data() {
+}

@@ -35,11 +35,13 @@ uint8_t *nvm;
 static uint32_t shutdown_counter = UINT32_MAX;
 static std::ofstream out_file;
 
+void save_model_output_data() {
 #ifdef USE_PROTOBUF
-static void save_model_output_data() {
-    model_output_data->SerializeToOstream(&out_file);
-}
+    if (out_file.is_open()) {
+        model_output_data->SerializeToOstream(&out_file);
+    }
 #endif
+}
 
 #ifdef __linux__
 static void* map_file(const char* path, size_t len, bool read_only) {
@@ -132,12 +134,6 @@ int main(int argc, char* argv[]) {
 
 #if ENABLE_COUNTERS
     print_all_counters();
-#endif
-
-#ifdef USE_PROTOBUF
-    if (out_file.is_open()) {
-        save_model_output_data();
-    }
 #endif
 
 #ifndef __linux__
