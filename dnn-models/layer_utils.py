@@ -125,8 +125,8 @@ def check_gemm_vm_usage(A, tile_channel, tile_a_rows, tile_b_cols, batch_size, t
     else:
         if total_vm_usage <= vm_size[target]:
             ret = True
-    logger.debug("tile_channel=%d, tile_b_cols=%d, tile_input_usage=%d, pState_usage=%d, total_vm_usage=%d => %s",
-                 tile_channel, tile_b_cols, tile_input_usage, pState_usage, total_vm_usage, "OK" if ret else "not OK")
+    logger.debug("tile_channel=%d, tile_a_rows=%d, tile_b_cols=%d, tile_input_usage=%d, pState_usage=%d, total_vm_usage=%d => %s",
+                 tile_channel, tile_a_rows, tile_b_cols, tile_input_usage, pState_usage, total_vm_usage, "OK" if ret else "not OK")
 
     return ret
 
@@ -134,6 +134,10 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
     logger.debug('Determine tile size for Gemm node %s', node.name)
 
     A = find_tensor_value_info(onnx_model, node.input[0])
+    A_shape = A.type.tensor_type.shape
+    input_dims = len(A_shape.dim)
+    A_rows = A_shape.dim[input_dims-2].dim_value
+
     B = find_initializer(onnx_model, node.input[1])
     if B is not None:
         weight_dims = len(B.dims)
@@ -174,6 +178,15 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
         if not check_gemm_vm_usage(A, gemm_flags.tile_channel, gemm_flags.tile_a_rows, new_tile_b_cols, batch_size, target):
             break
         gemm_flags.tile_b_cols = new_tile_b_cols
+
+    # Not using tile_a_row > 1 for now, as parallel computation + preservation will be more complicated
+    while False:
+        new_tile_a_rows = gemm_flags.tile_a_rows + 1
+        if new_tile_a_rows > A_rows:
+            break
+        if not check_gemm_vm_usage(A, gemm_flags.tile_channel, new_tile_a_rows, gemm_flags.tile_b_cols, batch_size, target):
+            break
+        gemm_flags.tile_a_rows = new_tile_a_rows
 
     gemm_flags.pState_len = get_gemm_pState_usage(gemm_flags.tile_channel, gemm_flags.tile_b_cols, target)
 
