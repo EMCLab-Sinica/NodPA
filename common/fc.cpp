@@ -272,6 +272,16 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                             weights_tmp[tile_channel_copy_idx] = get_q15_param(model, B, part_offset + (tile_channel_offset + tile_channel_copy_idx) * B_cols + (tile_b_col_offset + row));
                         }
                     }
+
+#if STATEFUL
+                    // When weights are also from an output feature map, states should be stripped
+                    if (B->parameter_info_idx >= N_INPUT) {
+                        for (uint16_t val_idx = BATCH_SIZE - 1; val_idx < tile_channels; val_idx += BATCH_SIZE) {
+                            strip_state(weights_tmp + val_idx);
+                        }
+                    }
+#endif
+
 #if JAPARI
                     my_interleave_q15(weights_tmp, extend_for_footprints(row), full_tile_b_cols, filter_ptr, tile_channels);
 #else
