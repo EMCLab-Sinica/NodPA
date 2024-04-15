@@ -77,7 +77,7 @@ configs: dict[str, ConfigType] = {
         'onnx_model': 'transformers_single',
         'onnx_model_single': 'transformers_single',
         'scale': 1,
-        'input_scale': 1,
+        'input_scale': 4,
         'num_slots': 10,
         'data_loader': load_attention_input_sequence,
         'n_all_samples': 1,
