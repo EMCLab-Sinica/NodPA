@@ -231,10 +231,24 @@
         }
     },
     {
+        "builder_name": "stateful-cnn-transformers_stateful_b1",
+        "command_env": {
+            "CONFIG": "--target msp430 --stateful --batch-size 1 transformers --all-samples",
+            "LOG_SUFFIX": "transformers_stateful_b1"
+        }
+    },
+    {
         "builder_name": "stateful-cnn-transformers_hawaii_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 transformers",
             "LOG_SUFFIX": "transformers_hawaii_b1_cmsis"
+        }
+    },
+    {
+        "builder_name": "stateful-cnn-transformers_stateful_b1_cmsis",
+        "command_env": {
+            "CONFIG": "--target msp432 --stateful --batch-size 1 transformers --all-samples",
+            "LOG_SUFFIX": "transformers_stateful_b1_cmsis"
         }
     }
 ]
