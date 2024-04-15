@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstdint>
+#include <cinttypes>
 #include "cnn_common.h"
 #include "counters.h"
 #include "data.h"
@@ -413,6 +414,18 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
     data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
     stop_cpu_counter();
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, state_query));
+    uint16_t next_output_turning_point;
+    int16_t offset;
+    uint8_t output_turning_point_idx;
+    SlotInfo *output_slot_info;
+    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
+                           data_offset, model, output);
+    stop_cpu_counter();
+#endif
+
 #endif
 
     uint16_t input_indices[4], output_indices[4];
@@ -435,10 +448,18 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
     }
 
     if (N_dims == 4) {
+        const uint16_t vector_size = output->dims[3];
+
         for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
             for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
                 for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
-                    for (; output_indices[3] < output->dims[3]; output_indices[3]++) {
+#if INDIRECT_RECOVERY
+                    start_cpu_counter(offsetof(Counters, state_query));
+                    fill_state_offsets(data_offset, vector_size, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+                    stop_cpu_counter();
+#endif
+
+                    for (; output_indices[3] < vector_size; output_indices[3]++) {
                         for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
                             input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
                         }
@@ -451,6 +472,19 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
                                                  output_indices[2] * output->dims[3] +
                                                  output_indices[3];
                         int16_t val = get_q15_param(model, X, input_offset);
+                        my_printf_debug("input_offset=%" PRIu32 " val=%d" NEWLINE, input_offset, val);
+
+#if STATEFUL
+                        strip_state(&val);
+#endif
+
+#if INDIRECT_RECOVERY
+                        start_cpu_counter(offsetof(Counters, embedding));
+                        val += state_offsets[output_indices[3]];
+                        stop_cpu_counter();
+#endif
+
+                        my_printf_debug("output_offset=%" PRIu32 " val=%d" NEWLINE, output_offset, val);
                         put_q15_param(output, output_offset, val, /*is_linear=*/false);
 #if HAWAII
                         write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
@@ -463,9 +497,17 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
             output_indices[1] = 0;
         }
     } else if (N_dims == 3) {
+        const uint16_t vector_size = output->dims[2];
+
         for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
             for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
-                for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
+#if INDIRECT_RECOVERY
+                start_cpu_counter(offsetof(Counters, state_query));
+                fill_state_offsets(data_offset, vector_size, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+                stop_cpu_counter();
+#endif
+
+                for (; output_indices[2] < vector_size; output_indices[2]++) {
                     for (uint8_t dim_idx = 0; dim_idx < 3; dim_idx++) {
                         input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
                     }
@@ -476,6 +518,19 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
                                              output_indices[1] * output->dims[2] +
                                              output_indices[2];
                     int16_t val = get_q15_param(model, X, input_offset);
+                    my_printf_debug("input_offset=%" PRIu32 " val=%d" NEWLINE, input_offset, val);
+
+#if STATEFUL
+                    strip_state(&val);
+#endif
+
+#if INDIRECT_RECOVERY
+                    start_cpu_counter(offsetof(Counters, embedding));
+                    val += state_offsets[output_indices[2]];
+                    stop_cpu_counter();
+#endif
+
+                    my_printf_debug("output_offset=%" PRIu32 " val=%d" NEWLINE, output_offset, val);
                     put_q15_param(output, output_offset, val, /*is_linear=*/false);
 #if HAWAII
                     write_hawaii_layer_footprint(model->layer_idx, /*n_jobs=*/1);
@@ -486,6 +541,12 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
             output_indices[1] = 0;
         }
     }
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, table_updates));
+    flip_state_bit(model, output);
+    stop_cpu_counter();
+#endif
 
     dump_params_debug(model, output, node->output_name);
 }

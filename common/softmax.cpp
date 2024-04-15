@@ -37,6 +37,18 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
     softmax_idx = data_offset % softmax_length;
     // needs to start from the row head
     data_offset -= softmax_idx;
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, state_query));
+    uint16_t next_output_turning_point;
+    int16_t offset;
+    uint8_t output_turning_point_idx;
+    SlotInfo *output_slot_info;
+    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
+                           data_offset, model, output);
+    stop_cpu_counter();
+#endif
+
 #endif
 
     for (; softmax_vector_idx < softmax_num_vectors; softmax_vector_idx++, data_offset += softmax_length) {
@@ -49,11 +61,30 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
         my_max_q15(lea_buffer, softmax_length, &max_val, &max_val_idx);
         my_offset_q15(lea_buffer, -(max_val), lea_buffer, softmax_length);
 
+#if INDIRECT_RECOVERY
+        start_cpu_counter(offsetof(Counters, state_query));
+        fill_state_offsets(data_offset, softmax_length, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+        stop_cpu_counter();
+#endif
+
         for (; softmax_idx < softmax_length; softmax_idx++) {
+#if STATEFUL
+            strip_state(lea_buffer + softmax_idx);
+#endif
+
             // exponentials
             float val = q15_to_float(lea_buffer[softmax_idx], ValueInfo(output));
             val = std::exp(val);
             int16_t exp_val = _Q15(val / output->scale.toFloat());
+
+#if INDIRECT_RECOVERY
+            // XXX: works with BATCH_SIZE=1 only
+            start_cpu_counter(offsetof(Counters, embedding));
+            exp_val += state_offsets[softmax_idx];
+            stop_cpu_counter();
+            my_printf_debug("After embedding states, val=%d" NEWLINE, exp_val);
+#endif
+
             put_q15_param(output, data_offset + softmax_idx, exp_val, /*is_linear=*/false);
 #if HAWAII
             write_hawaii_layer_footprint(model->layer_idx, 1);
@@ -61,6 +92,12 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
         }
         softmax_idx = 0;
     }
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, table_updates));
+    flip_state_bit(model, output);
+    stop_cpu_counter();
+#endif
 
     dump_params_debug(model, output, node->output_name);
 }
@@ -86,10 +123,31 @@ void handle_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterIn
 
     MY_ASSERT(data_offset % softmax_length == 0);
     softmax_vector_idx = data_offset / softmax_length;
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, state_query));
+    uint16_t next_output_turning_point;
+    int16_t offset;
+    uint8_t output_turning_point_idx;
+    SlotInfo *output_slot_info;
+    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
+                           data_offset, model, output);
+    stop_cpu_counter();
+#endif
+
 #endif
 
     for (; softmax_vector_idx < softmax_num_vectors; softmax_vector_idx++, data_offset += softmax_length) {
         my_memcpy_from_param(model, lea_buffer, X, data_offset, softmax_length * sizeof(int16_t));
+
+#if STATEFUL
+        my_printf_debug("Before strip states" NEWLINE);
+        dump_matrix_debug(lea_buffer, softmax_length, ValueInfo(output), false);
+
+        for (uint16_t val_idx = BATCH_SIZE - 1; val_idx < softmax_length; val_idx += BATCH_SIZE) {
+            strip_state(lea_buffer + val_idx);
+        }
+#endif
 
         int32_t softmax_sum = 0; // the denominator in softmax equation
         for (uint16_t softmax_idx = 0; softmax_idx < softmax_length; softmax_idx++) {
@@ -102,11 +160,28 @@ void handle_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterIn
         // normalize the row
         my_scale_q15(lea_buffer, softmax_sum_reciprocal, /*shift=*/0, lea_buffer, softmax_length);
 
+#if INDIRECT_RECOVERY
+        start_cpu_counter(offsetof(Counters, state_query));
+        fill_state_offsets(data_offset, softmax_length, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+        stop_cpu_counter();
+        start_cpu_counter(offsetof(Counters, embedding));
+        update_states(lea_buffer, softmax_length, true);
+        stop_cpu_counter();
+        my_printf_debug("After embedding states" NEWLINE);
+        dump_matrix_debug(lea_buffer, softmax_length, ValueInfo(output), true);
+#endif
+
         my_memcpy_to_param(output, data_offset, lea_buffer, softmax_length * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/false);
 #if HAWAII
         write_hawaii_layer_footprint(model->layer_idx, softmax_length);
 #endif
     }
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, table_updates));
+    flip_state_bit(model, output);
+    stop_cpu_counter();
+#endif
 
     dump_params_debug(model, output, node->output_name);
 }
