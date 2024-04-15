@@ -125,8 +125,9 @@ void handle_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterIn
     data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
     stop_cpu_counter();
 
-    MY_ASSERT(data_offset % softmax_length == 0);
     softmax_vector_idx = data_offset / softmax_length;
+    // needs to start from the row head
+    data_offset = softmax_vector_idx * softmax_length;
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, state_query));
