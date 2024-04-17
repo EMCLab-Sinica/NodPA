@@ -25,9 +25,14 @@ static_assert(OUTPUT_LEN <= OP_BUFFER_LEN, "invalid OP buffer size");
 static int16_t non_recorded_jobs = 0;
 void hawaii_record_footprints(Model* model, uint16_t vector_len) {
     non_recorded_jobs += vector_len;
+#if 0
     for (; non_recorded_jobs >= BATCH_SIZE; non_recorded_jobs -= BATCH_SIZE) {
         write_hawaii_layer_footprint(model->layer_idx, BATCH_SIZE);
     }
+#else
+    write_hawaii_layer_footprint(model->layer_idx, non_recorded_jobs / BATCH_SIZE * BATCH_SIZE);
+    non_recorded_jobs %= BATCH_SIZE;
+#endif
 }
 #endif
 
