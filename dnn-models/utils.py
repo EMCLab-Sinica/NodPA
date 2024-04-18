@@ -24,15 +24,17 @@ from torch.utils.data import Dataset, DataLoader
 
 from onnx_utils import (
     find_initializer,
-    get_model_opset_version,
 )
 
 logger = logging.getLogger('intermittent-cnn.utils')
 
-INPLACE_UPDATE_OPS = ['Reshape', 'Squeeze', 'Unsqueeze']
+INPLACE_UPDATE_OPS = ['Dropout', 'Reshape', 'Squeeze', 'Unsqueeze']
 OPS_WITH_MERGE = ['Conv', 'Gemm', 'MatMul', 'Softmax']
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
+
+# The opset version this repo supports. Models with older opset versions will be converted to this version.
+ONNX_OPSET_VERSION = 15
 
 audio_ops = ['DecodeWav', 'AudioSpectrogram', 'Mfcc']
 
@@ -188,7 +190,9 @@ def load_model_from_file(model_name, model_variant):
     if model_variant:
         model_name += f'-{model_variant}'
     # https://github.com/onnx/onnx/blob/master/docs/PythonAPIOverview.md
-    return onnx.load_model(THIS_DIR / f'{model_name}.onnx')
+    onnx_model = onnx.load_model(THIS_DIR / f'{model_name}.onnx')
+    onnx_model = onnx.version_converter.convert_version(onnx_model, target_version=ONNX_OPSET_VERSION)
+    return onnx_model
 
 def load_model(config, model_variant):
     onnx_model_batched = load_model_from_file(config['onnx_model'], model_variant)
@@ -207,7 +211,8 @@ def load_model(config, model_variant):
     # https://github.com/onnx/optimizer/blob/v0.2.6/onnxoptimizer/passes/fuse_matmul_add_bias_into_gemm.h#L60
     # https://zhuanlan.zhihu.com/p/41255090
     onnx_model_single = onnxoptimizer.optimize(onnx_model_single, [
-        'eliminate_nop_dropout',
+        # Not using eliminate_nop_dropout, as it is not designed to work with opset >= 12
+        # https://github.com/onnx/onnx/commit/8b3f7e2e7a0f2aba0e629e23d89f07c7fc0e6a5e#diff-43bf5856a3ddfa250094a7762f89327b0093049dd3c31df04e47f4801297f6d4
         'extract_constant_to_initializer',
         'fuse_add_bias_into_conv',
         'fuse_matmul_add_bias_into_gemm',
@@ -451,8 +456,6 @@ def split2slice(orig_model: onnx.ModelProto):
 
         # Slice: start, and, axis are inputs since opset 10
         # Split: split is an input since opset 13
-        assert get_model_opset_version(model) >= 13
-
         axis = get_attr(node, 'axis')
         if axis is None:
             axis = 0

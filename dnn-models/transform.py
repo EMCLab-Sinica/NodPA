@@ -45,7 +45,6 @@ from utils import (
 from onnx_utils import (
     compute_parameter_scales,
     find_tensor_annotation,
-    get_model_opset_version,
     get_sample_size,
     list_tensors_for_annotations,
 )
@@ -342,12 +341,9 @@ for idx, n in enumerate(nodes):
         # axes is an input fo Squeeze and Unsqueeze since opset 13
         # https://onnx.ai/onnx/operators/onnx__Squeeze.html
         # https://onnx.ai/onnx/operators/onnx__Unsqueeze.html
-        if get_model_opset_version(onnx_model) >= 13:
-            axes_initializer = find_initializer(onnx_model, n.input[1])
-            assert axes_initializer is not None
-            axes = list(onnx.numpy_helper.to_array(axes_initializer))
-        else:
-            axes = get_attr(n, 'axes')
+        axes_initializer = find_initializer(onnx_model, n.input[1])
+        assert axes_initializer is not None
+        axes = list(onnx.numpy_helper.to_array(axes_initializer))
         if n.op_type == 'Unsqueeze':
             assert axes is not None
         else:
@@ -379,12 +375,9 @@ for idx, n in enumerate(nodes):
         input_value_info = find_tensor_value_info(onnx_model, n.input[0])
         input_shape = input_value_info.type.tensor_type.shape
         if axis is None:
-            # The default value for 'axis' is changed in opset 13
+            # The default value for 'axis' is -1 since opset 13
             # https://onnx.ai/onnx/operators/onnx__Softmax.html
-            if get_model_opset_version(onnx_model) >= 13:
-                axis = - 1
-            else:
-                axis = 1
+            axis = - 1
         # Negative axis means counting back from the last dimension
         if axis < 0:
             axis += len(input_shape.dim)
@@ -568,7 +561,8 @@ for params in parameters:
             param_scale = 1
         else:
             assert False
-        data_len = np.prod(params.dims)
+        # params.dims is an empty list for scalars. In this case, np.prod returns a floating-point value.
+        data_len = int(np.prod(params.dims))
         parameters_slot.offset += data_len * param_size
         model_parameters_info.write(to_bytes(data_len * param_size, size=32))
         model_parameters_info.write(to_bytes(parameters_slot.slot_id, size=8))  # slot

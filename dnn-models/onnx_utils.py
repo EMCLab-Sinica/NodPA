@@ -67,12 +67,3 @@ def compute_parameter_scales(onnx_model: onnx.ModelProto):
             continue
         add_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=node.output[0],
                               data_type=onnx.TensorProto.DataType.FLOAT, vals=get_param_limit(onnx_model, node))
-
-def get_model_opset_version(onnx_model: onnx.ModelProto):
-    # https://onnx.ai/onnx/repo-docs/Versioning.html#operator-sets
-    for opset_import in onnx_model.opset_import:
-        domain = opset_import.domain
-        if not domain:
-            domain = 'ai.onnx'
-        if domain == 'ai.onnx':
-            return opset_import.version
