@@ -343,13 +343,13 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 #if INDIRECT_RECOVERY
                 start_cpu_counter(offsetof(Counters, state_query));
-                fill_state_offsets(output_offset, cur_tile_a_rows * tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+                fill_state_offsets(output_offset, tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
                 stop_cpu_counter();
 #endif
 
 #if STATEFUL
                 start_cpu_counter(offsetof(Counters, embedding));
-                update_states(filter_ptr, cur_tile_a_rows * tile_b_cols, false, true);
+                update_states(filter_ptr, tile_b_cols, false, true);
                 stop_cpu_counter();
 #endif
 
