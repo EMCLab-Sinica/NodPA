@@ -186,31 +186,47 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
     MY_ASSERT(A_cols == B_rows);
     check_buffer_address(pSrcA, A_rows * A_cols);
     check_buffer_address(pSrcB, B_rows * B_cols);
+
 #if !USE_ARM_CMSIS
     msp_matrix_mpy_q15_params matrix_mpy_params;
-    matrix_mpy_params.srcARows = A_rows;
-    matrix_mpy_params.srcACols = A_cols;
-    matrix_mpy_params.srcBRows = B_rows;
-    matrix_mpy_params.srcBCols = B_cols;
-    my_checkStatus(msp_matrix_mpy_q15(&matrix_mpy_params, pSrcA, pSrcB, pDst, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets));
+    for (uint16_t A_row_offset = 0; A_row_offset < A_rows; A_row_offset++) {
+        matrix_mpy_params.srcARows = 1;
+        matrix_mpy_params.srcACols = A_cols;
+        matrix_mpy_params.srcBRows = B_rows;
+        matrix_mpy_params.srcBCols = B_cols;
+        my_checkStatus(msp_matrix_mpy_q15(&matrix_mpy_params, pSrcA, pSrcB, pDst, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets));
+
+        // Moving to the next row of matrix A
+        pSrcA += A_cols;
+        pDst += B_cols;
+        offset_in_word += values_to_preserve;
+    }
 #else
     arm_matrix_instance_q15 A, B, C;
-    arm_mat_init_q15(&A, A_rows, A_cols, pSrcA);
-    arm_mat_init_q15(&B, B_rows, B_cols, pSrcB);
-    arm_mat_init_q15(&C, A_rows, B_cols, pDst);
     int16_t* pState = lea_buffer + LEA_BUFFER_SIZE - pState_len;
+    for (uint16_t A_row_offset = 0; A_row_offset < A_rows; A_row_offset++) {
+        arm_mat_init_q15(&A, 1, A_cols, pSrcA);
+        arm_mat_init_q15(&B, B_rows, B_cols, pSrcB);
+        arm_mat_init_q15(&C, 1, B_cols, pDst);
 #ifdef __MSP432__
-    arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets);
-    MY_ASSERT(status == ARM_MATH_SUCCESS);
+        arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets);
+        MY_ASSERT(status == ARM_MATH_SUCCESS);
 #else
-    arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, NULL, 0, 0, state_offsets);
-    MY_ASSERT(status == ARM_MATH_SUCCESS);
-    if (param) {
-        my_memcpy_to_param(param, offset_in_word, pDst, values_to_preserve * sizeof(int16_t), 0, true);
+        arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, NULL, 0, 0, state_offsets);
+        MY_ASSERT(status == ARM_MATH_SUCCESS);
+        if (param) {
+            my_memcpy_to_param(param, offset_in_word, pDst, values_to_preserve * sizeof(int16_t), 0, true);
+        }
+#endif // __MSP432__
+        (void)status; // Suppress -Wunused-variable when MY_DEBUG == MY_DEBUG_NO_ASSERT
+
+        // Moving to the next row of matrix A
+        pSrcA += A_cols;
+        pDst += B_cols;
+        offset_in_word += values_to_preserve;
     }
-#endif
-    (void)status; // Suppress -Wunused-variable when MY_DEBUG == MY_DEBUG_NO_ASSERT
-#endif
+#endif // !USE_ARM_CMSIS
+
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     add_counter(offsetof(Counters, macs), A_rows * B_cols * A_cols);
 #endif

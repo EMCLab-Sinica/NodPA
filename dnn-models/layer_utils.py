@@ -179,8 +179,7 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
             break
         gemm_flags.tile_b_cols = new_tile_b_cols
 
-    # Not using tile_a_row > 1 for now, as parallel computation + preservation will be more complicated
-    while False:
+    while True:
         new_tile_a_rows = gemm_flags.tile_a_rows + 1
         if new_tile_a_rows > A_rows:
             break

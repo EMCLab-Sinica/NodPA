@@ -140,8 +140,6 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
 
-    MY_ASSERT(node_flags->gemm.tile_a_rows == 1);
-
 #ifdef OpGemm
     // OpMatMul does not have a bias
     if (node->op_type == OpGemm) {
@@ -153,17 +151,17 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     // Use original tile sizes here, as tile sizes might be dynamically reconfigured, while
     // the reconfigured size is never larger than the original size
-    int16_t buffer_a_size = orig_node_flags->gemm.tile_a_rows * orig_node_flags->gemm.tile_channel + 2;
+    int16_t buffer_a_size = orig_node_flags->gemm.tile_a_rows * (orig_node_flags->gemm.tile_channel + 2);
 
     int16_t *buffer_a = lea_buffer,
             *buffer_temp = buffer_a + (buffer_a_size + 1) / 2 * 2; // guarantee even addresses, making check_buffer_address happy
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
     buffer_temp += 2;
-    int16_t* buffer_b = buffer_temp + extend_for_footprints(node_flags->gemm.tile_b_cols);
+    int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_a_rows * extend_for_footprints(node_flags->gemm.tile_b_cols);
     stop_cpu_counter();
 #else
-    int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_b_cols;
+    int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_a_rows * node_flags->gemm.tile_b_cols;
 #endif
     make_buffer_aligned(&buffer_b);
 
@@ -206,6 +204,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
         for (; part_idx < parts; part_idx++) {
           for (; tile_a_row_offset < A_rows; tile_a_row_offset += node_flags->gemm.tile_a_rows) {
+            int16_t cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
 #if JAPARI
             start_cpu_counter(offsetof(Counters, stripping));
             bool need_skipping = has_footprints(A);
@@ -219,8 +218,9 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             stop_cpu_counter();
             if (!need_skipping)
 #endif
-            {
-                my_memcpy_from_param(model, buffer_a, A, (part_idx * A_rows + tile_a_row_offset) * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
+            for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
+                my_memcpy_from_param(model, buffer_a + tile_a_row_offset_inner * extended_tile_channels,
+                                     A, (part_idx * A_rows + tile_a_row_offset + tile_a_row_offset_inner) * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
             }
 
 #if STATEFUL
@@ -232,11 +232,14 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
             stop_cpu_counter();
 #endif
-            buffer_a[tile_channels] = -0x8000;
-            buffer_a[tile_channels + 1] = 0;
+            for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
+                int16_t* bias_multiplier_ptr = buffer_a +tile_a_row_offset_inner * extended_tile_channels + tile_channels;
+                *bias_multiplier_ptr = -0x8000;
+                *(bias_multiplier_ptr + 1) = 0;
+            }
 
             my_printf_debug("Tile for A" NEWLINE);
-            dump_matrix_debug(buffer_a, node_flags->gemm.tile_a_rows, extended_tile_channels, ValueInfo(A, model));
+            dump_matrix_debug(buffer_a, cur_tile_a_rows, extended_tile_channels, ValueInfo(A, model));
 
             int16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
 
@@ -332,10 +335,10 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
                 my_printf_debug("Tile for B" NEWLINE);
                 dump_matrix_debug(buffer_b, extended_tile_channels, full_tile_b_cols, ValueInfo(B, model));
-                my_matrix_mpy_q15(node_flags->gemm.tile_a_rows, extended_tile_channels, extended_tile_channels, full_tile_b_cols, buffer_a, buffer_b, buffer_temp,
+                my_matrix_mpy_q15(cur_tile_a_rows, extended_tile_channels, extended_tile_channels, full_tile_b_cols, buffer_a, buffer_b, buffer_temp,
                                   output, output_offset, values_to_preserve, orig_node_flags->gemm.pState_len);
                 my_printf_debug("matrix_mpy_results" NEWLINE);
-                dump_matrix_debug(buffer_temp, node_flags->gemm.tile_a_rows, full_tile_b_cols, ValueInfo(output, model));
+                dump_matrix_debug(buffer_temp, cur_tile_a_rows, full_tile_b_cols, ValueInfo(output, model));
                 my_printf_debug(NEWLINE);
 
                 compare_vm_nvm(buffer_temp, model, output, output_offset, values_to_preserve);
