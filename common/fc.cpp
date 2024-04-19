@@ -128,7 +128,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
     }
 #endif
 
-    my_printf_debug("tile_channel=%d, tile_b_cols=%d" NEWLINE, node_flags->gemm.tile_channel, node_flags->gemm.tile_b_cols);
+    my_printf_debug("tile_a_rows=%d, tile_channel=%d, tile_b_cols=%d" NEWLINE, node_flags->gemm.tile_a_rows, node_flags->gemm.tile_channel, node_flags->gemm.tile_b_cols);
 
     uint8_t weight_dims = node_flags->gemm.weight_dims;
     output->params_len = output_len * upper_gauss(B->dims[weight_dims-2], node_flags->gemm.tile_channel) * sizeof(int16_t);
@@ -203,8 +203,30 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         const uint16_t extended_tile_channels = tile_channels + 2;
 
         for (; part_idx < parts; part_idx++) {
-          for (; tile_a_row_offset < A_rows; tile_a_row_offset += node_flags->gemm.tile_a_rows) {
-            int16_t cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
+          int16_t cur_tile_a_rows; // Will be initialized later. This is declared outside the loop, so that
+                                   // tile_a_row_offset can be correctly incremented for arbitrary cur_tile_a_rows.
+          for (; tile_a_row_offset < A_rows; tile_a_row_offset += cur_tile_a_rows) {
+            uint16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
+            cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
+
+#if INDIRECT_RECOVERY
+            if (tile_b_col_offset % node_flags->gemm.tile_b_cols != 0) {
+                // Force tile_a_rows=1 when resuming from the middle of an output matrix, as with the current loop order,
+                // processing of B starts from tile_b_col_offset, and thus preceeding columns after the first row are skipped.
+                cur_tile_a_rows = 1;
+            } else {
+                // Resulting states cannot be changed in the middle of an output matrix (ex: state 1 for the first two rows
+                // and the first half of the third row, and state -1 for remaining), as states are outer products of specific
+                // values in input and weight tiles. In these cases, cut tile_a_rows to before the state change.
+                // MAX_VAL is needed for the A row after the state change. At that time, next_output_turning_point is not
+                // updated for the current tile yet, and (next_output_turning_point - output_offset) / output_cols) may be 0 or negative.
+                cur_tile_a_rows = MAX_VAL(
+                    1,
+                    MIN_VAL(cur_tile_a_rows, (next_output_turning_point - output_offset) / output_cols)
+                );
+            }
+#endif
+
 #if JAPARI
             start_cpu_counter(offsetof(Counters, stripping));
             bool need_skipping = has_footprints(A);
@@ -226,7 +248,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #if STATEFUL
             start_cpu_counter(offsetof(Counters, stripping));
             if (A->slot != SLOT_TEST_SET) {
-                for (int16_t *input_ptr = buffer_a + BATCH_SIZE - 1; input_ptr < buffer_a + tile_channels; input_ptr += BATCH_SIZE) {
+                for (int16_t *input_ptr = buffer_a + BATCH_SIZE - 1; input_ptr < buffer_a + cur_tile_a_rows * extended_tile_channels; input_ptr += BATCH_SIZE) {
                     strip_state(input_ptr);
                 }
             }
@@ -240,8 +262,6 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
             my_printf_debug("Tile for A" NEWLINE);
             dump_matrix_debug(buffer_a, cur_tile_a_rows, extended_tile_channels, ValueInfo(A, model));
-
-            int16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
 
             for (; tile_b_col_offset < B_cols; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
                 int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B_cols - tile_b_col_offset);
@@ -323,13 +343,13 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 #if INDIRECT_RECOVERY
                 start_cpu_counter(offsetof(Counters, state_query));
-                fill_state_offsets(output_offset, tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+                fill_state_offsets(output_offset, cur_tile_a_rows * tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
                 stop_cpu_counter();
 #endif
 
 #if STATEFUL
                 start_cpu_counter(offsetof(Counters, embedding));
-                update_states(filter_ptr, tile_b_cols, false, true);
+                update_states(filter_ptr, cur_tile_a_rows * tile_b_cols, false, true);
                 stop_cpu_counter();
 #endif
 

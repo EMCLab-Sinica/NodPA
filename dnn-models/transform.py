@@ -354,7 +354,7 @@ for idx, n in enumerate(nodes):
     if n.op_type in ('Gemm', 'MatMul'):
         node_flags[idx].gemm.input_dims = get_parameter_dims(onnx_model, n.input[0])
         node_flags[idx].gemm.weight_dims = get_parameter_dims(onnx_model, n.input[1])
-        print(f'{n.name}: input_dims={node_flags[idx].gemm.input_dims} weight_dims={node_flags[idx].gemm.weight_dims}')
+        logger.debug('%s: input_dims=%d weight_dims=%d', n.name, node_flags[idx].gemm.input_dims, node_flags[idx].gemm.weight_dims)
     if n.op_type in ('GemmMerge', 'MatMulMerge'):
         node_flags[idx].gemmmerge.input_dims = get_parameter_dims(onnx_model, n.input[0])
         node_flags[idx].gemmmerge.tile_length = config['gemm_tile_length']
@@ -391,7 +391,7 @@ for idx, n in enumerate(nodes):
         weights_broadcasted_dims = broadcast_add(onnx_model, n)
         weights_broadcasted_dim = weights_broadcasted_dims[0] if weights_broadcasted_dims else -1
         node_flags[idx].add.weights_broadcasted_dim = weights_broadcasted_dim
-        print(f'{n.name}: weights_broadcasted_dim={weights_broadcasted_dim}')
+        logger.debug('%s: weights_broadcasted_dim=%d', n.name, weights_broadcasted_dim)
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
