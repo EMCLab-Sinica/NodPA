@@ -566,6 +566,8 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
     data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
 
+    fix_first_unfinished_value_offset(model, &data_offset);
+
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, state_query));
     uint16_t next_output_turning_point;
