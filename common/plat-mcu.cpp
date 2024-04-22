@@ -101,7 +101,7 @@ struct GPIOPin {
     uint16_t pin;
 };
 
-static GPIOPin indicators[] = {
+static const GPIOPin indicators[] = {
 #ifdef __MSP430__
     { GPIO_PORT_P4, GPIO_PIN7 }, // used in notify_layer_finished()
     { GPIO_PORT_P1, GPIO_PIN5 }, // TODO: check if it works
@@ -111,7 +111,7 @@ static GPIOPin indicators[] = {
 #endif
 };
 
-static GPIOPin gpio_flags[] = {
+static const GPIOPin gpio_flags[] = {
 #ifdef __MSP430__
     // TODO: check if these work on MSP430
     { GPIO_PORT_P3, GPIO_PIN7 },
