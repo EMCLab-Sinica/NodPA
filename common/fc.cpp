@@ -204,6 +204,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         uint16_t tile_channel_offset = UINT16_MAX;
         uint16_t extended_tile_channels = UINT16_MAX;
         uint16_t full_tile_b_cols = UINT16_MAX;
+        bool cache_valid = false;
     } weights_cache;
 
     for (; tile_channel_offset < B_rows; tile_channel_offset += node_flags->gemm.tile_channel, tile_channel_idx++) {
@@ -218,6 +219,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
 
 #if INDIRECT_RECOVERY
+                int16_t orig_cur_tile_a_rows = cur_tile_a_rows;
                 if (tile_b_col_offset % node_flags->gemm.tile_b_cols != 0) {
                     // Force tile_a_rows=1 when resuming from the middle of an output matrix, as with the current loop order,
                     // processing of B starts from tile_b_col_offset, and thus preceeding columns after the first row are skipped.
@@ -232,6 +234,9 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                         1,
                         MIN_VAL(cur_tile_a_rows, (next_output_turning_point - output_offset) / output_cols)
                     );
+                }
+                if (cur_tile_a_rows != orig_cur_tile_a_rows) {
+                    weights_cache.cache_valid = false;
                 }
 #endif
 
@@ -288,14 +293,17 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                         part_offset += part_idx * B_rows * B_cols;
                     }
 
+                    my_printf_debug("Checking whether to load weights or not... "
+                                    "part_offset=%d, tile_b_col_offset=%d, tile_channel_offset=%d, extended_tile_channels=%d, full_tile_b_cols=%d" NEWLINE,
+                                    part_offset, tile_b_col_offset, tile_channel_offset, extended_tile_channels, full_tile_b_cols);
                     if (
-                        weights_cache.part_offset == part_offset &&
+                        weights_cache.cache_valid && weights_cache.part_offset == part_offset &&
                         weights_cache.tile_b_col_offset == tile_b_col_offset && weights_cache.tile_channel_offset == tile_channel_offset &&
                         weights_cache.extended_tile_channels == extended_tile_channels && weights_cache.full_tile_b_cols == full_tile_b_cols
                     ) {
-                        my_printf_debug("Using cached weights: part_offset=%d, tile_b_col_offset=%d, tile_channel_offset=%d, extended_tile_channels=%d, full_tile_b_cols=%d" NEWLINE,
-                                        part_offset, tile_b_col_offset, tile_channel_offset, extended_tile_channels, full_tile_b_cols);
+                        my_printf_debug("Cached!" NEWLINE);
                     } else {
+                        my_printf_debug("Not cached!" NEWLINE);
 
                         int16_t *filter_ptr = buffer_b;
                         my_fill_q15(0, filter_ptr, extended_tile_channels * full_tile_b_cols);
@@ -360,6 +368,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 #if INDIRECT_RECOVERY
                         start_cpu_counter(offsetof(Counters, state_query));
+                        my_printf_debug("Fill states for output_offset=%d" NEWLINE, output_offset);
                         fill_state_offsets(output_offset, tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
                         stop_cpu_counter();
 #endif
@@ -369,6 +378,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                         update_states(filter_ptr, tile_b_cols, false, true);
                         stop_cpu_counter();
 #endif
+                        weights_cache.cache_valid = true;
                         weights_cache.part_offset = part_offset;
                         weights_cache.tile_b_col_offset = tile_b_col_offset;
                         weights_cache.tile_channel_offset = tile_channel_offset;
