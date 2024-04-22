@@ -211,191 +211,191 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         const uint16_t extended_tile_channels = tile_channels + 2;
 
         for (; part_idx < parts; part_idx++) {
-          int16_t cur_tile_a_rows; // Will be initialized later. This is declared outside the loop, so that
+            int16_t cur_tile_a_rows; // Will be initialized later. This is declared outside the loop, so that
                                    // tile_a_row_offset can be correctly incremented for arbitrary cur_tile_a_rows.
-          for (; tile_a_row_offset < A_rows; tile_a_row_offset += cur_tile_a_rows) {
-            uint16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
-            cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
+            for (; tile_a_row_offset < A_rows; tile_a_row_offset += cur_tile_a_rows) {
+                uint16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
+                cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
 
 #if INDIRECT_RECOVERY
-            if (tile_b_col_offset % node_flags->gemm.tile_b_cols != 0) {
-                // Force tile_a_rows=1 when resuming from the middle of an output matrix, as with the current loop order,
-                // processing of B starts from tile_b_col_offset, and thus preceeding columns after the first row are skipped.
-                cur_tile_a_rows = 1;
-            } else {
-                // Resulting states cannot be changed in the middle of an output matrix (ex: state 1 for the first two rows
-                // and the first half of the third row, and state -1 for remaining), as states are outer products of specific
-                // values in input and weight tiles. In these cases, cut tile_a_rows to before the state change.
-                // MAX_VAL is needed for the A row after the state change. At that time, next_output_turning_point is not
-                // updated for the current tile yet, and (next_output_turning_point - output_offset) / output_cols) may be 0 or negative.
-                cur_tile_a_rows = MAX_VAL(
-                    1,
-                    MIN_VAL(cur_tile_a_rows, (next_output_turning_point - output_offset) / output_cols)
-                );
-            }
-#endif
-
-#if JAPARI
-            start_cpu_counter(offsetof(Counters, stripping));
-            bool need_skipping = has_footprints(A);
-            if (need_skipping) {
-                // somehow loading many pieces is faster than loading a chunk and moving values around to remove footprints, even with external FRAM
-                uint16_t input_offset = extend_for_footprints(tile_channel_offset);
-                for (uint16_t idx = 0, output_idx = 0; output_idx < tile_channels; idx += BATCH_SIZE + 1, output_idx += BATCH_SIZE) {
-                    my_memcpy_from_param(model, buffer_a + output_idx, A, input_offset + idx, BATCH_SIZE * sizeof(uint16_t));
-                }
-            }
-            stop_cpu_counter();
-            if (!need_skipping)
-#endif
-            for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
-                my_memcpy_from_param(model, buffer_a + tile_a_row_offset_inner * extended_tile_channels,
-                                     A, (part_idx * A_rows + tile_a_row_offset + tile_a_row_offset_inner) * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
-            }
-
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, stripping));
-            if (A->slot != SLOT_TEST_SET) {
-                for (int16_t *input_ptr = buffer_a + BATCH_SIZE - 1; input_ptr < buffer_a + cur_tile_a_rows * extended_tile_channels; input_ptr += BATCH_SIZE) {
-                    strip_state(input_ptr);
-                }
-            }
-            stop_cpu_counter();
-#endif
-            for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
-                int16_t* bias_multiplier_ptr = buffer_a +tile_a_row_offset_inner * extended_tile_channels + tile_channels;
-                *bias_multiplier_ptr = -0x8000;
-                *(bias_multiplier_ptr + 1) = 0;
-            }
-
-            my_printf_debug("Tile for A" NEWLINE);
-            dump_matrix_debug(buffer_a, cur_tile_a_rows, extended_tile_channels, ValueInfo(A, model));
-
-            for (; tile_b_col_offset < B_cols; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
-                int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B_cols - tile_b_col_offset);
-                int16_t values_to_preserve = tile_b_cols,
-                        full_tile_b_cols;
-#if JAPARI
-                start_cpu_counter(offsetof(Counters, embedding));
-                values_to_preserve = extend_for_footprints(tile_b_cols);
-                full_tile_b_cols = (values_to_preserve + 1) / 2 * 2;
-                stop_cpu_counter();
-#else
-                full_tile_b_cols = (tile_b_cols + 1) / 2 * 2;
-#endif
-                uint32_t part_offset = 0;
-                if (!weights_broadcasted) {
-                    part_offset += part_idx * B_rows * B_cols;
-                }
-
-                if (
-                    weights_cache.part_offset == part_offset &&
-                    weights_cache.tile_b_col_offset == tile_b_col_offset && weights_cache.tile_channel_offset == tile_channel_offset &&
-                    weights_cache.extended_tile_channels == extended_tile_channels && weights_cache.full_tile_b_cols == full_tile_b_cols
-                ) {
-                    my_printf_debug("Using cached weights: part_offset=%d, tile_b_col_offset=%d, tile_channel_offset=%d, extended_tile_channels=%d, full_tile_b_cols=%d" NEWLINE,
-                                    part_offset, tile_b_col_offset, tile_channel_offset, extended_tile_channels, full_tile_b_cols);
+                if (tile_b_col_offset % node_flags->gemm.tile_b_cols != 0) {
+                    // Force tile_a_rows=1 when resuming from the middle of an output matrix, as with the current loop order,
+                    // processing of B starts from tile_b_col_offset, and thus preceeding columns after the first row are skipped.
+                    cur_tile_a_rows = 1;
                 } else {
-
-                int16_t *filter_ptr = buffer_b;
-                my_fill_q15(0, filter_ptr, extended_tile_channels * full_tile_b_cols);
-                for (uint16_t row = 0; row < tile_b_cols; row++) {
-                    MY_ASSERT(tile_channels <= OP_BUFFER_LEN);
-
-                    if (B->param_flags & TRANSPOSED) {
-                        my_memcpy_from_param(model, weights_tmp,
-                              B, part_offset + (tile_b_col_offset + row) * B_rows + tile_channel_offset,
-                              tile_channels * sizeof(uint16_t));
-                    } else {
-                        // XXX: copy and interleave might be merged
-                        for (uint16_t tile_channel_copy_idx = 0; tile_channel_copy_idx < tile_channels; tile_channel_copy_idx++) {
-                            weights_tmp[tile_channel_copy_idx] = get_q15_param(model, B, part_offset + (tile_channel_offset + tile_channel_copy_idx) * B_cols + (tile_b_col_offset + row));
-                        }
-                    }
-
-#if STATEFUL
-                    // When weights are also from an output feature map, states should be stripped
-                    if (B->parameter_info_idx >= N_INPUT) {
-                        for (uint16_t val_idx = BATCH_SIZE - 1; val_idx < tile_channels; val_idx += BATCH_SIZE) {
-                            strip_state(weights_tmp + val_idx);
-                        }
-                    }
-#endif
-
-#if JAPARI
-                    my_interleave_q15(weights_tmp, extend_for_footprints(row), full_tile_b_cols, filter_ptr, tile_channels);
-#else
-                    my_interleave_q15(weights_tmp, row, full_tile_b_cols, filter_ptr, tile_channels);
-#endif
+                    // Resulting states cannot be changed in the middle of an output matrix (ex: state 1 for the first two rows
+                    // and the first half of the third row, and state -1 for remaining), as states are outer products of specific
+                    // values in input and weight tiles. In these cases, cut tile_a_rows to before the state change.
+                    // MAX_VAL is needed for the A row after the state change. At that time, next_output_turning_point is not
+                    // updated for the current tile yet, and (next_output_turning_point - output_offset) / output_cols) may be 0 or negative.
+                    cur_tile_a_rows = MAX_VAL(
+                        1,
+                        MIN_VAL(cur_tile_a_rows, (next_output_turning_point - output_offset) / output_cols)
+                    );
                 }
-                filter_ptr += tile_channels * full_tile_b_cols;
+#endif
+
 #if JAPARI
-                start_cpu_counter(offsetof(Counters, embedding));
-                my_fill_q15(0, filter_ptr, 2 * full_tile_b_cols);
-                uint8_t processed_biases = 0, bias_offset = 0;
-                for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
-                    if (processed_biases == BATCH_SIZE) {
-                        processed_biases = 0;
-                        filter_ptr[idx] = param_state_bit(model, output, output_offset + idx);
-                    } else {
-                        if (tile_channel_idx == 0) {
-                            filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, bias_offset + tile_b_col_offset)) / A->scale.toFloat();
-                        }
-                        bias_offset++;
-                        processed_biases++;
+                start_cpu_counter(offsetof(Counters, stripping));
+                bool need_skipping = has_footprints(A);
+                if (need_skipping) {
+                    // somehow loading many pieces is faster than loading a chunk and moving values around to remove footprints, even with external FRAM
+                    uint16_t input_offset = extend_for_footprints(tile_channel_offset);
+                    for (uint16_t idx = 0, output_idx = 0; output_idx < tile_channels; idx += BATCH_SIZE + 1, output_idx += BATCH_SIZE) {
+                        my_memcpy_from_param(model, buffer_a + output_idx, A, input_offset + idx, BATCH_SIZE * sizeof(uint16_t));
                     }
                 }
                 stop_cpu_counter();
-#else
-                if (tile_channel_idx == 0) {
-                    for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
-                        if (matC) {
-                            filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, idx + tile_b_col_offset)) / A->scale.toFloat();
-                        } else {
-                            filter_ptr[idx] = 0;
-                        }
+                if (!need_skipping)
+#endif
+                for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
+                    my_memcpy_from_param(model, buffer_a + tile_a_row_offset_inner * extended_tile_channels,
+                                         A, (part_idx * A_rows + tile_a_row_offset + tile_a_row_offset_inner) * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
+                }
+
+#if STATEFUL
+                start_cpu_counter(offsetof(Counters, stripping));
+                if (A->slot != SLOT_TEST_SET) {
+                    for (int16_t *input_ptr = buffer_a + BATCH_SIZE - 1; input_ptr < buffer_a + cur_tile_a_rows * extended_tile_channels; input_ptr += BATCH_SIZE) {
+                        strip_state(input_ptr);
                     }
                 }
+                stop_cpu_counter();
+#endif
+                for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
+                    int16_t* bias_multiplier_ptr = buffer_a +tile_a_row_offset_inner * extended_tile_channels + tile_channels;
+                    *bias_multiplier_ptr = -0x8000;
+                    *(bias_multiplier_ptr + 1) = 0;
+                }
+
+                my_printf_debug("Tile for A" NEWLINE);
+                dump_matrix_debug(buffer_a, cur_tile_a_rows, extended_tile_channels, ValueInfo(A, model));
+
+                for (; tile_b_col_offset < B_cols; tile_b_col_offset += node_flags->gemm.tile_b_cols) {
+                    int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B_cols - tile_b_col_offset);
+                    int16_t values_to_preserve = tile_b_cols,
+                            full_tile_b_cols;
+#if JAPARI
+                    start_cpu_counter(offsetof(Counters, embedding));
+                    values_to_preserve = extend_for_footprints(tile_b_cols);
+                    full_tile_b_cols = (values_to_preserve + 1) / 2 * 2;
+                    stop_cpu_counter();
+#else
+                    full_tile_b_cols = (tile_b_cols + 1) / 2 * 2;
+#endif
+                    uint32_t part_offset = 0;
+                    if (!weights_broadcasted) {
+                        part_offset += part_idx * B_rows * B_cols;
+                    }
+
+                    if (
+                        weights_cache.part_offset == part_offset &&
+                        weights_cache.tile_b_col_offset == tile_b_col_offset && weights_cache.tile_channel_offset == tile_channel_offset &&
+                        weights_cache.extended_tile_channels == extended_tile_channels && weights_cache.full_tile_b_cols == full_tile_b_cols
+                    ) {
+                        my_printf_debug("Using cached weights: part_offset=%d, tile_b_col_offset=%d, tile_channel_offset=%d, extended_tile_channels=%d, full_tile_b_cols=%d" NEWLINE,
+                                        part_offset, tile_b_col_offset, tile_channel_offset, extended_tile_channels, full_tile_b_cols);
+                    } else {
+
+                        int16_t *filter_ptr = buffer_b;
+                        my_fill_q15(0, filter_ptr, extended_tile_channels * full_tile_b_cols);
+                        for (uint16_t row = 0; row < tile_b_cols; row++) {
+                            MY_ASSERT(tile_channels <= OP_BUFFER_LEN);
+
+                            if (B->param_flags & TRANSPOSED) {
+                                my_memcpy_from_param(model, weights_tmp,
+                                      B, part_offset + (tile_b_col_offset + row) * B_rows + tile_channel_offset,
+                                      tile_channels * sizeof(uint16_t));
+                            } else {
+                                // XXX: copy and interleave might be merged
+                                for (uint16_t tile_channel_copy_idx = 0; tile_channel_copy_idx < tile_channels; tile_channel_copy_idx++) {
+                                    weights_tmp[tile_channel_copy_idx] = get_q15_param(model, B, part_offset + (tile_channel_offset + tile_channel_copy_idx) * B_cols + (tile_b_col_offset + row));
+                                }
+                            }
+
+#if STATEFUL
+                            // When weights are also from an output feature map, states should be stripped
+                            if (B->parameter_info_idx >= N_INPUT) {
+                                for (uint16_t val_idx = BATCH_SIZE - 1; val_idx < tile_channels; val_idx += BATCH_SIZE) {
+                                    strip_state(weights_tmp + val_idx);
+                                }
+                            }
+#endif
+
+#if JAPARI
+                            my_interleave_q15(weights_tmp, extend_for_footprints(row), full_tile_b_cols, filter_ptr, tile_channels);
+#else
+                            my_interleave_q15(weights_tmp, row, full_tile_b_cols, filter_ptr, tile_channels);
+#endif
+                        }
+                        filter_ptr += tile_channels * full_tile_b_cols;
+#if JAPARI
+                        start_cpu_counter(offsetof(Counters, embedding));
+                        my_fill_q15(0, filter_ptr, 2 * full_tile_b_cols);
+                        uint8_t processed_biases = 0, bias_offset = 0;
+                        for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
+                            if (processed_biases == BATCH_SIZE) {
+                                processed_biases = 0;
+                                filter_ptr[idx] = param_state_bit(model, output, output_offset + idx);
+                            } else {
+                                if (tile_channel_idx == 0) {
+                                    filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, bias_offset + tile_b_col_offset)) / A->scale.toFloat();
+                                }
+                                bias_offset++;
+                                processed_biases++;
+                            }
+                        }
+                        stop_cpu_counter();
+#else
+                        if (tile_channel_idx == 0) {
+                            for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
+                                if (matC) {
+                                    filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, idx + tile_b_col_offset)) / A->scale.toFloat();
+                                } else {
+                                    filter_ptr[idx] = 0;
+                                }
+                            }
+                        }
 #endif
 
 #if INDIRECT_RECOVERY
-                start_cpu_counter(offsetof(Counters, state_query));
-                fill_state_offsets(output_offset, tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-                stop_cpu_counter();
+                        start_cpu_counter(offsetof(Counters, state_query));
+                        fill_state_offsets(output_offset, tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+                        stop_cpu_counter();
 #endif
 
 #if STATEFUL
-                start_cpu_counter(offsetof(Counters, embedding));
-                update_states(filter_ptr, tile_b_cols, false, true);
-                stop_cpu_counter();
+                        start_cpu_counter(offsetof(Counters, embedding));
+                        update_states(filter_ptr, tile_b_cols, false, true);
+                        stop_cpu_counter();
 #endif
-                weights_cache.part_offset = part_offset;
-                weights_cache.tile_b_col_offset = tile_b_col_offset;
-                weights_cache.tile_channel_offset = tile_channel_offset;
-                weights_cache.extended_tile_channels = extended_tile_channels;
-                weights_cache.full_tile_b_cols = full_tile_b_cols;
+                        weights_cache.part_offset = part_offset;
+                        weights_cache.tile_b_col_offset = tile_b_col_offset;
+                        weights_cache.tile_channel_offset = tile_channel_offset;
+                        weights_cache.extended_tile_channels = extended_tile_channels;
+                        weights_cache.full_tile_b_cols = full_tile_b_cols;
 
-                }
+                    }
 
-                my_printf_debug("Tile for B" NEWLINE);
-                dump_matrix_debug(buffer_b, extended_tile_channels, full_tile_b_cols, ValueInfo(B, model));
-                my_matrix_mpy_q15(cur_tile_a_rows, extended_tile_channels, extended_tile_channels, full_tile_b_cols, buffer_a, buffer_b, buffer_temp,
-                                  output, output_offset, values_to_preserve, orig_node_flags->gemm.pState_len);
-                my_printf_debug("matrix_mpy_results" NEWLINE);
-                dump_matrix_debug(buffer_temp, cur_tile_a_rows, full_tile_b_cols, ValueInfo(output, model));
-                my_printf_debug(NEWLINE);
+                    my_printf_debug("Tile for B" NEWLINE);
+                    dump_matrix_debug(buffer_b, extended_tile_channels, full_tile_b_cols, ValueInfo(B, model));
+                    my_matrix_mpy_q15(cur_tile_a_rows, extended_tile_channels, extended_tile_channels, full_tile_b_cols, buffer_a, buffer_b, buffer_temp,
+                                      output, output_offset, values_to_preserve, orig_node_flags->gemm.pState_len);
+                    my_printf_debug("matrix_mpy_results" NEWLINE);
+                    dump_matrix_debug(buffer_temp, cur_tile_a_rows, full_tile_b_cols, ValueInfo(output, model));
+                    my_printf_debug(NEWLINE);
 
-                compare_vm_nvm(buffer_temp, model, output, output_offset, values_to_preserve);
+                    compare_vm_nvm(buffer_temp, model, output, output_offset, values_to_preserve);
 
-                my_printf_debug("output_offset=%d" NEWLINE, output_offset);
+                    my_printf_debug("output_offset=%d" NEWLINE, output_offset);
 #if HAWAII
-                hawaii_record_footprints(model, values_to_preserve);
+                    hawaii_record_footprints(model, values_to_preserve);
 #endif
-                output_offset += values_to_preserve;
+                    output_offset += values_to_preserve;
+                }
+                tile_b_col_offset = extended_tile_b_col_offset = 0;
             }
-            tile_b_col_offset = extended_tile_b_col_offset = 0;
-          }
-          tile_a_row_offset = 0;
+            tile_a_row_offset = 0;
         }
         part_idx = 0;
     }
