@@ -198,6 +198,14 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         output_len *= output->dims[dim_idx];
     }
 
+    struct {
+        uint16_t part_offset = UINT16_MAX;
+        uint16_t tile_b_col_offset = UINT16_MAX;
+        uint16_t tile_channel_offset = UINT16_MAX;
+        uint16_t extended_tile_channels = UINT16_MAX;
+        uint16_t full_tile_b_cols = UINT16_MAX;
+    } weights_cache;
+
     for (; tile_channel_offset < B_rows; tile_channel_offset += node_flags->gemm.tile_channel, tile_channel_idx++) {
         const uint16_t tile_channels = MIN_VAL(node_flags->gemm.tile_channel, B_rows - tile_channel_offset);
         const uint16_t extended_tile_channels = tile_channels + 2;
@@ -275,15 +283,24 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #else
                 full_tile_b_cols = (tile_b_cols + 1) / 2 * 2;
 #endif
+                uint32_t part_offset = 0;
+                if (!weights_broadcasted) {
+                    part_offset += part_idx * B_rows * B_cols;
+                }
+
+                if (
+                    weights_cache.part_offset == part_offset &&
+                    weights_cache.tile_b_col_offset == tile_b_col_offset && weights_cache.tile_channel_offset == tile_channel_offset &&
+                    weights_cache.extended_tile_channels == extended_tile_channels && weights_cache.full_tile_b_cols == full_tile_b_cols
+                ) {
+                    my_printf_debug("Using cached weights: part_offset=%d, tile_b_col_offset=%d, tile_channel_offset=%d, extended_tile_channels=%d, full_tile_b_cols=%d" NEWLINE,
+                                    part_offset, tile_b_col_offset, tile_channel_offset, extended_tile_channels, full_tile_b_cols);
+                } else {
+
                 int16_t *filter_ptr = buffer_b;
                 my_fill_q15(0, filter_ptr, extended_tile_channels * full_tile_b_cols);
                 for (uint16_t row = 0; row < tile_b_cols; row++) {
                     MY_ASSERT(tile_channels <= OP_BUFFER_LEN);
-
-                    uint32_t part_offset = 0;
-                    if (!weights_broadcasted) {
-                        part_offset += part_idx * B_rows * B_cols;
-                    }
 
                     if (B->param_flags & TRANSPOSED) {
                         my_memcpy_from_param(model, weights_tmp,
@@ -352,6 +369,13 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 update_states(filter_ptr, tile_b_cols, false, true);
                 stop_cpu_counter();
 #endif
+                weights_cache.part_offset = part_offset;
+                weights_cache.tile_b_col_offset = tile_b_col_offset;
+                weights_cache.tile_channel_offset = tile_channel_offset;
+                weights_cache.extended_tile_channels = extended_tile_channels;
+                weights_cache.full_tile_b_cols = full_tile_b_cols;
+
+                }
 
                 my_printf_debug("Tile for B" NEWLINE);
                 dump_matrix_debug(buffer_b, extended_tile_channels, full_tile_b_cols, ValueInfo(B, model));
