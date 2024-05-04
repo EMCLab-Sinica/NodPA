@@ -420,7 +420,7 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
+void alloc_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     output->slot = get_next_slot(model, input[0]);
     int16_t output_len = 1;
     for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
@@ -432,18 +432,18 @@ void alloc_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *
     output->params_len = output_len * sizeof(int16_t);
 }
 
-void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+void handle_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *X = input[0];
 
     my_printf_debug("GemmMerge!" NEWLINE);
 
-    uint8_t output_dims = node_flags->gemmmerge.input_dims;
+    uint8_t output_dims = node_flags->gemm_stage2.input_dims;
     int16_t output_len = 1;
     for (uint8_t dim_idx = 0; dim_idx < output_dims; dim_idx++) {
         output_len *= X->dims[dim_idx];
     }
 
-    int16_t output_tile_size = node_flags->gemmmerge.tile_length;
+    int16_t output_tile_size = node_flags->gemm_stage2.tile_length;
     if (!output_tile_size) {
         // buffer_temp and buffer_gemm have the same size, and they occupy LEA buffer, so divide by 2
         output_tile_size = MIN_VAL(LIMIT_DMA_SIZE(output_len), LEA_BUFFER_SIZE / 2);
@@ -510,22 +510,22 @@ void handle_gemmmerge(Model *model, const ParameterInfo *input[], ParameterInfo 
     stop_cpu_counter();
 #endif
 
-    my_printf_debug("handle_gemmmerge output" NEWLINE);
+    my_printf_debug("handle_gemm_stage2 output" NEWLINE);
     dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void alloc_mat_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     alloc_gemm(model, input, output, node, node_flags, orig_node_flags);
 }
 
-void handle_matmul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_mat_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     handle_gemm(model, input, output, node, node_flags, orig_node_flags);
 }
 
-void alloc_matmulmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    alloc_gemmmerge(model, input, output, node, node_flags, orig_node_flags);
+void alloc_mat_mul_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    alloc_gemm_stage2(model, input, output, node, node_flags, orig_node_flags);
 }
 
-void handle_matmulmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    handle_gemmmerge(model, input, output, node, node_flags, orig_node_flags);
+void handle_mat_mul_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    handle_gemm_stage2(model, input, output, node, node_flags, orig_node_flags);
 }

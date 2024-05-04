@@ -38,20 +38,20 @@ enum {
     STRIDE_W = 1,
 };
 
-void alloc_maxpool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+void alloc_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
 
     const ParameterInfo *data = input[0];
 
     uint16_t CHANNEL = data->dims[1];
 
     MaxPoolParams* maxpool_params = &maxpool_params_obj;
-    maxpool_params->flags = &(node_flags->maxpool);
+    maxpool_params->flags = &(node_flags->max_pool);
 
     maxpool_params->H = data->dims[2];
     maxpool_params->W = data->dims[3];
     maxpool_params->stride_h = maxpool_params->flags->strides[STRIDE_H];
     maxpool_params->stride_w = maxpool_params->flags->strides[STRIDE_W];
-    maxpool_params->ceil_mode = node_flags->maxpool.ceil;
+    maxpool_params->ceil_mode = node_flags->max_pool.ceil;
     if (!maxpool_params->ceil_mode) {
         maxpool_params->new_H = maxpool_params->H / maxpool_params->stride_h;
         maxpool_params->new_W = maxpool_params->W / maxpool_params->stride_w;
@@ -59,7 +59,7 @@ void alloc_maxpool(Model *model, const ParameterInfo *input[], ParameterInfo *ou
         maxpool_params->new_H = (maxpool_params->H + maxpool_params->stride_h - 1) / maxpool_params->stride_h;
         maxpool_params->new_W = (maxpool_params->W + maxpool_params->stride_w - 1) / maxpool_params->stride_w;
     }
-    maxpool_params->need_nhwc2nchw = node_flags->maxpool.nhwc2nchw;
+    maxpool_params->need_nhwc2nchw = node_flags->max_pool.nhwc2nchw;
 
 #if JAPARI
     start_cpu_counter(offsetof(Counters, embedding));
@@ -159,7 +159,7 @@ static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t 
 }
 #endif
 
-void handle_maxpool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
+void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("MaxPool!" NEWLINE);
 
     /* XXX: add flags; assume no padding for now */
@@ -370,7 +370,7 @@ finished:
     }
 }
 
-void alloc_globalaveragepool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
+void alloc_global_average_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *data = input[0];
 
     MY_ASSERT(data->dims[0] == 1);
@@ -382,7 +382,7 @@ void alloc_globalaveragepool(Model *model, const ParameterInfo *input[], Paramet
     output->slot = get_next_slot(model, data);
 }
 
-void handle_globalaveragepool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
+void handle_global_average_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("GlobalAveragePool!" NEWLINE);
 
     const ParameterInfo *data = input[0];

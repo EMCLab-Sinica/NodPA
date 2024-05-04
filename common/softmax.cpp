@@ -102,7 +102,7 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
     dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+void alloc_softmax_stage2(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     output->slot = get_next_slot(model, input[0]);
     // the output scale is always 1 (16384 * 2**1 / 32768, see Scale::toFloat() function),
     // as scales are cancelled out after normalization
@@ -110,7 +110,7 @@ void alloc_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterInf
     output->scale.shift = 1;
 }
 
-void handle_softmaxmerge(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+void handle_softmax_stage2(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     int axis = node_flags->softmax.axis;
 
     const ParameterInfo* X = input[0];

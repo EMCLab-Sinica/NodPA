@@ -5,6 +5,7 @@ import itertools
 import logging
 import os.path
 import pathlib
+import re
 import struct
 import sys
 import tarfile
@@ -29,7 +30,14 @@ from onnx_utils import (
 logger = logging.getLogger('intermittent-cnn.utils')
 
 INPLACE_UPDATE_OPS = ['Dropout', 'Reshape', 'Squeeze', 'Unsqueeze']
-OPS_WITH_MERGE = ['Conv', 'Gemm', 'MatMul', 'Softmax']
+MULTIPLE_STAGE_OPS: dict[str, int] = {
+    # Split Conv/Gemm/MatMul for merging OFMs from channel tiling
+    'Conv': 2,
+    'Gemm': 2,
+    'MatMul': 2,
+    # Split Softmax for normalization over exponential results
+    'Softmax': 2,
+}
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
 
@@ -100,8 +108,9 @@ def download_file(url: str, filename: str, post_processor: Optional[Callable] = 
     return ret
 
 def find_tensor_value_info(onnx_model: onnx.ModelProto, name: str) -> onnx.ValueInfoProto:
-    if name.endswith('_before_merge'):
-        name = name[:-len('_before_merge')]
+    # Assume all stages have the same feature map dimensions
+    name = re.sub(':stage[0-9]+$', '', name)
+
     g = onnx_model.graph
     for value_info in itertools.chain(g.value_info, g.input, g.output):
         if value_info.name == name:
@@ -179,9 +188,10 @@ def get_model_ops(onnx_model):
         ops.add(schema.name)
 
     ops = ops.intersection(node.op_type for node in onnx_model.graph.node)
-    for op in OPS_WITH_MERGE:
+    for op in MULTIPLE_STAGE_OPS.keys():
         if op in ops:
-            ops.add(op + 'Merge')
+            for op_stage_idx in range(2, MULTIPLE_STAGE_OPS[op]+1):
+                ops.add(f'{op}Stage{op_stage_idx}')
     ops = sorted(ops)
 
     return ops
@@ -227,24 +237,33 @@ def load_model(config, model_variant):
         'single': onnx_model_single,
     }
 
-def add_merge_nodes(model):
-    # Split Conv/Gemm into Conv/Gemm and ConvMerge/GemmMerge (for merging OFMs from channel tiling)
+def add_multi_stage_nodes(model):
     new_nodes = []
     for idx, n in enumerate(model.graph.node):
         if n.op_type in audio_ops:
             logger.warning('skipping audio operator %s', n.op_type)
             continue
+
         new_nodes.append(n)
-        if idx+1 < len(model.graph.node) and model.graph.node[idx+1].op_type == n.op_type:
-            continue
-        if n.op_type in OPS_WITH_MERGE:
-            output_name = n.output[0]
-            new_node = onnx.NodeProto()
-            new_node.name = (n.name or n.op_type) + ':merge'
-            new_node.op_type = n.op_type + 'Merge'
-            new_node.input[:] = n.output[:] = [output_name + '_before_merge']
-            new_node.output[:] = [output_name]
-            new_nodes.append(new_node)
+
+        if n.op_type in MULTIPLE_STAGE_OPS.keys():
+            orig_node_name = n.name or n.op_type
+            orig_output_name = n.output[0]
+
+            n.output[:] = [f'{orig_output_name}:stage1']
+
+            last_op_stage_idx = MULTIPLE_STAGE_OPS[n.op_type]
+            for op_stage_idx in range(2, last_op_stage_idx + 1):
+                new_node = onnx.NodeProto()
+                new_node.name = f'{orig_node_name}:stage{op_stage_idx}'
+                new_node.op_type = f'{n.op_type}Stage{op_stage_idx}'
+                new_node.input[:] = [f'{orig_output_name}:stage{op_stage_idx-1}']
+                if op_stage_idx == last_op_stage_idx:
+                    new_node.output[:] = [orig_output_name]
+                else:
+                    new_node.output[:] = [f'{orig_output_name}:stage{op_stage_idx}']
+                new_nodes.append(new_node)
+
     del model.graph.node[:]
     model.graph.node.extend(new_nodes)
 
@@ -572,3 +591,8 @@ def remove_trailing_softmax(onnx_model: onnx.ModelProto):
         orig_nodes = onnx_model.graph.node[:]
         del onnx_model.graph.node[:]
         onnx_model.graph.node.extend(orig_nodes[:-1])
+
+# Convert CamelCase to snake_case
+# https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
+def op_name(op: str) -> str:
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', op).lower()

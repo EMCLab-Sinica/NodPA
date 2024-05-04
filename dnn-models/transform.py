@@ -26,7 +26,7 @@ from utils import (
     DataLayout,
     INPLACE_UPDATE_OPS,
     THIS_DIR,
-    add_merge_nodes,
+    add_multi_stage_nodes,
     broadcast_add,
     get_attr,
     get_parameter_dims,
@@ -38,6 +38,7 @@ from utils import (
     get_model_ops,
     infer_auto_pad,
     load_model,
+    op_name,
     run_model_batched,
     run_model_single,
     to_bytes,
@@ -204,7 +205,7 @@ images = images.numpy()
 
 Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])
 Constants.FP32_ACCURACY = run_model_batched(onnx_model_batched, model_data, verbose=False)
-add_merge_nodes(onnx_model)
+add_multi_stage_nodes(onnx_model)
 
 Constants.BATCH_SIZE = args.batch_size
 if args.stateful:
@@ -316,7 +317,7 @@ for idx, n in enumerate(nodes):
         node_flags[idx].conv.pads = infer_auto_pad(onnx_model, n)
         node_flags[idx].conv.group = get_attr(n, 'group') or 1
     if n.op_type in ('Conv', 'MaxPool'):
-        extra_flags = getattr(node_flags[idx], n.op_type.lower())
+        extra_flags = getattr(node_flags[idx], op_name(n.op_type))
         kernel_shape = find_kernel_shape(onnx_model, n)
         extra_flags.kernel_shape = kernel_shape
         strides = get_attr(n, 'strides')
@@ -330,13 +331,13 @@ for idx, n in enumerate(nodes):
     if n.op_type == 'MaxPool':
         ceil_mode = get_attr(n, 'ceil_mode')
         if ceil_mode:
-            node_flags[idx].maxpool.ceil = 1
+            node_flags[idx].max_pool.ceil = 1
     if n.op_type == 'Reshape':
         prev_node = n
         while prev_node and prev_node.op_type in INPLACE_UPDATE_OPS:
             prev_node_idx, prev_node = find_node_and_idx_by_output(nodes, prev_node.input[0])
         if prev_node and prev_node.op_type == 'MaxPool':
-            node_flags[prev_node_idx].maxpool.nhwc2nchw = 1
+            node_flags[prev_node_idx].max_pool.nhwc2nchw = 1
     if n.op_type in ('Squeeze', 'Unsqueeze'):
         # axes is an input fo Squeeze and Unsqueeze since opset 13
         # https://onnx.ai/onnx/operators/onnx__Squeeze.html
@@ -355,9 +356,9 @@ for idx, n in enumerate(nodes):
         node_flags[idx].gemm.input_dims = get_parameter_dims(onnx_model, n.input[0])
         node_flags[idx].gemm.weight_dims = get_parameter_dims(onnx_model, n.input[1])
         logger.debug('%s: input_dims=%d weight_dims=%d', n.name, node_flags[idx].gemm.input_dims, node_flags[idx].gemm.weight_dims)
-    if n.op_type in ('GemmMerge', 'MatMulMerge'):
-        node_flags[idx].gemmmerge.input_dims = get_parameter_dims(onnx_model, n.input[0])
-        node_flags[idx].gemmmerge.tile_length = config['gemm_tile_length']
+    if n.op_type in ('GemmStage2', 'MatMulStage2'):
+        node_flags[idx].gemm_stage2.input_dims = get_parameter_dims(onnx_model, n.input[0])
+        node_flags[idx].gemm_stage2.tile_length = config['gemm_tile_length']
     if n.op_type == 'Concat':
         node_flags[idx].concat.axis = get_attr(n, 'axis')
     if n.op_type == 'Transpose':
@@ -382,7 +383,7 @@ for idx, n in enumerate(nodes):
         if axis < 0:
             axis += len(input_shape.dim)
         node_flags[idx].softmax.axis = axis
-        node_flags[idx+1].softmax.axis = axis # merge
+        node_flags[idx+1].softmax.axis = axis # stage 2
     if n.op_type == 'Add':
         # Make sure constants are in the second input is one of inputs contain constants
         if len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):
@@ -729,20 +730,20 @@ struct NodeFlags;
         output_h.write(f'#define Op{op} {idx}\n')
 
     for op in ops:
-        output_h.write('void alloc_{}({});\n'.format(op.lower(), func_params))
-        output_h.write('void handle_{}({});\n'.format(op.lower(), func_params))
+        output_h.write('void alloc_{}({});\n'.format(op_name(op), func_params))
+        output_h.write('void handle_{}({});\n'.format(op_name(op), func_params))
     output_c.write('const handler handlers[] = {\n')
     for op in ops:
-        output_c.write(f'    handle_{op},\n'.lower())
+        output_c.write(f'    handle_{op_name(op)},\n')
     output_c.write('};\n')
     output_c.write('const allocator allocators[] = {\n')
     for op in ops:
-        output_c.write(f'    alloc_{op},\n'.lower())
+        output_c.write(f'    alloc_{op_name(op)},\n')
     output_c.write('};\n')
     for op in ops:
         if op in INPLACE_UPDATE_OPS:
             output_c.write(textwrap.dedent(f'''
-                void alloc_{op.lower()}({func_params}) {{
+                void alloc_{op_name(op)}({func_params}) {{
                     SlotInfo *cur_slot_info = get_slot_info(model, output->slot);
                     if (cur_slot_info) {{
                         cur_slot_info->user = model->layer_idx;
@@ -752,14 +753,14 @@ struct NodeFlags;
         else:
             output_c.write(textwrap.dedent(f'''
                 #if defined(FALLBACK_HANDLERS) && (defined(__GNUC__) || defined(__clang__))
-                void __attribute__((weak)) alloc_{op.lower()}({func_params}) {{
+                void __attribute__((weak)) alloc_{op_name(op)}({func_params}) {{
                     ERROR_OCCURRED();
                 }}
                 #endif
             '''))
         output_c.write(textwrap.dedent(f'''
             #if defined(FALLBACK_HANDLERS) && (defined(__GNUC__) || defined(__clang__))
-            void __attribute__((weak)) handle_{op.lower()}({func_params}) {{
+            void __attribute__((weak)) handle_{op_name(op)}({func_params}) {{
                 ERROR_OCCURRED();
             }}
             #endif

@@ -11,7 +11,7 @@ import onnxoptimizer
 
 from utils import (
     INPLACE_UPDATE_OPS,
-    OPS_WITH_MERGE,
+    MULTIPLE_STAGE_OPS,
     find_tensor_value_info,
     find_node_by_input,
     find_node_and_idx_by_output,
@@ -71,7 +71,7 @@ def find_min_range(onnx_model: onnx.ModelProto, nodes: list, node_flags, config:
         output_dims = dims_from_value_info(output_value_info)
         output_len = np.prod(output_dims)
 
-        if node.op_type in OPS_WITH_MERGE:
+        if node.op_type in MULTIPLE_STAGE_OPS.keys():
             # find IFM channels
             input_value_info = find_tensor_value_info(onnx_model, node.input[0])
             input_dims = dims_from_value_info(input_value_info)

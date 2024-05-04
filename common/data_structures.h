@@ -61,9 +61,9 @@ struct AddNodeFlags {
 struct NodeFlags {
     union {
         struct ConvNodeFlags conv;
-        struct MaxPoolFlags maxpool;
+        struct MaxPoolFlags max_pool;
         struct GemmNodeFlags gemm;
-        struct GemmMergeNodeFlags gemmmerge;
+        struct GemmMergeNodeFlags gemm_stage2;
         struct SqueezeNodeFlags squeeze;
         struct ConcatNodeFlags concat;
         struct TransposeNodeFlags transpose;

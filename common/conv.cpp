@@ -915,7 +915,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     dump_params_nhwc_debug(model, output, node->output_name);
 }
 
-void alloc_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
+void alloc_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *data = input[0];
 
     uint16_t OUTPUT_CHANNEL = data->dims[1],
@@ -957,7 +957,7 @@ void ConvMergeOutputChunkHandler(uint32_t range_offset, uint16_t range_len, int8
 }
 #endif
 
-void handle_convmerge(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
+void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     // Do not use conv_params here as its intialization in alloc_conv and
     // handle_conv might be skipped if the Conv node has finished.
     const ParameterInfo *data = input[0];
