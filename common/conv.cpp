@@ -912,7 +912,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
     my_printf_debug("handle_conv output" NEWLINE);
-    dump_params_nhwc_debug(model, output, node->output_name);
+    dump_params_nhwc_debug(model, output, node->output_name, "Conv");
 }
 
 void alloc_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
@@ -1081,5 +1081,5 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
     stop_cpu_counter();
 #endif
 
-    dump_params_nhwc_debug(model, output, node->output_name);
+    dump_params_nhwc_debug(model, output, node->output_name, "ConvStage2");
 }

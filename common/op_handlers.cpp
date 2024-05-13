@@ -140,7 +140,7 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
     my_printf_debug("handle_relu output" NEWLINE);
-    dump_params_nhwc_debug(model, output, node->output_name);
+    dump_params_nhwc_debug(model, output, node->output_name, "Relu");
 }
 
 void handle_reshape(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
@@ -194,7 +194,7 @@ void handle_reshape(Model *model, const ParameterInfo *input[], ParameterInfo *o
         output->dims[auto_idx] = inferred_dim;
     }
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "Reshape");
 }
 
 void handle_squeeze(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
@@ -336,7 +336,7 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
         }
     }
 
-    dump_params_nhwc_debug(model, output, node->output_name);
+    dump_params_nhwc_debug(model, output, node->output_name, "Concat");
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, table_updates));
@@ -370,7 +370,7 @@ static void handle_concat_batch(Model *model, const ParameterInfo *input[], Para
         copy_offset = 0;
     }
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "Concat");
 }
 
 void handle_concat(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
@@ -548,7 +548,7 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
     stop_cpu_counter();
 #endif
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "Transpose");
 }
 
 void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
@@ -655,8 +655,8 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 #endif
 
     if (X->param_flags & CHANNEL_LAST) {
-        dump_params_nhwc_debug(model, output, node->output_name);
+        dump_params_nhwc_debug(model, output, node->output_name, "Add");
     } else {
-        dump_params_debug(model, output, node->output_name);
+        dump_params_debug(model, output, node->output_name, "Add");
     }
 }

@@ -58,7 +58,7 @@ void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool
     my_printf(NEWLINE);
 }
 
-static void dump_params_common(Model* model, const ParameterInfo* cur_param, const char* layer_name, LayerOutput** p_layer_out) {
+static void dump_params_common(Model* model, const ParameterInfo* cur_param, const char* layer_name, const char* op_type, LayerOutput** p_layer_out) {
     my_printf("Slot: %d" NEWLINE, cur_param->slot);
 #ifndef __arm__
     my_printf("Scale: %f" NEWLINE, cur_param->scale.toFloat());
@@ -81,6 +81,7 @@ static void dump_params_common(Model* model, const ParameterInfo* cur_param, con
     if (layer_name && model_output_data.get()) {
         LayerOutput* layer_out = *p_layer_out = model_output_data->add_layer_out();
         layer_out->set_name(layer_name);
+        layer_out->set_op_type(op_type);
         for (uint8_t idx = 0; idx < 4; idx++) {
             layer_out->add_dims(cur_param->dims[idx]);
         }
@@ -125,12 +126,12 @@ static void extract_dimensions(const ParameterInfo* cur_param, uint16_t* NUM, ui
     }
 }
 
-void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* layer_name) {
+void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* layer_name, const char* op_type) {
     uint16_t NUM, H, W, CHANNEL;
     disable_counters();
     extract_dimensions(cur_param, &NUM, &H, &W, &CHANNEL);
     LayerOutput* layer_out = nullptr;
-    dump_params_common(model, cur_param, layer_name, &layer_out);
+    dump_params_common(model, cur_param, layer_name, op_type, &layer_out);
     int16_t output_tile_c = cur_param->dims[1];
     for (uint16_t n = 0; n < NUM; n++) {
         my_printf("Matrix %d" NEWLINE, n);
@@ -163,11 +164,11 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
 }
 
 // dump in NCHW format
-void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer_name) {
+void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer_name, const char* op_type) {
     uint16_t NUM, H, W, CHANNEL;
     extract_dimensions(cur_param, &NUM, &H, &W, &CHANNEL);
     LayerOutput* layer_out = nullptr;
-    dump_params_common(model, cur_param, layer_name, &layer_out);
+    dump_params_common(model, cur_param, layer_name, op_type, &layer_out);
     for (uint16_t i = 0; i < NUM; i++) {
         my_printf("Matrix %d" NEWLINE, i);
         for (uint16_t j = 0; j < CHANNEL; j++) {

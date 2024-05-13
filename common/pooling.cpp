@@ -364,9 +364,9 @@ finished:
 
     my_printf_debug("handle_maxpool output" NEWLINE);
     if (!maxpool_params->need_nhwc2nchw) {
-        dump_params_nhwc_debug(model, output, node->output_name);
+        dump_params_nhwc_debug(model, output, node->output_name, "MaxPool");
     } else {
-        dump_params_debug(model, output, node->output_name);
+        dump_params_debug(model, output, node->output_name, "MaxPool");
     }
 }
 
@@ -464,5 +464,5 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
     stop_cpu_counter();
 #endif
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "GlobalAveragePool");
 }

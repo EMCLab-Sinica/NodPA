@@ -96,5 +96,5 @@ void handle_mul(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     stop_cpu_counter();
 #endif
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "Mul");
 }

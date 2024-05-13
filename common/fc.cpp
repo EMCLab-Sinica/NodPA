@@ -18,7 +18,7 @@
  * For fully-connected layers, which are implemented via Gemm in ONNX.
  */
 
-void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+void alloc_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *A = input[0], *B = input[1];
 
     uint8_t input_dims = node_flags->gemm.input_dims,
@@ -137,7 +137,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 }
 #endif
 
-void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *A = input[0], *B = input[1], *matC = nullptr;
 
 #ifdef OpGemm
@@ -415,12 +415,9 @@ void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     flip_state_bit(model, output);
     stop_cpu_counter();
 #endif
-
-    my_printf_debug("handle_gemm output" NEWLINE);
-    dump_params_debug(model, output, node->output_name);
 }
 
-void alloc_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
+void alloc_gemm_stage2_impl(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     output->slot = get_next_slot(model, input[0]);
     int16_t output_len = 1;
     for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
@@ -432,7 +429,7 @@ void alloc_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo
     output->params_len = output_len * sizeof(int16_t);
 }
 
-void handle_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
+void handle_gemm_stage2_impl(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *X = input[0];
 
     my_printf_debug("GemmMerge!" NEWLINE);
@@ -509,23 +506,52 @@ void handle_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInf
     flip_state_bit(model, output);
     stop_cpu_counter();
 #endif
-
-    my_printf_debug("handle_gemm_stage2 output" NEWLINE);
-    dump_params_debug(model, output, node->output_name);
 }
 
+/* Wrappers for Gemm */
+
+void alloc_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    alloc_gemm_impl(model, input, output, node, node_flags, orig_node_flags);
+}
+
+void handle_gemm(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    handle_gemm_impl(model, input, output, node, node_flags, orig_node_flags);
+
+    my_printf_debug("handle_gemm output" NEWLINE);
+    dump_params_debug(model, output, node->output_name, "Gemm");
+}
+
+void alloc_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    alloc_gemm_stage2_impl(model, input, output, node, node_flags, orig_node_flags);
+}
+
+void handle_gemm_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+    handle_gemm_stage2_impl(model, input, output, node, node_flags, orig_node_flags);
+
+    my_printf_debug("handle_gemm_stage2 output" NEWLINE);
+    dump_params_debug(model, output, node->output_name, "GemmStage2");
+}
+
+/* Wrappers for MatMul */
+
 void alloc_mat_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    alloc_gemm(model, input, output, node, node_flags, orig_node_flags);
+    alloc_gemm_impl(model, input, output, node, node_flags, orig_node_flags);
 }
 
 void handle_mat_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    handle_gemm(model, input, output, node, node_flags, orig_node_flags);
+    handle_gemm_impl(model, input, output, node, node_flags, orig_node_flags);
+
+    my_printf_debug("handle_mat_mul output" NEWLINE);
+    dump_params_debug(model, output, node->output_name, "MatMul");
 }
 
 void alloc_mat_mul_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    alloc_gemm_stage2(model, input, output, node, node_flags, orig_node_flags);
+    alloc_gemm_stage2_impl(model, input, output, node, node_flags, orig_node_flags);
 }
 
 void handle_mat_mul_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
-    handle_gemm_stage2(model, input, output, node, node_flags, orig_node_flags);
+    handle_gemm_stage2_impl(model, input, output, node, node_flags, orig_node_flags);
+
+    my_printf_debug("handle_mat_mul_stage2 output" NEWLINE);
+    dump_params_debug(model, output, node->output_name, "MatMulStage2");
 }

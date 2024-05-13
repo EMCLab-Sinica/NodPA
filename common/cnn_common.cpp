@@ -332,7 +332,7 @@ uint8_t run_cnn_tests(uint16_t n_samples) {
     }
 #if MY_DEBUG >= MY_DEBUG_NORMAL
     if (n_samples == 1) {
-        dump_params(get_model(), output_node);
+        dump_params(get_model(), output_node, "Output", "Output");
     }
     my_printf("correct=%" PRId32 " ", correct);
     my_printf("total=%" PRId32 " ", total);

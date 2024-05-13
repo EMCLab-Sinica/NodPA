@@ -38,10 +38,12 @@ def main():
         model_output.ParseFromString(f.read())
     for layer_out in model_output.layer_out:
         name = layer_out.name
+        op_type = layer_out.op_type
+
         if name.endswith('_before_merge'):
             continue
 
-        print(f'Layer output {name}')
+        print(f'Layer output {name}, op_type = {op_type}')
         if name not in baseline_data:
             continue
         max_num = np.max(np.abs(baseline_data[name]))

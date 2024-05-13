@@ -392,6 +392,7 @@ def run_model_single(model: onnx.ModelProto, model_data: ModelData, verbose: boo
         if save_file:
             layer_out_obj = model_output_pb2.LayerOutput()
             layer_out_obj.name = layer_name
+            layer_out_obj.op_type = op_type
             layer_out_obj.dims.extend(layer_out.shape)
             if layer_out.shape:
                 linear_shape = [np.prod(layer_out.shape)]

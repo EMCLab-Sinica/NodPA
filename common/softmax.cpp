@@ -99,7 +99,7 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
     stop_cpu_counter();
 #endif
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "Softmax");
 }
 
 void alloc_softmax_stage2(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
@@ -188,5 +188,5 @@ void handle_softmax_stage2(Model* model, const ParameterInfo* input[], Parameter
     stop_cpu_counter();
 #endif
 
-    dump_params_debug(model, output, node->output_name);
+    dump_params_debug(model, output, node->output_name, "SoftmaxStage2");
 }
