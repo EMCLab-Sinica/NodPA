@@ -9,10 +9,10 @@ sys.path.append(str(TOPDIR / 'dnn-models'))
 
 from utils import import_model_output_pb2
 
-def get_tensor(layer_out):
+def get_tensor(layer_out) -> np.ndarray:
     arr = np.array(layer_out.value)
     if not len(arr):
-        return []
+        return np.array([])
     dims = np.array(layer_out.dims)
     try:
         return np.reshape(arr, dims[dims!=0])
@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--topk', type=int, required=True)
     args = parser.parse_args()
 
-    baseline_data = {}
+    baseline_data: dict[str, np.ndarray] = {}
     model_output = import_model_output_pb2().ModelOutput()
     with open(args.baseline, 'rb') as f:
         model_output.ParseFromString(f.read())
@@ -36,9 +36,17 @@ def main():
 
     with open(args.target, 'rb') as f:
         model_output.ParseFromString(f.read())
+
+    processed_outputs = set()
+
     for layer_out in model_output.layer_out:
         name = layer_out.name
         op_type = layer_out.op_type
+
+        if name in processed_outputs:
+            # print(f'Skipping processed output {name}')
+            continue
+        processed_outputs.add(name)
 
         if name.endswith('_before_merge'):
             continue
@@ -49,6 +57,11 @@ def main():
         max_num = np.max(np.abs(baseline_data[name]))
         cur_baseline_data = baseline_data[name]
         cur_target_data = get_tensor(layer_out)
+
+        if cur_baseline_data.shape != cur_target_data.shape:
+            print(f'ERROR: baseline data shape {cur_baseline_data.shape} != target data shape {cur_target_data.shape}')
+            continue
+
         errors = np.abs(cur_baseline_data - cur_target_data) / max_num
 
         # Sort on negative values to get indices for decreasing values
