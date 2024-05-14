@@ -18,6 +18,8 @@ extern int16_t lea_buffer[LEA_BUFFER_SIZE];
 int16_t upper_gauss(int16_t a, int16_t b);
 void float_to_scale_params(int16_t *scaleFract, uint8_t *shift, float scale);
 void float_to_scale_params(int16_t *scaleFract, uint8_t *shift, const Scale& scale);
+uint8_t count_dims(const ParameterInfo* data);
+void recalculate_params_len(ParameterInfo* output);
 void iterate_chunks(Model *model, const ParameterInfo *param, uint16_t start_offset, uint16_t len, const ChunkHandler& callback, void* params);
 void determine_tile_c(ParameterInfo *param, const ParameterInfo* input, const ParameterInfo *filter = nullptr);
 

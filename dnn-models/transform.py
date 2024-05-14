@@ -28,13 +28,13 @@ from utils import (
     THIS_DIR,
     add_multi_stage_nodes,
     broadcast_add,
+    ensure_non_negative_axis,
     get_attr,
     get_parameter_dims,
     find_kernel_shape,
     find_initializer,
     find_node_by_input,
     find_node_and_idx_by_output,
-    find_tensor_value_info,
     get_model_ops,
     infer_auto_pad,
     load_model,
@@ -346,12 +346,15 @@ for idx, n in enumerate(nodes):
         assert axes_initializer is not None
         axes = list(onnx.numpy_helper.to_array(axes_initializer))
         if n.op_type == 'Unsqueeze':
+            # Semantically, axes is required only for Unsqueeze
             assert axes is not None
         else:
+            # For Squeeze, axes is optional. Here I use an empty list to indicate the default (squeeze all the single dimensions)
             axes = axes or []
         node_flags[idx].squeeze.axes = 0
         for axis in axes:
-            node_flags[idx].squeeze.axes |= (1 << axis)
+            node_flags[idx].squeeze.axes |= (1 << ensure_non_negative_axis(onnx_model, n, axis))
+
     if n.op_type in ('Gemm', 'MatMul'):
         node_flags[idx].gemm.input_dims = get_parameter_dims(onnx_model, n.input[0])
         node_flags[idx].gemm.weight_dims = get_parameter_dims(onnx_model, n.input[1])
@@ -359,8 +362,13 @@ for idx, n in enumerate(nodes):
     if n.op_type in ('GemmStage2', 'MatMulStage2'):
         node_flags[idx].gemm_stage2.input_dims = get_parameter_dims(onnx_model, n.input[0])
         node_flags[idx].gemm_stage2.tile_length = config['gemm_tile_length']
+
     if n.op_type == 'Concat':
-        node_flags[idx].concat.axis = get_attr(n, 'axis')
+        # https://onnx.ai/onnx/operators/onnx__Concat.html#concat-13
+        axis = get_attr(n, 'axis')
+        assert axis
+        node_flags[idx].concat.axis = ensure_non_negative_axis(axis)
+
     if n.op_type == 'Transpose':
         perm = get_attr(n, 'perm')
         assert len(perm) <= 4
@@ -372,16 +380,10 @@ for idx, n in enumerate(nodes):
         node_flags[idx].transpose.perm = perm + [-1]*(4-len(perm))
         node_flags[idx].transpose.inverse_perm = inverse_perm + [-1]*(4-len(perm))
     if n.op_type == 'Softmax':
-        axis = get_attr(n, 'axis')
-        input_value_info = find_tensor_value_info(onnx_model, n.input[0])
-        input_shape = input_value_info.type.tensor_type.shape
-        if axis is None:
-            # The default value for 'axis' is -1 since opset 13
-            # https://onnx.ai/onnx/operators/onnx__Softmax.html
-            axis = - 1
-        # Negative axis means counting back from the last dimension
-        if axis < 0:
-            axis += len(input_shape.dim)
+        # The default value for 'axis' is -1 since opset 13
+        # https://onnx.ai/onnx/operators/onnx__Softmax.html
+        axis = get_attr(n, 'axis') or - 1
+        axis = ensure_non_negative_axis(onnx_model, n, axis)
         node_flags[idx].softmax.axis = axis
         node_flags[idx+1].softmax.axis = axis # stage 2
     if n.op_type == 'Add':

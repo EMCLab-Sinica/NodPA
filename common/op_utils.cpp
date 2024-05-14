@@ -88,6 +88,21 @@ void float_to_scale_params(int16_t *scaleFract, uint8_t *shift, float scale) {
     *scaleFract = scale * 32768;
 }
 
+uint8_t count_dims(const ParameterInfo* data) {
+    uint8_t dim_idx = 0;
+    while (dim_idx < MAX_NUM_DIMS && data->dims[dim_idx]) {
+        dim_idx++;
+    }
+    return dim_idx;
+}
+
+void recalculate_params_len(ParameterInfo* output) {
+    output->params_len = sizeof(int16_t);
+    for (uint8_t dim_idx = 0; (dim_idx < MAX_NUM_DIMS) && output->dims[dim_idx]; dim_idx++) {
+        output->params_len *= output->dims[dim_idx];
+    }
+}
+
 void iterate_chunks(Model *model, const ParameterInfo *param, uint16_t start_offset, uint16_t len, const ChunkHandler& chunk_handler, void* params) {
     uint16_t params_len;
     if (!len) {

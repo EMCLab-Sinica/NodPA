@@ -17,6 +17,8 @@ extern uint16_t inference_layer_idx;
 #pragma GCC diagnostic error "-Wpadded"
 #endif
 
+#define MAX_NUM_DIMS 4
+
 typedef struct Node {
     char name[NODE_NAME_LEN];
     char output_name[NODE_NAME_LEN];
@@ -51,7 +53,7 @@ typedef struct ParameterInfo {
     uint8_t slot;
     uint8_t param_flags;
     // uint8_t is not enough. For example, fully connected layer in MNIST has dims 256x1
-    uint16_t dims[4];
+    uint16_t dims[MAX_NUM_DIMS];
     Scale scale;
     uint16_t parameter_info_idx; // must be the last member of this struct
 } ParameterInfo;

@@ -11,14 +11,6 @@
 #include "my_dsplib.h"
 #include "platform.h"
 
-static inline uint8_t count_dims(const ParameterInfo* data) {
-    uint8_t dim_idx = 0;
-    while (dim_idx < 4 && data->dims[dim_idx]) {
-        dim_idx++;
-    }
-    return dim_idx;
-}
-
 #define RESHAPE_AUTO_DIM static_cast<uint16_t>(-1)
 
 const uint8_t RELU_TILE_SIZE = 16;
@@ -261,10 +253,7 @@ void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* out
         output->scale = (inp->scale > output->scale) ? inp->scale : output->scale;
     }
 
-    output->params_len = sizeof(int16_t);
-    for (uint8_t dim_idx = 0; (dim_idx < 4) && output->dims[dim_idx]; dim_idx++) {
-        output->params_len *= output->dims[dim_idx];
-    }
+    recalculate_params_len(output);
 
     output->slot = get_next_slot(model, input[0]);
 }

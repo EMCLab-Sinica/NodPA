@@ -17,17 +17,15 @@ void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struc
 
     output->slot = get_next_slot(model, X);
 
-    output->params_len = sizeof(int16_t);
-
     for(uint8_t dim_idx = 0; dim_idx < 3; dim_idx++) {
         if(dim_idx == input_axes){
             output->dims[dim_idx] = input_end-input_start;
-        }
-        else{
+        } else {
             output->dims[dim_idx] = X->dims[dim_idx];
         }
-        output->params_len *= output->dims[dim_idx];
     }
+
+    recalculate_params_len(output);
 }
 
 void handle_slice(struct Model *model, const struct ParameterInfo *input[], struct ParameterInfo *output, const struct Node* node, CurNodeFlags*, const NodeFlags*) {

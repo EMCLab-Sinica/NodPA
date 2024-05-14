@@ -178,6 +178,16 @@ def numpy_type_to_onnx_elem_type(numpy_type):
         return onnx.TensorProto.BOOL
     raise Exception(f'Unsupported type {numpy_type}')
 
+def ensure_non_negative_axis(onnx_model: onnx.ModelProto, node: onnx.NodeProto, axis):
+    # In many ONNX operators, a negative axis means counting back from the last dimension
+
+    dims = get_parameter_dims(onnx_model, node.input[0])
+
+    if axis < 0:
+        axis += len(dims)
+
+    return axis
+
 def get_model_ops(onnx_model):
     # Retrieving information for operators. Inspired by the script for generating
     # https://github.com/onnx/onnx/blob/v1.10.2/docs/Operators.md [1,2]
