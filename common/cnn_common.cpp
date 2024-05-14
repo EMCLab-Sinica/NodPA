@@ -356,7 +356,12 @@ bool Scale::operator>(const Scale& other) const {
 
 Scale Scale::operator*(const Scale& other) const {
     Scale newScale(*this);
-    newScale.fract = (static_cast<int32_t>(newScale.fract) * other.fract / 32768);
+    int32_t newFract = static_cast<int32_t>(newScale.fract) * other.fract;
+    while (newFract < 32768) {
+        newFract *= 2;
+        newScale.shift--;
+    }
+    newScale.fract = (newFract / 32768);
     newScale.shift += other.shift;
     return newScale;
 }
