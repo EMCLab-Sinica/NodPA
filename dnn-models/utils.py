@@ -181,10 +181,8 @@ def numpy_type_to_onnx_elem_type(numpy_type):
 def ensure_non_negative_axis(onnx_model: onnx.ModelProto, node: onnx.NodeProto, axis):
     # In many ONNX operators, a negative axis means counting back from the last dimension
 
-    dims = get_parameter_dims(onnx_model, node.input[0])
-
     if axis < 0:
-        axis += len(dims)
+        axis += get_parameter_dims(onnx_model, node.input[0])
 
     return axis
 
