@@ -367,7 +367,7 @@ for idx, n in enumerate(nodes):
         # https://onnx.ai/onnx/operators/onnx__Concat.html#concat-13
         axis = get_attr(n, 'axis')
         assert axis
-        node_flags[idx].concat.axis = ensure_non_negative_axis(axis)
+        node_flags[idx].concat.axis = ensure_non_negative_axis(onnx_model, n, axis)
 
     if n.op_type == 'Transpose':
         perm = get_attr(n, 'perm')
