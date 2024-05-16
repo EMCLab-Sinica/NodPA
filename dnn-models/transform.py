@@ -395,6 +395,18 @@ for idx, n in enumerate(nodes):
         weights_broadcasted_dim = weights_broadcasted_dims[0] if weights_broadcasted_dims else -1
         node_flags[idx].add.weights_broadcasted_dim = weights_broadcasted_dim
         logger.debug('%s: weights_broadcasted_dim=%d', n.name, weights_broadcasted_dim)
+
+    if n.op_type == 'ArgMax':
+        # https://onnx.ai/onnx/operators/onnx__ArgMax.html#argmax-13
+        axis = get_attr(n, 'axis') or 0
+        node_flags[idx].arg_max.axis = ensure_non_negative_axis(onnx_model, n, axis)
+        node_flags[idx].arg_max.keepdims = get_attr(n, 'keepdims')
+
+    if n.op_type == 'Gather':
+        # https://onnx.ai/onnx/operators/onnx__Gather.html#gather-13
+        axis = get_attr(n, 'axis') or 0
+        node_flags[idx].gather.axis = ensure_non_negative_axis(onnx_model, n, axis)
+
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 

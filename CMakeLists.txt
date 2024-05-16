@@ -152,6 +152,8 @@ set (intermittent_cnn_SOURCES
     ${COMMON_SRC_PATH}/slice.cpp
     ${COMMON_SRC_PATH}/mul.cpp
     ${COMMON_SRC_PATH}/dropout.cpp
+    ${COMMON_SRC_PATH}/argmax.cpp
+    ${COMMON_SRC_PATH}/gather.cpp
     ${CMAKE_BINARY_DIR}/data.cpp
 )
 add_executable(intermittent-cnn ${intermittent_cnn_SOURCES})

@@ -56,11 +56,21 @@ struct AddNodeFlags {
     int8_t weights_broadcasted_dim;
 };
 
+struct ArgMaxNodeFlags {
+    uint8_t axis;
+    uint8_t keepdims;
+};
+
+struct GatherNodeFlags {
+    uint8_t axis;
+};
+
 #define NODE_FLAGS_SIZE 16
 
 struct NodeFlags {
     union {
         struct ConvNodeFlags conv;
+        struct ConvNodeFlags conv_channel_gating;
         struct MaxPoolFlags max_pool;
         struct GemmNodeFlags gemm;
         struct GemmMergeNodeFlags gemm_stage2;
@@ -69,6 +79,8 @@ struct NodeFlags {
         struct TransposeNodeFlags transpose;
         struct SoftmaxNodeFlags softmax;
         struct AddNodeFlags add;
+        struct ArgMaxNodeFlags arg_max;
+        struct GatherNodeFlags gather;
         uint8_t as_bytes[NODE_FLAGS_SIZE];
     };
     // `canary` contains some non-zero value for detecting whether data are already in VM or not
