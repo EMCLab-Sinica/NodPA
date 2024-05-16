@@ -12,7 +12,6 @@
 void alloc_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *X = input[0], *Y = input[1];
 
-    output->slot = get_next_slot(model, input[0]);
     output->scale = X->scale * Y->scale;
 }
 

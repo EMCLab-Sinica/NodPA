@@ -17,8 +17,6 @@ const uint8_t RELU_TILE_SIZE = 16;
 static_assert(RELU_TILE_SIZE % BATCH_SIZE == 0, "Incorrect tile size for ReLU");
 
 void alloc_relu(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
-    const ParameterInfo *data = input[0];
-    output->slot = get_next_slot(model, data);
 }
 
 void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
@@ -254,8 +252,6 @@ void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* out
     }
 
     recalculate_params_len(output);
-
-    output->slot = get_next_slot(model, input[0]);
 }
 
 static void handle_concat_channels(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
@@ -386,8 +382,6 @@ void alloc_transpose(struct Model *model, const struct ParameterInfo **input, st
         }
         output->dims[dim_idx] = X->dims[perm[dim_idx]];
     }
-
-    output->slot = get_next_slot(model, input[0]);
 }
 
 void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
@@ -541,7 +535,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 }
 
 void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
-    output->slot = get_next_slot(model, input[0]);
 }
 
 void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags* node_flags, const NodeFlags*) {

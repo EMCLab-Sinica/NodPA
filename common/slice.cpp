@@ -16,8 +16,6 @@ void alloc_slice(struct Model *model, const struct ParameterInfo *input[], struc
     uint16_t input_end = get_int64_param(end, 0);
     uint16_t input_axes = get_int64_param(axes, 0);
 
-    output->slot = get_next_slot(model, X);
-
     for(uint8_t dim_idx = 0; dim_idx < 3; dim_idx++) {
         if(dim_idx == input_axes){
             output->dims[dim_idx] = input_end-input_start;

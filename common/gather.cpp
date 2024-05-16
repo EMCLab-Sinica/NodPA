@@ -16,8 +16,6 @@ struct {
 void alloc_gather(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, const NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *data = input[0], *indices = input[1];
 
-    output->slot = get_next_slot(model, data);
-
     uint8_t axis = node_flags->gather.axis;
     uint8_t accumulated_axis = 0;
 

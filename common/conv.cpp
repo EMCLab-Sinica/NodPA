@@ -660,7 +660,6 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     my_printf_debug("input_tile_c=%d, output_tile_c=%d" NEWLINE, conv_params->flags->conv.input_tile_c, conv_params->flags->conv.output_tile_c);
 
     /* XXX: extend flags; assume dilation=(1, 1) for now */
-    output->slot = get_next_slot(model, conv_input);
     output->params_len = conv_params->n_tiles_c * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * OUTPUT_CHANNEL * sizeof(int16_t);
     output->dims[0] = 1;
     output->dims[1] = OUTPUT_CHANNEL;
@@ -922,7 +921,6 @@ void alloc_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo
              OUTPUT_H = data->dims[2],
              OUTPUT_W = data->dims[3];
 
-    output->slot = get_next_slot(model, data);
     output->params_len = OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W * sizeof(int16_t);
     output->param_flags &= (~TRANSPOSED);
 }

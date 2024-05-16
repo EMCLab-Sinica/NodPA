@@ -10,8 +10,6 @@
 void alloc_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, const NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *data = input[0];
 
-    output->slot = get_next_slot(model, data);
-
     const ArgMaxNodeFlags& flags = node_flags->arg_max;
     if (node_flags->arg_max.keepdims) {
         output->dims[flags.axis] = 1;

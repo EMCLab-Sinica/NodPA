@@ -755,6 +755,13 @@ struct NodeFlags;
     for op in ops:
         output_c.write(f'    alloc_{op_name(op)},\n')
     output_c.write('};\n')
+
+    output_h.write('extern const uint8_t INPLACE_UPDATE_OPS_MAP[];\n')
+    output_c.write('const uint8_t INPLACE_UPDATE_OPS_MAP[] = {\n')
+    for op in ops:
+        output_c.write('{}, /* {} */'.format(int(op in INPLACE_UPDATE_OPS), op))
+    output_c.write('};\n')
+
     for op in ops:
         if op in INPLACE_UPDATE_OPS:
             output_c.write(textwrap.dedent(f'''

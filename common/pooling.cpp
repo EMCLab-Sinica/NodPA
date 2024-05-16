@@ -71,7 +71,6 @@ void alloc_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *o
 #endif
 
     output->params_len = maxpool_params->new_H * maxpool_params->new_W * CHANNEL * sizeof(int16_t);
-    output->slot = get_next_slot(model, data);
     output->dims[0] = 1;
     output->dims[1] = CHANNEL;
     output->dims[2] = maxpool_params->new_H;
@@ -379,7 +378,6 @@ void alloc_global_average_pool(Model *model, const ParameterInfo *input[], Param
     output->dims[0] = output->dims[2] = output->dims[3] = 1;
     output->dims[1] = output_len;
     output->params_len = output_len * sizeof(int16_t);
-    output->slot = get_next_slot(model, data);
 }
 
 void handle_global_average_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {

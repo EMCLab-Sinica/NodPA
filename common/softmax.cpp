@@ -14,7 +14,6 @@
 #include "platform.h"
 
 void alloc_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
-        output->slot = get_next_slot(model, input[0]);
 }
 
 void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
@@ -103,7 +102,6 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
 }
 
 void alloc_softmax_stage2(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
-    output->slot = get_next_slot(model, input[0]);
     // the output scale is always 1 (16384 * 2**1 / 32768, see Scale::toFloat() function),
     // as scales are cancelled out after normalization
     output->scale.fract = 16384;

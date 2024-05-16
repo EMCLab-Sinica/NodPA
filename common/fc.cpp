@@ -46,7 +46,6 @@ void alloc_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo *
 #else
     output->dims[output_dims-1] = B->dims[weight_dims-1];
 #endif
-    output->slot = get_next_slot(model, A);
     output->scale = A->scale * B->scale;
 
     uint16_t output_len = 1;
@@ -418,7 +417,6 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
 }
 
 void alloc_gemm_stage2_impl(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
-    output->slot = get_next_slot(model, input[0]);
     int16_t output_len = 1;
     for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
         if (!output->dims[dim_idx]) {

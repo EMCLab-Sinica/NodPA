@@ -131,6 +131,10 @@ static void handle_node(Model *model, uint16_t node_idx) {
     ParameterInfo *output = get_intermediate_parameter_info(node_idx);
     my_memcpy(output, input[0], sizeof(ParameterInfo) - sizeof(uint16_t)); // don't overwrite parameter_info_idx
     output->params_offset = 0;
+    if (!INPLACE_UPDATE_OPS_MAP[cur_node->op_type]) {
+        output->slot = get_next_slot(model, input[0]);
+    }
+
     allocators[cur_node->op_type](model, input, output, cur_node, cur_node_flags, cur_orig_node_flags);
 #if MY_DEBUG >= MY_DEBUG_NORMAL
     my_printf_debug("Needed mem = %d, dims=(", output->params_len);
