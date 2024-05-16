@@ -112,6 +112,7 @@ other_flags = [
     # parameter flags
     'CHANNEL_LAST',
     'TRANSPOSED',
+    'INTEGER',  # For integer types like INT64; no conversion like Q15 involved
 ]
 
 def op_flag(flag):

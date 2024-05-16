@@ -45,6 +45,17 @@ static void print_q15(LayerOutput* layer_out, int16_t val, const ValueInfo& val_
     }
 }
 
+static void print_integer(LayerOutput* layer_out, int16_t val) {
+#ifdef USE_PROTOBUF
+    if (layer_out) {
+        layer_out->add_value(val);
+    } else
+#endif
+    {
+        my_printf("% 6d ", val);
+    }
+}
+
 void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state) {
 #ifndef __arm__
     my_printf("Scale: %f" NEWLINE, val_info.scale);
@@ -151,7 +162,13 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
                             // internal format is NHWC
                             offset2 = n * H * W * CHANNEL + H * W * tile_c_base + h * W * cur_tile_c + w * cur_tile_c + c;
                         }
-                        print_q15(layer_out, get_q15_param(model, cur_param, offset2), ValueInfo(cur_param, model), offset_has_state(offset2));
+
+                        int16_t val = get_q15_param(model, cur_param, offset2);
+                        if (cur_param->param_flags & INTEGER) {
+                            print_integer(layer_out, val);
+                        } else {
+                            print_q15(layer_out, val, ValueInfo(cur_param, model), offset_has_state(offset2));
+                        }
                     }
                     PRINT_NEWLINE_IF_DATA_NOT_SAVED
                 }
@@ -179,7 +196,12 @@ void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer
                 for (uint16_t l = 0; l < W; l++) {
                     // internal format is NCHW
                     size_t offset = i * H * W * CHANNEL + j * H * W + k * W + l;
-                    print_q15(layer_out, get_q15_param(model, cur_param, offset), ValueInfo(cur_param, model), offset_has_state(offset));
+                    int16_t val = get_q15_param(model, cur_param, offset);
+                    if (cur_param->param_flags & INTEGER) {
+                        print_integer(layer_out, val);
+                    } else {
+                        print_q15(layer_out, val, ValueInfo(cur_param, model), offset_has_state(offset));
+                    }
                 }
                 PRINT_NEWLINE_IF_DATA_NOT_SAVED
             }
