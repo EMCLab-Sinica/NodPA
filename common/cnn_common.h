@@ -116,7 +116,6 @@ const uint8_t* get_param_base_pointer(const ParameterInfo *param, uint32_t *limi
 int16_t get_q15_param(Model* model, const ParameterInfo *param, uint16_t offset_in_word);
 void put_q15_param(ParameterInfo *param, uint16_t offset_in_word, int16_t val, bool is_linear);
 int64_t get_int64_param(const ParameterInfo *param, size_t i);
-uint16_t get_next_slot(Model *model, const ParameterInfo *param);
 const ParameterInfo* get_parameter_info(uint16_t i);
 const Node* get_node(size_t i);
 const Node* get_node(const ParameterInfo* param);

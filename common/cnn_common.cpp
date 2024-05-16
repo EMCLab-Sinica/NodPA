@@ -62,7 +62,7 @@ int64_t get_int64_param(const ParameterInfo *param, size_t i) {
 
 }
 
-uint16_t get_next_slot(Model *model, const ParameterInfo *param) {
+static uint16_t get_next_slot(Model *model) {
     /* pick a unused slot */
     uint16_t next_slot_id = 0;
     uint8_t cycle_count = 0;
@@ -132,7 +132,7 @@ static void handle_node(Model *model, uint16_t node_idx) {
     my_memcpy(output, input[0], sizeof(ParameterInfo) - sizeof(uint16_t)); // don't overwrite parameter_info_idx
     output->params_offset = 0;
     if (!INPLACE_UPDATE_OPS_MAP[cur_node->op_type]) {
-        output->slot = get_next_slot(model, input[0]);
+        output->slot = get_next_slot(model);
     }
 
     allocators[cur_node->op_type](model, input, output, cur_node, cur_node_flags, cur_orig_node_flags);
