@@ -286,6 +286,9 @@ for n in new_nodes:
     for idx, inp in enumerate(n.input):
         n.input[idx] = replaced_nodes_map.get(inp, inp)
 
+del onnx_model.graph.node[:]
+onnx_model.graph.node.extend(new_nodes)
+
 nodes = [ONNXNodeWrapper(n) for n in new_nodes]
 node_flags = ffi.new('struct NodeFlags[]', len(nodes))
 for cur_node_flags in node_flags:

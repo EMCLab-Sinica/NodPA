@@ -232,6 +232,8 @@ void handle_unsqueeze(Model* model, const ParameterInfo* input[], ParameterInfo*
             output_dim_offset++;
         }
     }
+
+    dump_params_debug(model, output, node->output_name, "Unsqueeze");
 }
 
 void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {

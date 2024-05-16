@@ -59,6 +59,7 @@ static void print_integer(LayerOutput* layer_out, int16_t val) {
 void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state) {
 #ifndef __arm__
     my_printf("Scale: %f" NEWLINE, val_info.scale);
+    MY_ASSERT(val_info.scale != 0);
 #endif
     for (size_t j = 0; j < len; j++) {
         print_q15(nullptr, mat[j], val_info, has_state && offset_has_state(j));
@@ -73,6 +74,7 @@ static void dump_params_common(Model* model, const ParameterInfo* cur_param, con
     my_printf("Slot: %d" NEWLINE, cur_param->slot);
 #ifndef __arm__
     my_printf("Scale: %f" NEWLINE, cur_param->scale.toFloat());
+    MY_ASSERT(cur_param->scale.toFloat() != 0);
 #endif
     my_printf("Params len: %" PRId32 NEWLINE, cur_param->params_len);
 #if INDIRECT_RECOVERY
@@ -87,6 +89,7 @@ static void dump_params_common(Model* model, const ParameterInfo* cur_param, con
         }
     }
     my_printf(NEWLINE);
+    my_printf("Channel last: %s" NEWLINE, cur_param->param_flags & CHANNEL_LAST ? "true" : "false");
 
 #ifdef USE_PROTOBUF
     if (layer_name && model_output_data.get()) {
@@ -231,6 +234,7 @@ void dump_turning_points(Model *model, const ParameterInfo *output) {
 void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info, bool has_state) {
 #ifndef __arm__
     my_printf("Scale: %f", val_info.scale);
+    MY_ASSERT(val_info.scale != 0);
 #endif
     if (rows > cols) {
         my_printf(" (transposed)" NEWLINE);
