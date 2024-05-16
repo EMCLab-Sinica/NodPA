@@ -87,7 +87,6 @@ static_assert(sizeof(Model) == 8 + NUM_SLOTS * (2 + INDIRECT_RECOVERY * (2 + TUR
 /**********************************
  *          Global data           *
  **********************************/
-extern ParameterInfo intermediate_parameters_info_vm[MODEL_NODES_LEN];
 extern uint16_t sample_idx;
 
 /**********************************

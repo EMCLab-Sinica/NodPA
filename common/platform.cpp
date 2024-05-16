@@ -16,6 +16,8 @@
 static_assert(COUNTERS_OFFSET >= PARAMETERS_OFFSET + PARAMETERS_DATA_LEN, "Incorrect NVM layout");
 
 Model model_vm;
+const uint8_t NUM_PARAMETER_INFO_SLOTS = 1 + NUM_INPUTS; // ParameterInfo for one output and several inputs
+static ParameterInfo intermediate_parameters_info_vm[NUM_PARAMETER_INFO_SLOTS];
 
 static uint32_t intermediate_values_offset(uint8_t slot_id) {
     return INTERMEDIATE_VALUES_OFFSET + slot_id * INTERMEDIATE_VALUES_SIZE;
@@ -101,6 +103,18 @@ void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
     read_from_nvm(dest, SAMPLES_OFFSET + (sample_idx % LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
 }
 
+static uint8_t get_available_parameter_info_slot() {
+    for (uint8_t parameter_info_slot_idx = 0; parameter_info_slot_idx < NUM_PARAMETER_INFO_SLOTS; parameter_info_slot_idx++) {
+        if (intermediate_parameters_info_vm[parameter_info_slot_idx].parameter_info_idx == 0) {
+            return parameter_info_slot_idx;
+        }
+    }
+
+    MY_ASSERT(false);
+
+    return UINT8_MAX;
+}
+
 ParameterInfo* get_intermediate_parameter_info(uint16_t i) {
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     if (counters_enabled) {
@@ -108,7 +122,7 @@ ParameterInfo* get_intermediate_parameter_info(uint16_t i) {
         my_printf_debug("Recorded %lu bytes of ParameterInfo fetched from NVM" NEWLINE, sizeof(ParameterInfo));
     }
 #endif
-    ParameterInfo* dst = intermediate_parameters_info_vm + i;
+    ParameterInfo* dst = intermediate_parameters_info_vm + get_available_parameter_info_slot();
     read_from_nvm(dst, intermediate_parameters_info_addr(i), sizeof(ParameterInfo));
     my_printf_debug("Load intermediate parameter info %d from NVM" NEWLINE, i);
     MY_ASSERT(dst->parameter_info_idx == i + N_INPUT,
@@ -116,17 +130,22 @@ ParameterInfo* get_intermediate_parameter_info(uint16_t i) {
     return dst;
 }
 
-void commit_intermediate_parameter_info(uint16_t i) {
+void commit_intermediate_parameter_info(const ParameterInfo* param) {
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_write_model), sizeof(ParameterInfo));
         my_printf_debug("Recorded %lu bytes of ParameterInfo written NVM" NEWLINE, sizeof(ParameterInfo));
     }
 #endif
-    const ParameterInfo* src = intermediate_parameters_info_vm + i;
-    MY_ASSERT(src->parameter_info_idx == i + N_INPUT);
-    write_to_nvm(src, intermediate_parameters_info_addr(i), sizeof(ParameterInfo));
-    my_printf_debug("Committing intermediate parameter info %d to NVM" NEWLINE, i);
+    uint16_t node_idx = param->parameter_info_idx - N_INPUT;
+    write_to_nvm(param, intermediate_parameters_info_addr(node_idx), sizeof(ParameterInfo));
+    my_printf_debug("Committing intermediate parameter info %d to NVM" NEWLINE, node_idx);
+}
+
+void flush_intermediate_parameter_info() {
+    for (uint8_t parameter_info_slot_idx = 0; parameter_info_slot_idx < NUM_PARAMETER_INFO_SLOTS; parameter_info_slot_idx++) {
+        intermediate_parameters_info_vm[parameter_info_slot_idx].parameter_info_idx = 0;
+    }
 }
 
 Model* load_model_from_nvm(void) {

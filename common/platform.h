@@ -56,7 +56,8 @@ void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, 
 void my_memcpy_from_parameters(void *dest, const ParameterInfo *param, uint32_t offset_in_bytes, size_t n);
 void read_from_samples(void *dest, uint16_t offset_in_word, size_t n);
 ParameterInfo* get_intermediate_parameter_info(uint16_t i);
-void commit_intermediate_parameter_info(uint16_t i);
+void commit_intermediate_parameter_info(const ParameterInfo* param);
+void flush_intermediate_parameter_info();
 Model* get_model(void);
 Model* load_model_from_nvm(void);
 void commit_model(void);

@@ -14,7 +14,6 @@
 #include "op_utils.h"
 #include "platform.h"
 
-ParameterInfo intermediate_parameters_info_vm[MODEL_NODES_LEN];
 uint16_t sample_idx;
 uint16_t inference_layer_idx = 0;
 
@@ -167,7 +166,8 @@ static void handle_node(Model *model, uint16_t node_idx) {
     my_printf_debug("New output state bit=%d" NEWLINE, get_state_bit(model, output->slot));
 #endif
 
-    commit_intermediate_parameter_info(node_idx);
+    commit_intermediate_parameter_info(output);
+    flush_intermediate_parameter_info(); // flush intermediate ParameterInfo loaded to VM for the next layer
 
     if (node_idx == MODEL_NODES_LEN - 1) {
         model->running = 0;
