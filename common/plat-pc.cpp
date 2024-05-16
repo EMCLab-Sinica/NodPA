@@ -38,6 +38,7 @@ static std::ofstream out_file;
 void save_model_output_data() {
 #ifdef USE_PROTOBUF
     if (out_file.is_open()) {
+        out_file.seekp(0);
         model_output_data->SerializeToOstream(&out_file);
     }
 #endif

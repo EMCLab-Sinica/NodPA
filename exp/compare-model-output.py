@@ -37,16 +37,9 @@ def main():
     with open(args.target, 'rb') as f:
         model_output.ParseFromString(f.read())
 
-    processed_outputs = set()
-
     for layer_out in model_output.layer_out:
         name = layer_out.name
         op_type = layer_out.op_type
-
-        if name in processed_outputs:
-            # print(f'Skipping processed output {name}')
-            continue
-        processed_outputs.add(name)
 
         if name.endswith('_before_merge'):
             continue
