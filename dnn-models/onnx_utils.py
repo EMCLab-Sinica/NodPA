@@ -65,5 +65,5 @@ def compute_parameter_scales(onnx_model: onnx.ModelProto):
     for node in onnx_model.graph.node:
         if node.op_type not in ('Conv', 'Gemm', 'MatMul'):
             continue
-        add_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=node.output[0],
+        add_tensor_annotation(onnx_model, key='Q15_SCALE_TENSOR', tensor_name=node.output[0],
                               data_type=onnx.TensorProto.DataType.FLOAT, vals=get_param_limit(onnx_model, node))

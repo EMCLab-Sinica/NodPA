@@ -565,7 +565,8 @@ for params in parameters:
                 params_data = np.transpose(params_data)
                 param_flags |= 1 << other_flags.index('TRANSPOSED')
 
-            param_scale = find_tensor_annotation(onnx_model, key='Q15_SCLAE_TENSOR', tensor_name=params.name) or config['scale']
+            param_scale = find_tensor_annotation(onnx_model, key='Q15_SCALE_TENSOR', tensor_name=used_node.output[0]) or config['scale']
+            logger.debug('param_scale for %s: %f', params.name, param_scale)
             parameters_slot.target.write(to_bytes(_Q15(params_data / param_scale, 'Parameter')))
         elif params.data_type == onnx.TensorProto.INT64:
             param_size = 8
