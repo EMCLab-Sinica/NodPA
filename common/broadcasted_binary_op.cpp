@@ -9,7 +9,7 @@
 #include "platform.h"
 #include <cstdint>
 
-typedef void (*vector_op)(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size);
+typedef void (*vector_op)(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size, bool cached_y);
 
 static struct {
     uint8_t X_num_dims;
@@ -157,6 +157,8 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
     buffer_size_without_footprints = offset_without_footprints(buffer_size);
 #endif
 
+    uint32_t cached_Y_value_offset = UINT32_MAX;
+
     while (data_offset < output->params_len / sizeof(int16_t)) {
         uint16_t cur_buffer_size = buffer_size - (data_offset % buffer_size);
 
@@ -167,6 +169,8 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
 
         uint32_t X_value_offset = get_broadcast_index(X_dims, binary_op_params.X_num_dims, output_indices, X_strides),
                  Y_value_offset = get_broadcast_index(Y_dims, binary_op_params.Y_num_dims, output_indices_without_footprints, Y_strides);
+
+        bool cached_y = (cached_Y_value_offset == Y_value_offset);
 
         my_printf_debug(NEWLINE "X_value_offset=%d, Y_value_offset=%d, data_offset=%d" NEWLINE,
                         X_value_offset, Y_value_offset, data_offset);
@@ -203,24 +207,28 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
         }
 
         if (broadcasted_Y) {
-            my_memcpy_from_param(model, buffer_y, Y, Y_value_offset, sizeof(int16_t));
-            my_printf_debug("Y" NEWLINE);
-            dump_matrix_debug(buffer_y, 1, ValueInfo(Y));
+            if (!cached_y) {
+                my_memcpy_from_param(model, buffer_y, Y, Y_value_offset, sizeof(int16_t));
+                my_printf_debug("Y" NEWLINE);
+                dump_matrix_debug(buffer_y, 1, ValueInfo(Y));
+            }
 
-            broadcasted_vector_op(X, Y, buffer_x, buffer_y, cur_buffer_size);
+            broadcasted_vector_op(X, Y, buffer_x, buffer_y, cur_buffer_size, cached_y);
         } else {
-            my_memcpy_from_param(model, buffer_y, Y, Y_value_offset, cur_buffer_size_without_footprints * sizeof(int16_t));
+            if (!cached_y) {
+                my_memcpy_from_param(model, buffer_y, Y, Y_value_offset, cur_buffer_size_without_footprints * sizeof(int16_t));
 
 #if JAPARI
-            start_cpu_counter(offsetof(Counters, embedding));
-            move_weights(buffer_y, false, buffer_size, buffer_size_without_footprints);
-            stop_cpu_counter();
+                start_cpu_counter(offsetof(Counters, embedding));
+                move_weights(buffer_y, false, buffer_size, buffer_size_without_footprints);
+                stop_cpu_counter();
 #endif
 
-            my_printf_debug("Y" NEWLINE);
-            dump_matrix_debug(buffer_y, cur_buffer_size, ValueInfo(Y));
+                my_printf_debug("Y" NEWLINE);
+                dump_matrix_debug(buffer_y, cur_buffer_size, ValueInfo(Y));
+            }
 
-            non_broadcasted_vector_op(X, Y, buffer_x, buffer_y, cur_buffer_size);
+            non_broadcasted_vector_op(X, Y, buffer_x, buffer_y, cur_buffer_size, cached_y);
         }
 
         my_printf_debug("After computation" NEWLINE);
@@ -258,6 +266,8 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
 #endif
 
         data_offset += cur_buffer_size;
+
+        cached_Y_value_offset = Y_value_offset;
     }
 
 #if INDIRECT_RECOVERY
@@ -275,16 +285,18 @@ void alloc_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output
     output->scale = X->scale * Y->scale;
 }
 
-static void broadcasted_vector_mul(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size) {
-    int16_t scaleFract;
-    uint8_t shift;
+static void broadcasted_vector_mul(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size, bool cached_y) {
+    static int16_t scaleFract;
+    static uint8_t shift;
 
-    float_to_scale_params(&scaleFract, &shift, q15_to_float(*buffer_y, ValueInfo(Y), /*p_use_prefix=*/nullptr, /*has_state=*/false));
+    if (!cached_y) {
+        float_to_scale_params(&scaleFract, &shift, q15_to_float(*buffer_y, ValueInfo(Y), /*p_use_prefix=*/nullptr, /*has_state=*/false));
+    }
 
     my_scale_q15(buffer_x, scaleFract, shift, buffer_x, buffer_size);
 }
 
-static void non_broadcasted_vector_mul(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size) {
+static void non_broadcasted_vector_mul(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size, bool cached_y) {
     my_vector_mult_q15(buffer_x, buffer_y, buffer_x, buffer_size);
 }
 
@@ -300,25 +312,28 @@ void handle_mul(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     }
 }
 
-#if 1
 void alloc_add(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     alloc_broadcasted_binary_op(model, input, output, node, node_flags, orig_node_flags);
 }
 
-static void align_scale(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_y, uint16_t buffer_size) {
+static void align_scale(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_y, uint16_t buffer_size, bool cached_y) {
+    if (cached_y) {
+        return;
+    }
+
     int16_t scaleFract;
     uint8_t shift;
     float_to_scale_params(&scaleFract, &shift, Y->scale/X->scale);
     my_scale_q15(buffer_y, scaleFract, shift, buffer_y, buffer_size);
 }
 
-static void broadcasted_vector_add(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size) {
-    align_scale(X, Y, buffer_y, buffer_size);
+static void broadcasted_vector_add(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size, bool cached_y) {
+    align_scale(X, Y, buffer_y, buffer_size, cached_y);
     my_offset_q15(buffer_x, *buffer_y, buffer_x, buffer_size);
 }
 
-static void non_broadcasted_vector_add(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size) {
-    align_scale(X, Y, buffer_y, buffer_size);
+static void non_broadcasted_vector_add(const ParameterInfo* X, const ParameterInfo* Y, int16_t* buffer_x, int16_t* buffer_y, uint16_t buffer_size, bool cached_y) {
+    align_scale(X, Y, buffer_y, buffer_size, cached_y);
     my_add_q15(buffer_x, buffer_y, buffer_x, buffer_size);
 }
 
@@ -333,4 +348,3 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
         dump_params_debug(model, output, node->output_name, "Add");
     }
 }
-#endif
