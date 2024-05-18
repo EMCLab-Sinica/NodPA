@@ -52,10 +52,6 @@ struct SoftmaxNodeFlags {
     int8_t axis;
 };
 
-struct AddNodeFlags {
-    int8_t weights_broadcasted_dim;
-};
-
 struct ArgMaxNodeFlags {
     uint8_t axis;
     uint8_t keepdims;
@@ -78,7 +74,6 @@ struct NodeFlags {
         struct ConcatNodeFlags concat;
         struct TransposeNodeFlags transpose;
         struct SoftmaxNodeFlags softmax;
-        struct AddNodeFlags add;
         struct ArgMaxNodeFlags arg_max;
         struct GatherNodeFlags gather;
         uint8_t as_bytes[NODE_FLAGS_SIZE];

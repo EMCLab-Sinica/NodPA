@@ -27,7 +27,6 @@ from utils import (
     INPLACE_UPDATE_OPS,
     THIS_DIR,
     add_multi_stage_nodes,
-    broadcast_add,
     ensure_non_negative_axis,
     get_attr,
     get_parameter_dims,
@@ -394,11 +393,6 @@ for idx, n in enumerate(nodes):
         # Make sure constants are in the second input is one of inputs contain constants
         if len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):
             n.input = [n.input[1], n.input[0]]
-
-        weights_broadcasted_dims = broadcast_add(onnx_model, n)
-        weights_broadcasted_dim = weights_broadcasted_dims[0] if weights_broadcasted_dims else -1
-        node_flags[idx].add.weights_broadcasted_dim = weights_broadcasted_dim
-        logger.debug('%s: weights_broadcasted_dim=%d', n.name, weights_broadcasted_dim)
 
     if n.op_type == 'ArgMax':
         # https://onnx.ai/onnx/operators/onnx__ArgMax.html#argmax-13
