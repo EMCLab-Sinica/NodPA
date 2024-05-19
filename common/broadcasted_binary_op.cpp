@@ -15,6 +15,7 @@ static struct {
     uint8_t X_num_dims;
     uint8_t Y_num_dims;
     uint8_t output_num_dims;
+    bool channel_last;
 } binary_op_params;
 
 static void alloc_broadcasted_binary_op(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags*, const NodeFlags*) {
@@ -25,6 +26,7 @@ static void alloc_broadcasted_binary_op(Model *model, const ParameterInfo *input
     binary_op_params.X_num_dims = count_dims(X);
     binary_op_params.Y_num_dims = count_dims(Y);
     binary_op_params.output_num_dims = MAX_VAL(binary_op_params.X_num_dims, binary_op_params.Y_num_dims);
+    binary_op_params.channel_last = ((X->param_flags | Y->param_flags) & CHANNEL_LAST) != 0;
 
     uint8_t X_dim_offset = binary_op_params.output_num_dims - binary_op_params.X_num_dims,
             Y_dim_offset = binary_op_params.output_num_dims - binary_op_params.Y_num_dims;
@@ -53,6 +55,10 @@ static void alloc_broadcasted_binary_op(Model *model, const ParameterInfo *input
     }
 
     recalculate_params_len(output);
+
+    if (binary_op_params.channel_last) {
+        output->param_flags |= CHANNEL_LAST;
+    }
 }
 
 static uint32_t get_broadcast_index(const uint16_t input_dims[], uint8_t input_num_dims, const uint16_t output_indices[], const uint32_t strides[]) {
@@ -109,7 +115,7 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
     // Map dimensions for CHANNEL_LAST
     const uint16_t *X_dims, *Y_dims, *output_dims;
     uint16_t X_mapped_dims[MAX_NUM_DIMS], Y_mapped_dims[MAX_NUM_DIMS], output_mapped_dims[MAX_NUM_DIMS];
-    if (X->param_flags & CHANNEL_LAST) {
+    if (binary_op_params.channel_last) {
         map_dims_channel_last(X->dims, X_mapped_dims, binary_op_params.X_num_dims);
         map_dims_channel_last(Y->dims, Y_mapped_dims, binary_op_params.Y_num_dims);
         map_dims_channel_last(output->dims, output_mapped_dims, binary_op_params.output_num_dims);
@@ -198,7 +204,7 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
 
         bool broadcasted_Y;
 #if JAPARI
-        if (X->param_flags & CHANNEL_LAST) {
+        if (binary_op_params.channel_last) {
             broadcasted_Y = (X_last_dim != Y_last_dim * 2);
         } else
 #endif
@@ -305,7 +311,7 @@ void handle_mul(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 
     handle_broadcastd_binary_op(model, input, output, node, node_flags, orig_node_flags, broadcasted_vector_mul, non_broadcasted_vector_mul);
 
-    if (input[0]->param_flags & CHANNEL_LAST) {
+    if (binary_op_params.channel_last) {
         dump_params_nhwc_debug(model, output, node->output_name, "Mul");
     } else {
         dump_params_debug(model, output, node->output_name, "Mul");
@@ -342,7 +348,7 @@ void handle_add(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 
     handle_broadcastd_binary_op(model, input, output, node, node_flags, orig_node_flags, broadcasted_vector_add, non_broadcasted_vector_add);
 
-    if (input[0]->param_flags & CHANNEL_LAST) {
+    if (binary_op_params.channel_last) {
         dump_params_nhwc_debug(model, output, node->output_name, "Add");
     } else {
         dump_params_debug(model, output, node->output_name, "Add");
