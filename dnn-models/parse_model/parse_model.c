@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -101,6 +102,16 @@ static void handle_tensor(Onnx__TensorProto *tensor) {
     }
 }
 
+static void handle_quantization_annotation(Onnx__TensorAnnotation* annotation) {
+    size_t i;
+
+    printf("tensor_name=%s\n", annotation->tensor_name);
+    for (i = 0; i < annotation->n_quant_parameter_tensor_names; i++) {
+        Onnx__StringStringEntryProto* entry = annotation->quant_parameter_tensor_names[i];
+        printf("key=%s value=%s\n", entry->key, entry->value);
+    }
+}
+
 int main(void) {
   Onnx__ModelProto *msg;
   size_t i, j, k;
@@ -192,6 +203,10 @@ int main(void) {
   printf("\nValue info:\n");
   for (i = 0; i < graph->n_value_info; i++) {
       handle_value_info(graph->value_info[i]);
+  }
+  printf("\nQuantization annotations:\n");
+  for (i = 0; i < graph->n_quantization_annotation; i++) {
+      handle_quantization_annotation(graph->quantization_annotation[i]);
   }
 
   onnx__model_proto__free_unpacked(msg, NULL);
