@@ -53,7 +53,7 @@ def dims_from_value_info(value_info: onnx.ValueInfoProto):
     return dims
 
 def get_param_limit(model: onnx.ModelProto, node: onnx.NodeProto):
-    param_limit = 0
+    param_limit = 1
     for input_idx, input_ in enumerate(node.input):
         initializer = find_initializer(model, input_)
         if initializer is None:
