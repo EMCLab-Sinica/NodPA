@@ -288,7 +288,7 @@ for n in new_nodes:
 del onnx_model.graph.node[:]
 onnx_model.graph.node.extend(new_nodes)
 
-nodes = [ONNXNodeWrapper(n) for n in new_nodes]
+nodes = [ONNXNodeWrapper(n) for n in onnx_model.graph.node]
 node_flags = ffi.new('struct NodeFlags[]', len(nodes))
 for cur_node_flags in node_flags:
     cur_node_flags.canary = 0x55
@@ -404,6 +404,17 @@ for idx, n in enumerate(nodes):
         # https://onnx.ai/onnx/operators/onnx__Gather.html#gather-13
         axis = get_attr(n, 'axis') or 0
         node_flags[idx].gather.axis = ensure_non_negative_axis(onnx_model, n, axis)
+
+    if n.op_type == 'AveragePool':
+        # https://onnx.ai/onnx/operators/onnx__AveragePool.html#averagepool-11
+        kernel_shape = get_attr(n, 'kernel_shape')
+        assert kernel_shape
+        auto_pad = get_attr(n, 'auto_pad') or 'NOTSET'
+        pads = get_attr(n, 'pads')
+
+        input_dims = get_parameter_dims(onnx_model, n.input[0])
+        if kernel_shape == input_dims[2:] and (auto_pad == 'NOTSET' and set(pads) == {0} or auto_pad == 'VALID'):
+            n.orig_node.op_type = 'GlobalAveragePool'
 
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
