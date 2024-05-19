@@ -359,11 +359,11 @@ for idx, n in enumerate(nodes):
             node_flags[idx].squeeze.axes |= (1 << ensure_non_negative_axis(onnx_model, n, axis))
 
     if n.op_type in ('Gemm', 'MatMul'):
-        node_flags[idx].gemm.input_dims = get_parameter_dims(onnx_model, n.input[0])
-        node_flags[idx].gemm.weight_dims = get_parameter_dims(onnx_model, n.input[1])
+        node_flags[idx].gemm.input_dims = len(get_parameter_dims(onnx_model, n.input[0]))
+        node_flags[idx].gemm.weight_dims = len(get_parameter_dims(onnx_model, n.input[1]))
         logger.debug('%s: input_dims=%d weight_dims=%d', n.name, node_flags[idx].gemm.input_dims, node_flags[idx].gemm.weight_dims)
     if n.op_type in ('GemmStage2', 'MatMulStage2'):
-        node_flags[idx].gemm_stage2.input_dims = get_parameter_dims(onnx_model, n.input[0])
+        node_flags[idx].gemm_stage2.input_dims = len(get_parameter_dims(onnx_model, n.input[0]))
         node_flags[idx].gemm_stage2.tile_length = config['gemm_tile_length']
 
     if n.op_type == 'Concat':

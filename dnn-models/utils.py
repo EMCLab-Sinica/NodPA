@@ -10,7 +10,7 @@ import struct
 import sys
 import tarfile
 import zipfile
-from typing import Callable, Iterator, NamedTuple, Optional
+from typing import Callable, Iterator, NamedTuple, Optional, Union
 from urllib.request import urlretrieve
 
 import filelock
@@ -182,7 +182,7 @@ def ensure_non_negative_axis(onnx_model: onnx.ModelProto, node: onnx.NodeProto, 
     # In many ONNX operators, a negative axis means counting back from the last dimension
 
     if axis < 0:
-        axis += get_parameter_dims(onnx_model, node.input[0])
+        axis += len(get_parameter_dims(onnx_model, node.input[0]))
 
     return axis
 
@@ -528,14 +528,14 @@ def split2slice(orig_model: onnx.ModelProto):
 
     return model
 
-def get_parameter_dims(onnx_model: onnx.ModelProto, parameter_name):
+def get_parameter_dims(onnx_model: onnx.ModelProto, parameter_name) -> list[Union[str, int]]:
     initializer = find_initializer(onnx_model, parameter_name)
     if initializer:
-        return len(initializer.dims)
+        return initializer.dims
 
     input_value_info = find_tensor_value_info(onnx_model, parameter_name)
-    input_shape = input_value_info.type.tensor_type.shape
-    return len(input_shape.dim)
+    input_shape: onnx.TensorShapeProto = input_value_info.type.tensor_type.shape
+    return [dim.dim_value or dim.dim_param for dim in input_shape.dim]
 
 def remove_trailing_softmax(onnx_model: onnx.ModelProto):
     '''Modify the model, such that if the last node is Softmax, remove that last node to avoid unnecessary computation.
