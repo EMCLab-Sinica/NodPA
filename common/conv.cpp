@@ -153,7 +153,7 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
     uint16_t output_h = (cur_input_h - conv_params->input_h_first) / layer_dims->STRIDE_H,
              output_w = (conv_params->input_w - conv_params->input_w_first) / layer_dims->STRIDE_W;
     // use NWHC so that output is written continuously on the address space
-    uint16_t cur_output_data_offset =
+    uint32_t cur_output_data_offset =
              layer_dims->OUTPUT_W * layer_dims->OUTPUT_H * (conv_params->input_tile_c_index * layer_dims->OUTPUT_CHANNEL) +  // n
              output_w * layer_dims->OUTPUT_H * layer_dims->OUTPUT_CHANNEL +                                                   // w
              output_h * layer_dims->OUTPUT_CHANNEL +                                                                           // h
@@ -358,7 +358,7 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
     compare_vm_nvm(matrix_mpy_results, conv_params->model, conv_params->output, cur_output_data_offset, values_to_preserve);
     /* END dump data */
 
-    my_printf_debug("output_data offset = %d" NEWLINE, cur_output_data_offset);
+    my_printf_debug("output_data offset = %" PRIu32 NEWLINE, cur_output_data_offset);
 
     MY_ASSERT(cur_output_data_offset + n_filters < INTERMEDIATE_VALUES_SIZE * NUM_SLOTS);
 
@@ -1088,7 +1088,7 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
             my_printf_debug("real_chunk_len = %d" NEWLINE, real_chunk_len);
             for (uint16_t input_tile_c_index = 0; input_tile_c_index < n_tiles_c; input_tile_c_index++) {
                 int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
-                uint16_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
+                uint32_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
                 my_memcpy_from_param(model, to_add, data, cur_input_offset, real_chunk_len * sizeof(int16_t));
 #if JAPARI && ENABLE_COUNTERS
                 add_counter(offsetof(Counters, data_loading), (real_chunk_len/2)*(4*8));

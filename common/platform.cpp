@@ -53,7 +53,7 @@ static void notify_progress(void) {
 #endif
 }
 
-void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear) {
+void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear) {
     MY_ASSERT(param->slot < NUM_SLOTS);
     uint32_t total_offset = param->params_offset + offset_in_word * sizeof(int16_t);
     MY_ASSERT(total_offset + n <= param->params_len);
@@ -81,7 +81,7 @@ void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const voi
     notify_progress();
 }
 
-void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n) {
+void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n) {
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_job_outputs), n);
@@ -92,7 +92,7 @@ void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, 
     read_from_nvm(dest, intermediate_values_offset(param->slot) + offset_in_word * sizeof(int16_t), n);
 }
 
-void read_from_samples(void *dest, uint16_t offset_in_word, size_t n) {
+void read_from_samples(void *dest, uint32_t offset_in_word, size_t n) {
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_job_outputs), n);

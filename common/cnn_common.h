@@ -118,14 +118,14 @@ uint8_t run_cnn_tests(uint16_t n_samples);
  * Helpers for the model & nodes  *
  **********************************/
 const uint8_t* get_param_base_pointer(const ParameterInfo *param, uint32_t *limit_p);
-int16_t get_q15_param(Model* model, const ParameterInfo *param, uint16_t offset_in_word);
-void put_q15_param(ParameterInfo *param, uint16_t offset_in_word, int16_t val, bool is_linear);
+int16_t get_q15_param(Model* model, const ParameterInfo *param, uint32_t offset_in_word);
+void put_q15_param(ParameterInfo *param, uint32_t offset_in_word, int16_t val, bool is_linear);
 int64_t get_int64_param(const ParameterInfo *param, size_t i);
 const ParameterInfo* get_parameter_info(uint16_t i);
 const Node* get_node(size_t i);
 const Node* get_node(const ParameterInfo* param);
 SlotInfo * get_slot_info(Model* model, uint8_t i);
-void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n);
+void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n);
 
 /**********************************
  *       Operation handlers       *

@@ -33,24 +33,24 @@ SlotInfo* get_slot_info(Model* model, uint8_t i) {
     }
 }
 
-int16_t get_q15_param(Model* model, const ParameterInfo *param, uint16_t i) {
+int16_t get_q15_param(Model* model, const ParameterInfo *param, uint32_t offset_in_word) {
     if (param->slot == SLOT_TEST_SET) {
         int16_t ret;
-        read_from_samples(&ret, i, sizeof(int16_t));
+        read_from_samples(&ret, offset_in_word, sizeof(int16_t));
         return ret;
     } else if (param->slot == SLOT_PARAMETERS) {
         int16_t ret;
-        my_memcpy_from_parameters(&ret, param, i * sizeof(int16_t), sizeof(int16_t));
+        my_memcpy_from_parameters(&ret, param, offset_in_word * sizeof(int16_t), sizeof(int16_t));
         return ret;
     } else {
         int16_t ret;
-        my_memcpy_from_param(model, &ret, param, i, sizeof(int16_t));
+        my_memcpy_from_param(model, &ret, param, offset_in_word, sizeof(int16_t));
         return ret;
     }
 }
 
-void put_q15_param(ParameterInfo *param, uint16_t i, int16_t val, bool is_linear) {
-    my_memcpy_to_param(param, i, &val, sizeof(int16_t), 0, is_linear);
+void put_q15_param(ParameterInfo *param, uint32_t offset_in_word, int16_t val, bool is_linear) {
+    my_memcpy_to_param(param, offset_in_word, &val, sizeof(int16_t), 0, is_linear);
 }
 
 int64_t get_int64_param(const ParameterInfo *param, size_t i) {
@@ -94,7 +94,7 @@ static uint16_t get_next_slot(Model *model) {
     return next_slot_id;
 }
 
-void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n) {
+void my_memcpy_from_param(Model* model, void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n) {
     if (param->slot == SLOT_TEST_SET) {
         read_from_samples(dest, offset_in_word, n);
     } else if (param->slot == SLOT_PARAMETERS) {

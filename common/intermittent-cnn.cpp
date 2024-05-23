@@ -149,7 +149,7 @@ static uint8_t value_finished(Model* model, const ParameterInfo* output, uint32_
 }
 #endif
 
-uint32_t job_index_to_offset(const ParameterInfo *output, uint16_t job_index) {
+uint32_t job_index_to_offset(const ParameterInfo *output, uint32_t job_index) {
 #if STATEFUL
     if (job_index >= output->params_len / sizeof(int16_t)) {
         return job_index;

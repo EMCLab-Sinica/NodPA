@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 struct ParameterInfo;
-typedef void (*data_preservation_func)(struct ParameterInfo *param, uint16_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear);
+typedef void (*data_preservation_func)(struct ParameterInfo *param, uint32_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear);
 void record_overflow_handling_overhead(uint32_t cycles);
 #ifdef __cplusplus
 }

@@ -50,11 +50,11 @@ void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint3
 void my_erase(void);
 void copy_data_to_nvm(void);
 void my_memcpy(void* dest, const void* src, size_t n);
-void my_memcpy_to_param(ParameterInfo *param, uint16_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear);
-void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint16_t offset_in_word, size_t n);
+void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear);
+void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n);
 // offset_in_bytes may go beyond 64K after being multiplied with sizeof(T)
 void my_memcpy_from_parameters(void *dest, const ParameterInfo *param, uint32_t offset_in_bytes, size_t n);
-void read_from_samples(void *dest, uint16_t offset_in_word, size_t n);
+void read_from_samples(void *dest, uint32_t offset_in_word, size_t n);
 ParameterInfo* get_intermediate_parameter_info(uint16_t i);
 void commit_intermediate_parameter_info(const ParameterInfo* param);
 void flush_intermediate_parameter_info();

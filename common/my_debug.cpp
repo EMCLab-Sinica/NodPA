@@ -261,7 +261,7 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
 static const uint16_t BUFFER_TEMP_SIZE = 16;
 static int16_t buffer_temp[BUFFER_TEMP_SIZE];
 
-void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint16_t output_offset, uint16_t blockSize) {
+void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint32_t output_offset, uint16_t blockSize) {
     disable_counters();
     check_buffer_address(vm_data, blockSize);
 
