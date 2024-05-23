@@ -27,6 +27,8 @@ def main():
     parser.add_argument('--topk', type=int, required=True)
     args = parser.parse_args()
 
+    np.seterr(divide = 'raise')
+
     baseline_data: dict[str, np.ndarray] = {}
     model_output = import_model_output_pb2().ModelOutput()
     with open(args.baseline, 'rb') as f:
@@ -55,7 +57,10 @@ def main():
             print(f'ERROR: baseline data shape {cur_baseline_data.shape} != target data shape {cur_target_data.shape}')
             continue
 
-        errors = np.abs(cur_baseline_data - cur_target_data) / max_num
+        if max_num:
+            errors = np.abs(cur_baseline_data - cur_target_data) / max_num
+        else:
+            errors = np.abs(cur_baseline_data - cur_target_data)
 
         # Sort on negative values to get indices for decreasing values
         # https://www.kite.com/python/answers/how-to-use-numpy-argsort-in-descending-order-in-python

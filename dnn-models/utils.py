@@ -50,6 +50,9 @@ audio_ops = ['DecodeWav', 'AudioSpectrogram', 'Mfcc']
 # 1024 transfers = 1024 bytes = 512 Q-15 values
 DMA_Q15_LIMIT = 512
 
+PRUNING_INPUT_CHANNELS = 1
+PRUNING_OUTPUT_CHANNELS = 2
+
 class DataLayout(enum.Enum):
     NEUTRAL = 0
     NCW = 1
@@ -128,13 +131,17 @@ def find_node_by_output(nodes: list[onnx.NodeProto], output_name: str) -> Option
     _, node = find_node_and_idx_by_output(nodes, output_name)
     return node
 
-def find_node_by_input(nodes: list[onnx.NodeProto], input_name: str) -> Optional[onnx.NodeProto]:
-    for node in nodes:
+def find_node_and_idx_by_input(nodes: list[onnx.NodeProto], input_name: str) -> tuple[int, Optional[onnx.NodeProto]]:
+    for idx, node in enumerate(nodes):
         for input_ in node.input:
             if input_ == input_name:
-                return node
+                return idx, node
 
-    return None
+    return -1, None
+
+def find_node_by_input(nodes: list[onnx.NodeProto], input_name: str) -> Optional[onnx.NodeProto]:
+    _, node = find_node_and_idx_by_input(nodes, input_name)
+    return node
 
 def get_attr(node, attr_name):
     for attr in node.attribute:
@@ -402,12 +409,9 @@ def run_model_single(model: onnx.ModelProto, model_data: ModelData, verbose: boo
             layer_out_obj.name = layer_name
             layer_out_obj.op_type = op_type
             layer_out_obj.dims.extend(layer_out.shape)
-            if layer_out.shape:
-                linear_shape = [np.prod(layer_out.shape)]
-                layer_out_obj.value.extend(np.reshape(layer_out, linear_shape))
-            else:
-                # zero-dimension tensor -> scalar
-                layer_out_obj.value.append(layer_out)
+            # needs int to handle zero-dimension tensor (scalar)
+            linear_shape = [int(np.prod(layer_out.shape))]
+            layer_out_obj.value.extend(np.reshape(layer_out, linear_shape))
             model_output.layer_out.append(layer_out_obj)
         last_layer_out = layer_out
     if save_file:

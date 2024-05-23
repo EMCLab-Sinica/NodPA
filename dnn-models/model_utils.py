@@ -12,9 +12,13 @@ import onnxoptimizer
 from utils import (
     INPLACE_UPDATE_OPS,
     MULTIPLE_STAGE_OPS,
+    PRUNING_INPUT_CHANNELS,
+    PRUNING_OUTPUT_CHANNELS,
     find_tensor_value_info,
+    find_node_and_idx_by_input,
     find_node_by_input,
     find_node_and_idx_by_output,
+    find_node_by_output,
 )
 from onnx_utils import (
     dims_from_value_info,
@@ -112,3 +116,45 @@ def remove_tensorflow_input_transpose(onnx_model: onnx.ModelProto):
     onnx_model = onnxoptimizer.optimize(onnx_model, ['eliminate_deadend'])
 
     return onnx_model
+
+def apply_dynamic_channel_pruning(nodes: list[onnx.NodeProto], node_flags: list[Any], config: ConfigType):
+    pruning_threshold = config.get('pruning_threshold', 0)
+
+    if not pruning_threshold:
+        return
+
+    logger.info('pruning_threshold: %f', pruning_threshold)
+
+    for node in nodes:
+        if node.op_type != 'Mul':
+            continue
+
+        decision_head_unsqueeze_node = find_node_by_output(nodes, node.input[0])
+        decision_head_gather_node = find_node_by_output(nodes, decision_head_unsqueeze_node.input[0])
+
+        assert decision_head_gather_node.op_type == 'Gather'
+
+        decision_map = decision_head_gather_node.output[0]
+
+        conv_stage2_node = find_node_by_output(nodes, node.input[1])
+        conv_node_idx, conv_node = find_node_and_idx_by_output(nodes, conv_stage2_node.input[0])
+
+        relu_node = find_node_by_input(nodes, node.output[0])
+        conv_node_after_idx, conv_node_after = find_node_and_idx_by_input(nodes, relu_node.output[0])
+
+        pruning_threshold_q15 = int(pruning_threshold * 2**15)
+        sparsity_q15 = int(config['sparsity'] * 2**15)
+
+        conv_node.input.append(decision_map)
+        conv_flags = node_flags[conv_node_idx].conv
+        conv_flags.pruning_target = PRUNING_OUTPUT_CHANNELS
+        conv_flags.pruning_threshold = pruning_threshold_q15
+        conv_flags.sparsity = sparsity_q15
+
+        conv_node_after.input.append(decision_map)
+        conv_after_flags = node_flags[conv_node_after_idx].conv
+        conv_after_flags.pruning_target = PRUNING_INPUT_CHANNELS
+        conv_after_flags.pruning_threshold = pruning_threshold_q15
+        conv_after_flags.sparsity = sparsity_q15
+
+        logger.debug('Conv node idx=%d, pruning_threshold=%d', conv_node_idx, node_flags[conv_node_idx].conv.pruning_threshold)

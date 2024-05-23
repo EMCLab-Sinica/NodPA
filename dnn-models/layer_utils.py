@@ -8,6 +8,8 @@ import onnx
 
 from utils import (
     DMA_Q15_LIMIT,
+    PRUNING_INPUT_CHANNELS,
+    PRUNING_OUTPUT_CHANNELS,
     find_initializer,
     find_tensor_value_info,
 )
@@ -38,8 +40,16 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
     kH = filter_info.dims[2]
     kW = filter_info.dims[3]
 
-    max_continuous_channels = CHANNEL
-    conv_flags.input_tile_c = max_continuous_channels
+    sparsity = conv_flags.sparsity / 2**15 or 1.0
+
+    if not conv_flags.pruning_threshold or conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:
+        conv_flags.input_tile_c = CHANNEL
+    else:
+        conv_flags.input_tile_c = 1
+        CHANNEL = math.ceil(CHANNEL * sparsity)
+
+    if conv_flags.pruning_threshold and conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:
+        OUTPUT_CHANNEL = math.ceil(OUTPUT_CHANNEL * sparsity)
 
     logger.debug('Initial input_tile_c=%d', conv_flags.input_tile_c)
 
@@ -65,7 +75,13 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
         input_tile_too_large = False
         # inner +1 for biases
         filter_len = ((conv_flags.input_tile_c * kW + 1) + 1) // 2 * 2 * kH
-        output_tile_c = OUTPUT_CHANNEL
+
+        if conv_flags.pruning_threshold and conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:
+            # Not using 1, as LEA requires even dimensions
+            output_tile_c = 2
+        else:
+            output_tile_c = OUTPUT_CHANNEL
+
         while True:
             tile_input_usage = get_tile_input_usage(output_tile_c, filter_len)
             pState_usage = get_pstate_usage(output_tile_c, filter_len)

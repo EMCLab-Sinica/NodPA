@@ -9,7 +9,9 @@ struct ConvNodeFlags {
     uint8_t kernel_shape[2];
     uint8_t strides[2];
     uint8_t group;
-    uint8_t dummy;
+    uint8_t pruning_target;
+    int16_t pruning_threshold;
+    int16_t sparsity;
     uint16_t pState_len;
 };
 
@@ -61,7 +63,7 @@ struct GatherNodeFlags {
     uint8_t axis;
 };
 
-#define NODE_FLAGS_SIZE 16
+#define NODE_FLAGS_SIZE 20
 
 struct NodeFlags {
     union {

@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cinttypes> // for PRId32
+#include <cstdlib>
 #include "cnn_common.h"
 #include "conv.h"
 #include "counters.h"
@@ -35,6 +36,7 @@ typedef struct ConvTaskParams {
     const ParameterInfo *conv_input;
     const ParameterInfo *conv_filter;
     const ParameterInfo *conv_bias;
+    const ParameterInfo *conv_channel_pruning_mask;
     ParameterInfo *output;
     CurNodeFlags* flags;
     const NodeFlags* orig_flags;
@@ -43,6 +45,7 @@ typedef struct ConvTaskParams {
     ConvLayerDimensions layer_dims;
     uint16_t pState_len;
     uint8_t group;
+    uint16_t input_tile_c;
     uint16_t input_tile_c_offset;
     uint16_t input_tile_c_index;
     uint16_t cur_input_tile_c;
@@ -601,6 +604,14 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
     return tile_h;
 }
 
+static void calculate_n_tiles_c(ConvTaskParams* conv_params, const uint16_t CHANNEL) {
+    if (conv_params->flags->conv.sparsity && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
+        conv_params->n_tiles_c = upper_gauss(CHANNEL * conv_params->flags->conv.sparsity >> 15, conv_params->input_tile_c);
+    } else {
+        conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->input_tile_c);
+    }
+}
+
 void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *conv_input = input[0], *conv_filter = input[1];
 
@@ -646,7 +657,10 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     OUTPUT_CHANNEL = extend_for_footprints(OUTPUT_CHANNEL, conv_params->force_align_footprints);
     stop_cpu_counter();
 #endif
-    conv_params->n_tiles_c = (CHANNEL + conv_params->flags->conv.input_tile_c - 1) / conv_params->flags->conv.input_tile_c;
+
+    conv_params->input_tile_c = conv_params->flags->conv.input_tile_c;
+    calculate_n_tiles_c(conv_params, CHANNEL);
+
 #if STATEFUL
     start_cpu_counter(offsetof(Counters, memory_layout));
     if (conv_params->flags->conv.output_tile_c % BATCH_SIZE) {
@@ -657,7 +671,7 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     OUTPUT_CHANNEL += conv_params->output_padding;
     stop_cpu_counter();
 #endif
-    my_printf_debug("input_tile_c=%d, output_tile_c=%d" NEWLINE, conv_params->flags->conv.input_tile_c, conv_params->flags->conv.output_tile_c);
+    my_printf_debug("input_tile_c=%d, output_tile_c=%d" NEWLINE, conv_params->input_tile_c, conv_params->flags->conv.output_tile_c);
 
     /* XXX: extend flags; assume dilation=(1, 1) for now */
     output->params_len = conv_params->n_tiles_c * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * OUTPUT_CHANNEL * sizeof(int16_t);
@@ -706,7 +720,10 @@ static void adapt_conv(ConvTaskParams* conv_params) {
 #endif
 
 void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
-    const ParameterInfo *conv_input = input[0], *conv_filter = input[1], *conv_bias = (node->inputs_len == 3) ? input[2] : nullptr;
+    const ParameterInfo *conv_input = input[0], *conv_filter = input[1], *conv_bias = (node->inputs_len >= 3) ? input[2] : nullptr;
+
+    const ParameterInfo *conv_channel_pruning_mask = (node->inputs_len >= 4) ? input[3] : nullptr;
+
     my_printf_debug("Conv!" NEWLINE);
 
     /* input: N x C x H x W, filter: M x C x kH x kW */
@@ -721,6 +738,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     conv_params->conv_input = conv_input;
     conv_params->conv_filter = conv_filter;
     conv_params->conv_bias = conv_bias;
+    conv_params->conv_channel_pruning_mask = conv_channel_pruning_mask;
     conv_params->output = output;
     conv_params->filter_buffer_addr = NULL;
     conv_params->cached_filter_idx = -1;
@@ -772,7 +790,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     conv_params->input_tile_c_index = first_unfinished_value_offset / slice_size_input_channel_tiling;
     // Not extending for JAPARI footprints here as input_tile_c_offset will be extended later
-    conv_params->input_tile_c_offset = conv_params->input_tile_c_index * conv_params->flags->conv.input_tile_c;
+    conv_params->input_tile_c_offset = conv_params->input_tile_c_index * conv_params->input_tile_c;
     first_unfinished_value_offset %= slice_size_input_channel_tiling;
 
     conv_params->filter_tile_index = (first_unfinished_value_offset % layer_dims->OUTPUT_CHANNEL) / cur_output_tile_c;
@@ -812,11 +830,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #if DYNBAL_REPORT_PARAMETERS
     if (first_unfinished_job_idx == 0) {
         uint16_t node_idx = conv_params->output->parameter_info_idx - N_INPUT;
-        my_printf("%d,%d,%d,", node_idx, conv_params->flags->conv.input_tile_c, conv_params->flags->conv.output_tile_c);
+        my_printf("%d,%d,%d,", node_idx, conv_params->input_tile_c, conv_params->flags->conv.output_tile_c);
     }
 #endif
 
-    conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->flags->conv.input_tile_c);
+    // recalculate n_tiles_c, as tile sizes may be changed during dynamic reconfiguration
+    calculate_n_tiles_c(conv_params, CHANNEL);
     output->params_len = conv_params->n_tiles_c * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
 
 #if ENABLE_DEMO_COUNTERS
@@ -826,10 +845,10 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         // really report costs only once per layer to avoid non-termination
         if (last_reported_layer_idx != conv_params->model->layer_idx) {
             InferenceStats* stats = load_inference_stats_from_nvm(InferenceStatsOpType::Conv);
-            const UsageSpanConv usage_span(*layer_dims, conv_params->flags->conv.input_tile_c, conv_params->flags->conv.output_tile_c, stats->power_cycle_energy);
+            const UsageSpanConv usage_span(*layer_dims, conv_params->input_tile_c, conv_params->flags->conv.output_tile_c, stats->power_cycle_energy);
 
-            uint32_t data_reuse_cost = usage_span.data_reuse_cost(UsageSpanConv::ParameterDimension::InputTileChannel, conv_params->flags->conv.input_tile_c);
-            uint32_t data_refetch_cost = usage_span.data_refetch_cost(UsageSpanConv::ParameterDimension::InputTileChannel, conv_params->flags->conv.input_tile_c);
+            uint32_t data_reuse_cost = usage_span.data_reuse_cost(UsageSpanConv::ParameterDimension::InputTileChannel, conv_params->input_tile_c);
+            uint32_t data_refetch_cost = usage_span.data_refetch_cost(UsageSpanConv::ParameterDimension::InputTileChannel, conv_params->input_tile_c);
             my_printf("U,%" PRIu32 ",%" PRIu32 NEWLINE, data_reuse_cost/1024, data_refetch_cost/1024);
 
             last_reported_layer_idx = conv_params->model->layer_idx;
@@ -839,8 +858,34 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
     int16_t input_channels = conv_filter->dims[1];
-    for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->flags->conv.input_tile_c) {
-        conv_params->cur_input_tile_c = MIN_VAL(conv_params->flags->conv.input_tile_c, input_channels - conv_params->input_tile_c_offset);
+    for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {
+        if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
+            int16_t channel_mask;
+            while (conv_params->input_tile_c_offset < input_channels) {
+                int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
+                channel_mask = get_q15_param(model, conv_channel_pruning_mask, conv_params->input_tile_c_offset);
+
+                my_printf_debug("input_tile_c_offset=%d channel_mask=%d... ", conv_params->input_tile_c_offset, channel_mask);
+
+                Scale inverse_scale = SCALE_ONE / conv_channel_pruning_mask->scale;
+                my_scale_q15(&pruning_threshold, inverse_scale.fract, inverse_scale.shift, &pruning_threshold, 1);
+
+                if (abs(channel_mask) >= pruning_threshold) {
+                    my_printf_debug("running" NEWLINE);
+                    break;
+                }
+                my_printf_debug("skipping" NEWLINE);
+
+                conv_params->input_tile_c_offset += conv_params->input_tile_c;
+            }
+            if (conv_params->input_tile_c_offset >= input_channels) {
+                break;
+            }
+        }
+
+        MY_ASSERT(conv_params->input_tile_c_index < conv_params->n_tiles_c);
+
+        conv_params->cur_input_tile_c = MIN_VAL(conv_params->input_tile_c, input_channels - conv_params->input_tile_c_offset);
         conv_params->cur_filter_tile_c = conv_params->cur_input_tile_c;
 #if JAPARI
         start_cpu_counter(offsetof(Counters, embedding));
@@ -865,13 +910,36 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         conv_params->filter_offset = layer_dims->kH * conv_params->dest_offset;
 
         while (true) {
-            for (; conv_params->input_w <= conv_params->input_w_last; conv_params->input_w += conv_params->layer_dims.STRIDE_W) {
-                for (; conv_params->input_h <= conv_params->input_h_last;) {
-                    conv_params->input_h += handle_conv_inner_loop(model, layer_dims, conv_params);
+            bool skip_current_output_channel = false;
+            if (conv_params->conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
+                int16_t channel_masks[2];
+                int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
+
+                my_memcpy_from_param(model, channel_masks, conv_params->conv_channel_pruning_mask, conv_params->filter_idx, 2*sizeof(int16_t));
+
+                my_printf_debug("filter_idx=%d channel_masks=[%d, %d]... ", conv_params->filter_idx, channel_masks[0], channel_masks[1]);
+
+                Scale inverse_scale = SCALE_ONE / conv_channel_pruning_mask->scale;
+                my_scale_q15(&pruning_threshold, inverse_scale.fract, inverse_scale.shift, &pruning_threshold, 1);
+
+                if (abs(channel_masks[0]) < pruning_threshold && abs(channel_masks[1]) < pruning_threshold) {
+                    my_printf_debug("skipping" NEWLINE);
+                    skip_current_output_channel = true;
+                } else {
+                    my_printf_debug("running" NEWLINE);
                 }
-                conv_params->input_h = conv_params->input_h_first;
-                report_progress();
             }
+
+            if (!skip_current_output_channel) {
+                for (; conv_params->input_w <= conv_params->input_w_last; conv_params->input_w += conv_params->layer_dims.STRIDE_W) {
+                    for (; conv_params->input_h <= conv_params->input_h_last;) {
+                        conv_params->input_h += handle_conv_inner_loop(model, layer_dims, conv_params);
+                    }
+                    conv_params->input_h = conv_params->input_h_first;
+                    report_progress();
+                }
+            }
+
             conv_params->input_w = conv_params->input_w_first;
             conv_params->filter_tile_index++;
             if (conv_params->filter_tile_index * conv_params->flags->conv.output_tile_c >= layer_dims->N_FILTERS) {
@@ -903,6 +971,8 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         stop_cpu_counter();
 #endif
     }
+
+    output->params_len = conv_params->input_tile_c_index * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, table_updates));
@@ -971,7 +1041,7 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
 
     uint32_t tiling_results_len = OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W;
 
-    uint16_t chunk_len = OUTPUT_CHANNEL;
+    uint16_t chunk_len = MIN_VAL(OUTPUT_CHANNEL, LEA_BUFFER_SIZE / n_tiles_c) / 2 * 2;
     uint16_t output_h = 0, output_w = 0, chunk_offset = 0;
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));

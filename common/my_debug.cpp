@@ -71,6 +71,7 @@ void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool
 }
 
 static void dump_params_common(Model* model, const ParameterInfo* cur_param, const char* layer_name, const char* op_type, LayerOutput** p_layer_out) {
+    my_printf("Layer: %s" NEWLINE, layer_name);
     my_printf("Slot: %d" NEWLINE, cur_param->slot);
 #ifndef __arm__
     my_printf("Scale: %f" NEWLINE, cur_param->scale.toFloat());

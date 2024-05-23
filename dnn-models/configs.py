@@ -43,6 +43,10 @@ class ConfigType(TypedDict):
     total_sample_size: NotRequired[int]
     gemm_tile_length: NotRequired[int]
 
+    # For dynamic channel pruning
+    pruning_threshold: NotRequired[float]
+    sparsity: NotRequired[float]
+
 configs: dict[str, ConfigType] = {
     'cifar10': {
         'onnx_model': 'squeezenet_cifar10',

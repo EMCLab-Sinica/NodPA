@@ -43,6 +43,12 @@ struct Scale {
     float toFloat() const;
 };
 
+const Scale SCALE_ONE = {
+    /* .fract = */ 16384,
+    /* .shift = */ 1,
+    /* .dummy = */ 0,
+};
+
 /* ParameterInfo may indicate data from the model (parameters) or intermediate values */
 typedef struct ParameterInfo {
     uint32_t params_offset;

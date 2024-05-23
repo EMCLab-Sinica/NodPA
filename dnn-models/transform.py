@@ -26,6 +26,8 @@ from utils import (
     DataLayout,
     INPLACE_UPDATE_OPS,
     THIS_DIR,
+    PRUNING_INPUT_CHANNELS,
+    PRUNING_OUTPUT_CHANNELS,
     add_multi_stage_nodes,
     ensure_non_negative_axis,
     get_attr,
@@ -50,6 +52,7 @@ from onnx_utils import (
 )
 from model_utils import (
     find_min_range,
+    apply_dynamic_channel_pruning,
 )
 from layer_utils import (
     determine_conv_tile_c,
@@ -103,6 +106,9 @@ class Constants:
     COUNTERS_LEN = 0
 
     FP32_ACCURACY: float = 0.0  # will be filled
+
+    PRUNING_INPUT_CHANNELS = PRUNING_INPUT_CHANNELS
+    PRUNING_OUTPUT_CHANNELS = PRUNING_OUTPUT_CHANNELS
 
 # Some demo codes assume counters are accumulated across layers
 assert not Constants.ENABLE_PER_LAYER_COUNTERS or not Constants.ENABLE_DEMO_COUNTERS, 'ENABLE_PER_LAYER_COUNTERS and ENABLE_DEMO_COUNTERS are mutually exclusive'
@@ -419,6 +425,8 @@ for idx, n in enumerate(nodes):
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
+apply_dynamic_channel_pruning(nodes, node_flags, config)
+
 for idx, node in enumerate(nodes):
     node.inputs = [names[i] for i in node.input]
     for inp in node.inputs:
@@ -426,6 +434,17 @@ for idx, node in enumerate(nodes):
             continue
         used_node = nodes[inp - Constants.N_INPUT]
         used_node.max_output_id = max([idx, used_node.max_output_id])
+
+for node in nodes:
+    if node.op_type not in INPLACE_UPDATE_OPS:
+        continue
+
+    inp = node.inputs[0]
+
+    if inp < Constants.N_INPUT:
+        continue
+
+    node.max_output_id = max([node.max_output_id, nodes[inp - Constants.N_INPUT].max_output_id])
 
 parameters = [None for _ in range(Constants.N_INPUT)]
 
@@ -673,9 +692,6 @@ def nvm_layout():
     remaining_size -= 2*config['total_sample_size']
     # intermediate_values_size should < 65536, or TI's compiler gets confused
     Constants.INTERMEDIATE_VALUES_SIZE = int((remaining_size / config['num_slots']) / 16) * 16
-    if args.target == 'msp430' or True:
-        # TODO: remove the limitation for non-MSP430 platforms. It is there as turning points are 16-bit.
-        Constants.INTERMEDIATE_VALUES_SIZE = min(Constants.INTERMEDIATE_VALUES_SIZE, 65534)
     logger.debug('INTERMEDIATE_VALUES_SIZE=%d', Constants.INTERMEDIATE_VALUES_SIZE)
 
 nvm_layout()
