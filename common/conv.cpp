@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cinttypes> // for PRId32
 #include <cstdlib>
+#include <cstring>
 #include "cnn_common.h"
 #include "conv.h"
 #include "counters.h"
@@ -981,8 +982,20 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     stop_cpu_counter();
 #endif
 
+#if MY_DEBUG >= MY_DEBUG_LAYERS
     my_printf_debug("handle_conv output" NEWLINE);
     dump_params_nhwc_debug(model, output, node->output_name, "Conv");
+    if (conv_params->flags->conv.sparsity && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
+        char output_name[NODE_NAME_LEN];
+        strcpy(output_name, node->output_name);
+        char* replaced = strstr(output_name, ":stage1");
+        strcpy(replaced, ":mask");
+        dump_params_debug(model, conv_channel_pruning_mask, output_name, "ConvChannelMask");
+
+        strcpy(replaced, ":thres"); // pruning threshold, use abbreviation here to avoid buffer overflow
+        dump_matrix(&conv_params->flags->conv.pruning_threshold, /*len=*/1, ValueInfo(1.0f), /*has_state=*/false, output_name, "ConvChannelPruningThreshold");
+    }
+#endif
 }
 
 void alloc_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {

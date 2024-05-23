@@ -56,13 +56,23 @@ static void print_integer(LayerOutput* layer_out, int16_t val) {
     }
 }
 
-void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state) {
+void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state, const char* layer_name, const char* op_type) {
+#ifdef USE_PROTOBUF
+    LayerOutput* layer_out = nullptr;
+    if (layer_name && model_output_data.get()) {
+        layer_out =  model_output_data->add_layer_out();
+        layer_out->set_name(layer_name);
+        layer_out->set_op_type(op_type);
+        layer_out->add_dims(len);
+    }
+#endif
+
 #ifndef __arm__
     my_printf("Scale: %f" NEWLINE, val_info.scale);
     MY_ASSERT(val_info.scale != 0);
 #endif
     for (size_t j = 0; j < len; j++) {
-        print_q15(nullptr, mat[j], val_info, has_state && offset_has_state(j));
+        print_q15(layer_out, mat[j], val_info, has_state && offset_has_state(j));
         if (j && (j % 16 == 15)) {
             my_printf(NEWLINE);
         }

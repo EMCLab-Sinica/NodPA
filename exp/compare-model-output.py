@@ -20,6 +20,11 @@ def get_tensor(layer_out) -> np.ndarray:
         # Mismatched dimensions, which happen when T_n != N - ignoring for now
         return np.array([])
 
+def find_layer_output(model_output, name):
+    for layer_out in model_output.layer_out:
+        if layer_out.name == name:
+            return layer_out
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--baseline', required=True)
@@ -43,13 +48,9 @@ def main():
         name = layer_out.name
         op_type = layer_out.op_type
 
-        if name.endswith('_before_merge'):
-            continue
-
         print(f'Layer output {name}, op_type = {op_type}')
         if name not in baseline_data:
             continue
-        max_num = np.max(np.abs(baseline_data[name]))
         cur_baseline_data = baseline_data[name]
         cur_target_data = get_tensor(layer_out)
 
@@ -57,6 +58,15 @@ def main():
             print(f'ERROR: baseline data shape {cur_baseline_data.shape} != target data shape {cur_target_data.shape}')
             continue
 
+        if op_type == 'ConvStage2':
+            mask_layer_out = find_layer_output(model_output, name + ':mask')
+            if mask_layer_out:
+                channel_masks = get_tensor(mask_layer_out)
+                pruning_threshold = get_tensor(find_layer_output(model_output, name + ':thres'))[0]
+                cur_baseline_data[channel_masks < pruning_threshold] = 0
+                cur_target_data[channel_masks < pruning_threshold] = 0
+
+        max_num = np.max(np.abs(baseline_data[name]))
         if max_num:
             errors = np.abs(cur_baseline_data - cur_target_data) / max_num
         else:
