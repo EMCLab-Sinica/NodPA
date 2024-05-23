@@ -602,7 +602,7 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
         conv_params->filter_idx = conv_params->filter_tile_index * conv_params->flags->conv.output_tile_c;
     }
     // Return the offset for input tiles = output tile size * stride
-    return ((tile_h - conv_params->layer_dims.kH) / conv_params->layer_dims.STRIDE_H + 1) * conv_params->layer_dims.STRIDE_H;
+    return tile_h / conv_params->layer_dims.STRIDE_H * conv_params->layer_dims.STRIDE_H;
 }
 
 static void calculate_n_tiles_c(ConvTaskParams* conv_params, const uint16_t CHANNEL) {
