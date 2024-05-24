@@ -38,7 +38,7 @@ default_graph.add_tensor_list('temperature', True)
 
 
 class DecisionHead(nn.Module):
-    def __init__(self, in_channels, out_channels, action_num, deterministic=False):
+    def __init__(self, in_channels, out_channels, action_num, deterministic=False, pruning_threshold=0):
         super(DecisionHead, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -48,6 +48,7 @@ class DecisionHead(nn.Module):
         self.fc1 = nn.Linear(in_channels, action_num, bias=False)
         self.relu = nn.ReLU()
         self.channel_gates = nn.Parameter(torch.ones(action_num, out_channels))
+        self.pruning_threshold = pruning_threshold
 
     def head_params(self):
         return [self.fc1.weight]
@@ -75,6 +76,9 @@ class DecisionHead(nn.Module):
             onehot_actions.scatter_(1, sampled_actions.unsqueeze(1), 1)
             substitute_actions = (onehot_actions - actions).detach() + actions
             selected_channels = torch.mm(substitute_actions, self.channel_gates)
+
+        if self.pruning_threshold:
+            selected_channels[selected_channels < self.pruning_threshold] = 0
 
         return sampled_actions, selected_channels
 
@@ -105,6 +109,10 @@ def set_deterministic_value(m, deterministic):
 
 def normalize_head_weights(m):
     m.normalize_weights()
+
+
+def set_pruning_threshold(m, pruning_threshold):
+    m.pruning_threshold = pruning_threshold
 
 
 def init_decision_convbn(m, action_num):

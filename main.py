@@ -6,7 +6,8 @@ import argparse
 import os
 
 from decision import default_graph, apply_func, replace_func, \
-    collect_params, set_deterministic_value, normalize_head_weights
+    collect_params, set_deterministic_value, normalize_head_weights, \
+    set_pruning_threshold
 import models
 import misc
 
@@ -24,6 +25,7 @@ parser.add_argument('--lambd', default=0.5, type=float)
 parser.add_argument('--epochs', default=100, type=int)
 parser.add_argument('--log_interval', default=100, type=int)
 parser.add_argument('--train_batch_size', default=128, type=int)
+parser.add_argument('--pruning_threshold', default=0.5, type=float)
 
 args = parser.parse_args()
 
@@ -102,6 +104,7 @@ optimizer_model = torch.optim.SGD(model_params, lr=args.lr, momentum=0.9, weight
 def train(epoch):
     model.train()
     apply_func(model, 'DecisionHead', set_deterministic_value, deterministic=False)
+    apply_func(model, 'DecisionHead', set_pruning_threshold, pruning_threshold=args.pruning_threshold)
     for i, (data, target) in enumerate(trainloader):
         default_graph.clear_all_tensors()
 
@@ -144,6 +147,7 @@ def train(epoch):
 def test():
     model.eval()
     apply_func(model, 'DecisionHead', set_deterministic_value, deterministic=True)
+    apply_func(model, 'DecisionHead', set_pruning_threshold, pruning_threshold=args.pruning_threshold)
     test_loss_ce = []
     test_loss_reg = []
     test_sparsity = []
