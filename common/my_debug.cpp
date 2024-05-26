@@ -57,8 +57,8 @@ static void print_integer(LayerOutput* layer_out, int16_t val) {
 }
 
 void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state, const char* layer_name, const char* op_type) {
-#ifdef USE_PROTOBUF
     LayerOutput* layer_out = nullptr;
+#ifdef USE_PROTOBUF
     if (layer_name && model_output_data.get()) {
         layer_out =  model_output_data->add_layer_out();
         layer_out->set_name(layer_name);
