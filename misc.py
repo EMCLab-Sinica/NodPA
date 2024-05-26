@@ -1,3 +1,4 @@
+import argparse
 from PIL import Image
 import os
 import shutil
@@ -111,3 +112,20 @@ def accuracy(output, target, topk=(1,)):
         correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
+
+def get_basic_argument_parser(default_lr: float, default_wd: float):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--gpu', default='0', type=str)
+    parser.add_argument('--dataset', default='cifar10', type=str)
+    parser.add_argument('--arch', '-a', default='resnet56', type=str)
+    parser.add_argument('--action_num', default=40, type=int)
+    parser.add_argument('--sparsity_level', default=0.7, type=float)
+    parser.add_argument('--lr', default=default_lr, type=float)
+    parser.add_argument('--mm', default=0.9, type=float)
+    parser.add_argument('--wd', default=default_wd, type=float)
+    parser.add_argument('--epochs', default=160, type=int)
+    parser.add_argument('--log_interval', default=100, type=int)
+    parser.add_argument('--train_batch_size', default=128, type=int)
+    parser.add_argument('--pruning_threshold', default=0.5, type=float)
+
+    return parser

@@ -2,7 +2,6 @@ from torchvision import transforms, datasets
 import torch.nn.functional as F
 import numpy as np
 import torch
-import argparse
 import os
 
 from decision import default_graph, apply_func, replace_func, \
@@ -14,18 +13,8 @@ import misc
 np.set_printoptions(precision=2, linewidth=160)
 print = misc.logger.info
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', default='0', type=str)
-parser.add_argument('--dataset', default='cifar10', type=str)
-parser.add_argument('--arch', '-a', default='resnet56', type=str)
-parser.add_argument('--action_num', default=40, type=int)
-parser.add_argument('--sparsity_level', default=0.7, type=float)
-parser.add_argument('--lr', default=0.01, type=float)
+parser = misc.get_basic_argument_parser(default_lr=0.01, default_wd=1e-9)
 parser.add_argument('--lambd', default=0.5, type=float)
-parser.add_argument('--epochs', default=100, type=int)
-parser.add_argument('--log_interval', default=100, type=int)
-parser.add_argument('--train_batch_size', default=128, type=int)
-parser.add_argument('--pruning_threshold', default=0.5, type=float)
 
 args = parser.parse_args()
 
@@ -99,7 +88,7 @@ head_params = default_graph.get_tensor_list('head_params')
 gate_params = default_graph.get_tensor_list('gate_params')
 
 optimizer_gate = torch.optim.Adam(head_params + gate_params, lr=args.lr)
-optimizer_model = torch.optim.SGD(model_params, lr=args.lr, momentum=0.9, weight_decay=1e-9)
+optimizer_model = torch.optim.SGD(model_params, lr=args.lr, momentum=args.mm, weight_decay=args.wd)
 
 def train(epoch):
     model.train()

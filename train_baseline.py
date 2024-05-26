@@ -1,7 +1,6 @@
 from torchvision import transforms, datasets
 import torch.nn.functional as F
 import torch
-import argparse
 import os
 
 import models
@@ -9,16 +8,7 @@ import misc
 
 print = misc.logger.info
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', default='0', type=str)
-parser.add_argument('--dataset', default='cifar10', type=str)
-parser.add_argument('--arch', '-a', default='resnet56', type=str)
-parser.add_argument('--lr', default=0.1, type=float)
-parser.add_argument('--mm', default=0.9, type=float)
-parser.add_argument('--wd', default=1e-4, type=float)
-parser.add_argument('--epochs', default=160, type=int)
-parser.add_argument('--log_interval', default=100, type=int)
-parser.add_argument('--train_batch_size', default=128, type=int)
+parser = misc.get_basic_argument_parser(default_lr=0.1, default_wd=1e-4)
 
 args = parser.parse_args()
 
