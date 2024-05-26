@@ -1042,7 +1042,7 @@ void ConvMergeOutputChunkHandler(uint32_t range_offset, uint16_t range_len, int8
 void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     // Do not use conv_params here as its intialization in alloc_conv and
     // handle_conv might be skipped if the Conv node has finished.
-    const ParameterInfo *data = input[0];
+    const ParameterInfo *data = input[0], *bias = input[2];
     uint16_t OUTPUT_CHANNEL = data->dims[1],
              OUTPUT_H = data->dims[2],
              OUTPUT_W = data->dims[3];
@@ -1051,11 +1051,12 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
 
     uint8_t n_tiles_c = data->params_len / sizeof(int16_t) / (OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W);
 
-    MY_ASSERT(n_tiles_c);
-
     uint32_t tiling_results_len = OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W;
 
-    uint16_t chunk_len = MIN_VAL(OUTPUT_CHANNEL, LEA_BUFFER_SIZE / n_tiles_c) / 2 * 2;
+    uint16_t chunk_len = OUTPUT_CHANNEL;
+    if (n_tiles_c) {
+        chunk_len = MIN_VAL(chunk_len, LEA_BUFFER_SIZE / n_tiles_c) / 2 * 2;
+    }
     uint16_t output_h = 0, output_w = 0, chunk_offset = 0;
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
@@ -1095,30 +1096,45 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
     stop_cpu_counter();
 #endif
 
+    // A special case - when all channels are pruned
+    if (!n_tiles_c) {
+        if (bias) {
+            my_memcpy_from_param(model, lea_buffer, bias, /*offset_in_word=*/0, chunk_len * sizeof(int16_t));
+            Scale newScale = bias->scale / data->scale;
+            my_scale_q15(lea_buffer, newScale.fract, newScale.shift, lea_buffer, chunk_len);
+        } else {
+            my_fill_q15(0, lea_buffer, chunk_len);
+        }
+    }
+
     for (; output_h < OUTPUT_H;) {
         for (; output_w < OUTPUT_W; output_w++) {
             uint16_t real_chunk_len = chunk_len - chunk_offset;
             my_printf_debug("real_chunk_len = %d" NEWLINE, real_chunk_len);
-            for (uint16_t input_tile_c_index = 0; input_tile_c_index < n_tiles_c; input_tile_c_index++) {
-                int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
-                uint32_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
-                my_memcpy_from_param(model, to_add, data, cur_input_offset, real_chunk_len * sizeof(int16_t));
+
+            if (n_tiles_c) {
+                for (uint16_t input_tile_c_index = 0; input_tile_c_index < n_tiles_c; input_tile_c_index++) {
+                    int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
+                    uint32_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
+                    my_memcpy_from_param(model, to_add, data, cur_input_offset, real_chunk_len * sizeof(int16_t));
 #if JAPARI && ENABLE_COUNTERS
-                add_counter(offsetof(Counters, data_loading), (real_chunk_len/2)*(4*8));
+                    add_counter(offsetof(Counters, data_loading), (real_chunk_len/2)*(4*8));
 #endif
 #if STATEFUL
-                start_cpu_counter(offsetof(Counters, stripping));
-                ConvMergeInputChunkHandlerParams params({to_add, cur_input_offset});
-                iterate_chunks(model, data, cur_input_offset, real_chunk_len, ConvMergeInputChunkHandler, &params);
-                stop_cpu_counter();
+                    start_cpu_counter(offsetof(Counters, stripping));
+                    ConvMergeInputChunkHandlerParams params({to_add, cur_input_offset});
+                    iterate_chunks(model, data, cur_input_offset, real_chunk_len, ConvMergeInputChunkHandler, &params);
+                    stop_cpu_counter();
 #endif
-                my_printf_debug(NEWLINE "Input offset %d, input tile %d, output offset %d" NEWLINE, cur_input_offset, input_tile_c_index, output_offset);
-                my_printf_debug("Added chunk" NEWLINE);
-                dump_matrix_debug(to_add, real_chunk_len, ValueInfo(data));
-                if (input_tile_c_index != 0) {
-                    my_add_q15(lea_buffer, to_add, lea_buffer, real_chunk_len);
+                    my_printf_debug(NEWLINE "Input offset %d, input tile %d, output offset %d" NEWLINE, cur_input_offset, input_tile_c_index, output_offset);
+                    my_printf_debug("Added chunk" NEWLINE);
+                    dump_matrix_debug(to_add, real_chunk_len, ValueInfo(data));
+                    if (input_tile_c_index != 0) {
+                        my_add_q15(lea_buffer, to_add, lea_buffer, real_chunk_len);
+                    }
                 }
             }
+
 #if INDIRECT_RECOVERY
 
 #if STATEFUL

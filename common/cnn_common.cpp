@@ -123,6 +123,9 @@ static void handle_node(Model *model, uint16_t node_idx) {
         input[j] = get_parameter_info(input_id[j]);
         // dump_params(input[j]);
     }
+    for (uint16_t j = cur_node->inputs_len; j < NUM_INPUTS; j++) {
+        input[j] = nullptr;
+    }
     my_printf_debug(NEWLINE);
 
     /* Allocate an ParameterInfo for output. Details are filled by

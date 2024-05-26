@@ -29,14 +29,18 @@ from onnx_utils import (
 
 logger = logging.getLogger('intermittent-cnn.utils')
 
+class OperatorProperties(NamedTuple):
+    num_stages: int
+    include_all_inputs: bool = False
+
 INPLACE_UPDATE_OPS = ['Dropout', 'Reshape', 'Squeeze', 'Unsqueeze']
-MULTIPLE_STAGE_OPS: dict[str, int] = {
+MULTIPLE_STAGE_OPS: dict[str, OperatorProperties] = {
     # Split Conv/Gemm/MatMul for merging OFMs from channel tiling
-    'Conv': 2,
-    'Gemm': 2,
-    'MatMul': 2,
+    'Conv': OperatorProperties(num_stages=2, include_all_inputs=True),
+    'Gemm': OperatorProperties(num_stages=2),
+    'MatMul': OperatorProperties(num_stages=2),
     # Split Softmax for normalization over exponential results
-    'Softmax': 2,
+    'Softmax': OperatorProperties(num_stages=2),
 }
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
@@ -205,7 +209,7 @@ def get_model_ops(onnx_model):
     ops = ops.intersection(node.op_type for node in onnx_model.graph.node)
     for op in MULTIPLE_STAGE_OPS.keys():
         if op in ops:
-            for op_stage_idx in range(2, MULTIPLE_STAGE_OPS[op]+1):
+            for op_stage_idx in range(2, MULTIPLE_STAGE_OPS[op].num_stages+1):
                 ops.add(f'{op}Stage{op_stage_idx}')
     ops = sorted(ops)
 
@@ -267,7 +271,7 @@ def add_multi_stage_nodes(model):
 
             n.output[:] = [f'{orig_output_name}:stage1']
 
-            last_op_stage_idx = MULTIPLE_STAGE_OPS[n.op_type]
+            last_op_stage_idx = MULTIPLE_STAGE_OPS[n.op_type].num_stages
             for op_stage_idx in range(2, last_op_stage_idx + 1):
                 new_node = onnx.NodeProto()
                 new_node.name = f'{orig_node_name}:stage{op_stage_idx}'
@@ -277,6 +281,10 @@ def add_multi_stage_nodes(model):
                     new_node.output[:] = [orig_output_name]
                 else:
                     new_node.output[:] = [f'{orig_output_name}:stage{op_stage_idx}']
+
+                if MULTIPLE_STAGE_OPS[n.op_type].include_all_inputs:
+                    new_node.input.extend(n.input[1:])
+
                 new_nodes.append(new_node)
 
     del model.graph.node[:]
