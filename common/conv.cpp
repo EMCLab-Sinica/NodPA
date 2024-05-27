@@ -555,7 +555,8 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
 #endif
     // 1 additional filters for values before transpose
     uint16_t inputs_buffer_end = LEA_BUFFER_SIZE - OUTPUT_LEN - conv_params->pState_len - (max_n_filters + 1) * conv_params->filter_offset;
-    uint16_t tile_h = MIN_VAL(inputs_buffer_end / (conv_params->group * conv_params->dest_offset) - 2 * field_size, layer_dims->H);
+    // Align tile_h with the stride size to make sure the next tile starts from the correct place
+    uint16_t tile_h = MIN_VAL(inputs_buffer_end / (conv_params->group * conv_params->dest_offset) - 2 * field_size, layer_dims->H) / conv_params->layer_dims.STRIDE_H * conv_params->layer_dims.STRIDE_H;
 #if DYNBAL_REPORT_PARAMETERS
     if (conv_params->first_unfinished_job_idx == 0 && !conv_params->reported) {
         my_printf("%d" NEWLINE, tile_h);
@@ -602,8 +603,7 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
         // reset here for further processing
         conv_params->filter_idx = conv_params->filter_tile_index * conv_params->flags->conv.output_tile_c;
     }
-    // Return the offset for input tiles = output tile size * stride
-    return tile_h / conv_params->layer_dims.STRIDE_H * conv_params->layer_dims.STRIDE_H;
+    return tile_h;
 }
 
 static void calculate_n_tiles_c(ConvTaskParams* conv_params, const uint16_t CHANNEL) {
