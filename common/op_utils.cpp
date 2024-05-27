@@ -22,8 +22,8 @@ int16_t op_buffer[OP_BUFFER_LEN];
 static_assert(OUTPUT_LEN <= OP_BUFFER_LEN, "invalid OP buffer size");
 
 #if HAWAII
-static int16_t non_recorded_jobs = 0;
-void hawaii_record_footprints(Model* model, uint16_t vector_len) {
+static uint32_t non_recorded_jobs = 0;
+void hawaii_record_footprints(Model* model, uint32_t vector_len) {
     non_recorded_jobs += vector_len;
 #if 0
     for (; non_recorded_jobs >= BATCH_SIZE; non_recorded_jobs -= BATCH_SIZE) {

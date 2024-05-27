@@ -24,7 +24,7 @@ void iterate_chunks(Model *model, const ParameterInfo *param, uint16_t start_off
 void determine_tile_c(ParameterInfo *param, const ParameterInfo* input, const ParameterInfo *filter = nullptr);
 
 #if HAWAII
-void hawaii_record_footprints(Model* model, uint16_t vector_len);
+void hawaii_record_footprints(Model* model, uint32_t vector_len);
 #endif
 
 #if JAPARI

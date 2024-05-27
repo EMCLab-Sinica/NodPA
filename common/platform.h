@@ -69,6 +69,6 @@ bool read_gpio_flag(GPIOFlag flag);
 void save_model_output_data();
 #if HAWAII
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
-uint16_t read_hawaii_layer_footprint(uint16_t layer_idx);
+uint32_t read_hawaii_layer_footprint(uint16_t layer_idx);
 void reset_hawaii_layer_footprint(uint16_t layer_idx);
 #endif

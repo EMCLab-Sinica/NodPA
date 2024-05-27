@@ -241,8 +241,8 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
     MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
 }
 
-uint16_t read_hawaii_layer_footprint(uint16_t layer_idx) {
-    uint16_t footprint = get_versioned_data<Footprint>(layer_idx)->value;
+uint32_t read_hawaii_layer_footprint(uint16_t layer_idx) {
+    uint32_t footprint = get_versioned_data<Footprint>(layer_idx)->value;
     my_printf_debug("HAWAII layer footprint=%d for layer %d" NEWLINE, footprint, layer_idx);
     MY_ASSERT(footprint % BATCH_SIZE == 0);
     return footprint;
