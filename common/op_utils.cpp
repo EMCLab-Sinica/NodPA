@@ -34,6 +34,18 @@ void hawaii_record_footprints(Model* model, uint32_t vector_len) {
     non_recorded_jobs %= BATCH_SIZE;
 #endif
 }
+
+void hawaii_record_branch_information(Model* model, uint16_t branch_information) {
+    uint32_t footprint_value = get_hawaii_layer_footprint(model->layer_idx);
+    footprint_value = (footprint_value & 0x00FF'FFFF) | (branch_information << 24);
+    set_hawaii_layer_footprint(model->layer_idx, footprint_value);
+}
+
+uint16_t hawaii_extract_branch_information(uint32_t* footprint_value) {
+    uint16_t branch_information = *footprint_value >> 24;
+    *footprint_value &= 0x00FF'FFFF;
+    return branch_information;
+}
 #endif
 
 #if JAPARI

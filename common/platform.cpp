@@ -215,7 +215,7 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 }
 
 #if HAWAII
-Footprint footprints_vm[MODEL_NODES_LEN];
+static Footprint footprints_vm[MODEL_NODES_LEN];
 
 template<>
 uint32_t nvm_addr<Footprint>(uint8_t copy_id, uint16_t layer_idx) {
@@ -232,18 +232,27 @@ const char* datatype_name<Footprint>(void) {
     return "footprint";
 }
 
+uint32_t get_hawaii_layer_footprint(uint16_t layer_idx) {
+    Footprint* footprint_vm = footprints_vm + layer_idx;
+    return footprint_vm->value;
+}
+
+void set_hawaii_layer_footprint(uint16_t layer_idx, uint32_t footprint) {
+    Footprint* footprint_vm = footprints_vm + layer_idx;
+    footprint_vm->value = footprint;
+    commit_versioned_data<Footprint>(layer_idx);
+    my_printf_debug("Write HAWAII layer footprint %d (0x%08x) for layer %d" NEWLINE, footprint_vm->value, footprint_vm->value, layer_idx);
+    MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
+}
+
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
     Footprint* footprint_vm = footprints_vm + layer_idx;
-    footprint_vm->value += n_jobs;
-    MY_ASSERT(footprint_vm->value < INTERMEDIATE_VALUES_SIZE);
-    commit_versioned_data<Footprint>(layer_idx);
-    my_printf_debug("Write HAWAII layer footprint %d for layer %d" NEWLINE, footprint_vm->value, layer_idx);
-    MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
+    set_hawaii_layer_footprint(layer_idx, footprint_vm->value + n_jobs);
 }
 
 uint32_t read_hawaii_layer_footprint(uint16_t layer_idx) {
     uint32_t footprint = get_versioned_data<Footprint>(layer_idx)->value;
-    my_printf_debug("HAWAII layer footprint=%d for layer %d" NEWLINE, footprint, layer_idx);
+    my_printf_debug("HAWAII layer footprint=%d (0x%08x) for layer %d" NEWLINE, footprint, footprint, layer_idx);
     MY_ASSERT(footprint % BATCH_SIZE == 0);
     return footprint;
 }
