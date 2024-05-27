@@ -766,7 +766,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 
-#if BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && BRANCH_AWARE_FOOTPRINTING
     uint16_t branch_information = hawaii_extract_branch_information(&first_unfinished_job_idx);
 #endif
 
@@ -796,7 +796,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     uint16_t slice_size_input_channel_tiling = layer_dims->OUTPUT_W * layer_dims->OUTPUT_H * layer_dims->OUTPUT_CHANNEL;
 
     conv_params->input_tile_c_index = first_unfinished_value_offset / slice_size_input_channel_tiling;
-#if BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && BRANCH_AWARE_FOOTPRINTING
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         conv_params->input_tile_c_offset = branch_information;
     } else
