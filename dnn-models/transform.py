@@ -83,7 +83,7 @@ class Constants:
     NUM_INPUTS = 0  # will be filled during parsing
     N_INPUT = 0
     # Match the size of external FRAM
-    NVM_SIZE = 512 * 1024
+    NVM_SIZE = 1024 * 1024
     ORIG_NVM_SIZE = NVM_SIZE
     INTERMEDIATE_VALUES_SIZE = 0  # will be filled by nvm_layout()
     N_SAMPLES = 1
@@ -125,6 +125,9 @@ def op_flag(flag):
 
 def _Q15(arr, name):
     """Transform a floating point number to TI's fixed point _q15 format"""
+
+    # flatten data here, as the overflow check below assumes a flattened array
+    arr = arr.flatten()
 
     # See DSPLib_1_30_00_02/include/DSPLib_support.h
 
@@ -209,7 +212,7 @@ model_data = config['data_loader'](train=False, target_size=sample_size)
 images, labels = next(iter(model_data.data_loader(limit=Constants.N_SAMPLES)))
 images = images.numpy()
 
-Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model, model_data, verbose=False)[0])
+Constants.FIRST_SAMPLE_OUTPUTS = list(run_model_single(onnx_model_batched, model_data, verbose=False)[0])
 Constants.FP32_ACCURACY = run_model_batched(onnx_model_batched, model_data, verbose=False)
 add_multi_stage_nodes(onnx_model)
 
@@ -395,9 +398,12 @@ for idx, n in enumerate(nodes):
         axis = ensure_non_negative_axis(onnx_model, n, axis)
         node_flags[idx].softmax.axis = axis
         node_flags[idx+1].softmax.axis = axis # stage 2
+
     if n.op_type == 'Add':
         # Make sure constants are in the second input is one of inputs contain constants
-        if len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):
+        # In some cases, no inputs are constants. Swapping inputs may be needed to avoid exploded
+        # quantization scales, which happen when the first input feature map comes after many layers.
+        if config.get('swap_add', False) or len(n.input) == 2 and find_initializer(onnx_model, n.input[0]):
             n.input = [n.input[1], n.input[0]]
 
     if n.op_type == 'ArgMax':
@@ -461,7 +467,7 @@ for params in onnx_model.graph.initializer:
 def nchw2nhwc(arr, dims):
     arr = np.reshape(arr, dims)  # Change flattened to 4-D
     arr = np.transpose(arr, axes=(0, 2, 3, 1))  # NCHW -> NHWC
-    return arr.flatten()  # Change it back to flattened
+    return arr
 
 outputs: dict[str, io.BytesIO] = {
     'parameters': io.BytesIO(),

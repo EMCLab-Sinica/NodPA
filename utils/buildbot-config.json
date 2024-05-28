@@ -250,5 +250,19 @@
             "CONFIG": "--target msp432 --stateful --batch-size 1 transformers --all-samples",
             "LOG_SUFFIX": "transformers_stateful_b1_cmsis"
         }
+    },
+    {
+        "builder_name": "stateful-cnn-cifar10-dnp_ideal_b1",
+        "command_env": {
+            "CONFIG": "--target msp430 --ideal --batch-size 1 cifar10-dnp --all-samples",
+            "LOG_SUFFIX": "cifar10-dnp_ideal_b1"
+        }
+    },
+    {
+        "builder_name": "stateful-cnn-cifar10-dnp_ideal_b1_cmsis",
+        "command_env": {
+            "CONFIG": "--target msp432 --ideal --batch-size 1 cifar10-dnp --all-samples",
+            "LOG_SUFFIX": "cifar10-dnp_ideal_b1_cmsis"
+        }
     }
 ]

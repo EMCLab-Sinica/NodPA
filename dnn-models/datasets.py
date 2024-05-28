@@ -8,7 +8,7 @@ import platformdirs
 import torch
 import torchaudio
 import torchvision.datasets
-from torchvision.transforms import Compose, ToTensor, Resize
+from torchvision.transforms import Compose, ToTensor, Resize, Normalize
 from torch.utils.data import TensorDataset
 
 from utils import (
@@ -21,14 +21,15 @@ from utils import (
     onnxruntime_prepare_model,
 )
 
-def load_data_cifar10(train: bool, target_size: tuple[int, int]) -> ModelData:
+def load_data_cifar10(train: bool, target_size: tuple[int, int], normalized: bool = False) -> ModelData:
     xdg_cache_home = platformdirs.user_cache_path()
-    transforms = Compose([
-        ToTensor(),
-        Resize(size=target_size[-2:], antialias=True),  # H and W from NCHW of ONNX
-    ])
+    transforms = [ToTensor()]
+    if normalized:
+        transforms.append(Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)))
+    transforms.append(Resize(size=target_size[-2:], antialias=True))  # H and W from NCHW of ONNX
+    
     with filelock.FileLock(xdg_cache_home / 'cifar10.lock'):
-        dataset = torchvision.datasets.CIFAR10(root=xdg_cache_home, train=train, download=True, transform=transforms)
+        dataset = torchvision.datasets.CIFAR10(root=xdg_cache_home, train=train, download=True, transform=Compose(transforms))
     return ModelData(dataset=dataset, data_layout=DataLayout.NCHW)
 
 def preprocess_kws_dataset(original_dataset):

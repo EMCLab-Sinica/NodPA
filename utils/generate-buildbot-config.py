@@ -43,6 +43,7 @@ def main() -> None:
         ModelConfig(model='har', **complete_config),
         ModelConfig(model='transformers', **ideal_config),
         ModelConfig(model='transformers', targets=all_targets, approaches=['hawaii', 'stateful'], batch_sizes=[1]),
+        ModelConfig(model='cifar10-dnp', **ideal_config),
     ]
 
     buildbot_configurations = []

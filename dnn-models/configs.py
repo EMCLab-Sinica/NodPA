@@ -1,3 +1,4 @@
+import functools
 from typing import Protocol, TypedDict
 import sys
 
@@ -56,6 +57,19 @@ configs: dict[str, ConfigType] = {
         'data_loader': load_data_cifar10,
         'n_all_samples': 10000,
         'op_filters': 2,
+    },
+    'cifar10-dnp': {
+        'onnx_model': 'cifar_resnet10-batched',
+        'onnx_model_single': 'cifar_resnet10-single',
+        'scale': 1,
+        'input_scale': 5,
+        'num_slots': 4,
+        'data_loader': functools.partial(load_data_cifar10, normalized=True),
+        'n_all_samples': 10000,
+        'op_filters': 2,
+        'pruning_threshold': 0.5,
+        'sparsity': 0.4,
+        'swap_add': True,
     },
     'kws': {
         'onnx_model': 'KWS-DNN_S',
