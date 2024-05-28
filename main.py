@@ -64,7 +64,7 @@ for p in model.parameters():
 print('==> Loading pretrained model...')
 model.load_state_dict(torch.load('logs/pretrained/%s/%s/checkpoint.pth' % (args.dataset, args.arch)))
 
-if args.arch in ['resnet20', 'resnet56']:
+if args.arch.startswith('resnet'):
     from decision import init_decision_basicblock, decision_basicblock_forward
     init_func = init_decision_basicblock
     new_forward = decision_basicblock_forward

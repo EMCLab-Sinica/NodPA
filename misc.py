@@ -117,7 +117,7 @@ def get_basic_argument_parser(default_lr: float, default_wd: float):
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', default='0', type=str)
     parser.add_argument('--dataset', default='cifar10', type=str)
-    parser.add_argument('--arch', '-a', default='resnet56', type=str)
+    parser.add_argument('--arch', '-a', default='resnet10', type=str)
     parser.add_argument('--action_num', default=40, type=int)
     parser.add_argument('--sparsity_level', default=0.7, type=float)
     parser.add_argument('--lr', default=default_lr, type=float)
