@@ -33,6 +33,7 @@
 /* data on NVM, made persistent via mmap() with a file */
 uint8_t *nvm;
 static uint32_t shutdown_counter = UINT32_MAX;
+static bool shutdown_counter_enabled = false;
 static std::ofstream out_file;
 
 void save_model_output_data() {
@@ -83,6 +84,7 @@ int main(int argc, char* argv[]) {
                 break;
             case 'c':
                 shutdown_counter = atol(optarg);
+                shutdown_counter_enabled = true;
                 break;
             case 's':
 #if defined(USE_PROTOBUF) && MY_DEBUG >= MY_DEBUG_LAYERS
@@ -178,7 +180,7 @@ void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
     const uint8_t *src_u = reinterpret_cast<const uint8_t*>(src);
     for (size_t idx = 0; idx < n; idx++) {
         dest_u[idx] = src_u[idx];
-        if (write_to_nvm && counters_enabled) {
+        if (write_to_nvm && counters_enabled && shutdown_counter_enabled) {
             shutdown_counter--;
             if (!shutdown_counter) {
                 exit_with_status(2);
