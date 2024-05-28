@@ -14,7 +14,7 @@ np.set_printoptions(precision=2, linewidth=160)
 print = misc.logger.info
 
 parser = misc.get_basic_argument_parser(default_lr=0.01, default_wd=1e-9)
-parser.add_argument('--lambd', default=0.5, type=float)
+parser.add_argument('--lambd', default=1.0, type=float)
 
 args = parser.parse_args()
 
@@ -178,12 +178,11 @@ for epoch in range(args.epochs):
     train(epoch)
     acc, sparsity = test()
 
-    if sparsity <= args.sparsity_level:
-        print('Save best checkpoint @ Epoch %d, Accuracy = %.4f, Sparsity = %.4f\n' % (
-            epoch, acc, sparsity
-        ))
+    print('Save best checkpoint @ Epoch %d, Accuracy = %.4f, Sparsity = %.4f\n' % (
+        epoch, acc, sparsity
+    ))
 
-        save_checkpoint({
-            'epoch': epoch,
-            'state_dict': model.state_dict(),
-        }, filepath=args.logdir)
+    save_checkpoint({
+        'epoch': epoch,
+        'state_dict': model.state_dict(),
+    }, filepath=args.logdir)
