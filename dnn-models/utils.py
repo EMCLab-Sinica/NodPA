@@ -251,6 +251,9 @@ def load_model(config, model_variant):
     remove_trailing_softmax(onnx_model_single)
     onnx.checker.check_model(onnx_model_single)
 
+    remove_trailing_softmax(onnx_model_batched)
+    onnx.checker.check_model(onnx_model_batched)
+
     return {
         'batched': onnx_model_batched,
         'single': onnx_model_single,
