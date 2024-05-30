@@ -1,8 +1,6 @@
 #include <cmath>
 #include <cstdint>
 
-#include "DSPLib.h"
-
 #include "cnn_common.h"
 #include "counters.h"
 #include "data.h"
@@ -74,7 +72,7 @@ void handle_softmax(Model* model, const ParameterInfo* input[], ParameterInfo* o
             // exponentials
             float val = q15_to_float(lea_buffer[softmax_idx], ValueInfo(output));
             val = std::exp(val);
-            int16_t exp_val = _Q15(val / output->scale.toFloat());
+            int16_t exp_val = static_cast<int16_t>(val / output->scale.toFloat() * (1<<15));
 
 #if INDIRECT_RECOVERY
             // XXX: works with BATCH_SIZE=1 only
