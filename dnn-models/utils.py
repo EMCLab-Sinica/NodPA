@@ -41,6 +41,7 @@ MULTIPLE_STAGE_OPS: dict[str, OperatorProperties] = {
     'MatMul': OperatorProperties(num_stages=2),
     # Split Softmax for normalization over exponential results
     'Softmax': OperatorProperties(num_stages=2),
+    'GlobalAveragePool': OperatorProperties(num_stages=2),
 }
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent

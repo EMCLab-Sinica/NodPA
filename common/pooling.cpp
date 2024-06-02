@@ -1,5 +1,8 @@
 #include <cstddef>
 #include <cstdint>
+#include <cinttypes>
+#include <cstdlib>
+#include <cstring>
 #include "data.h"
 #include "data_structures.h"
 #include "cnn_common.h"
@@ -143,20 +146,6 @@ static uint16_t maxpool_patch(MaxPoolParams *maxpool_params) {
     }
     return output_channel_offset;
 }
-
-#if JAPARI
-static inline void offset_vector(int16_t* const buffer, int16_t offset, uint8_t len, const uint16_t output_offset, const uint16_t next_output_turning_point) {
-    int16_t cur_footprint = (offset == 0x4000 ? 1 : -1);
-    uint8_t reverted = 0;
-    for (uint8_t idx = BATCH_SIZE; idx < len; idx += BATCH_SIZE + 1) {
-        if (output_offset + idx >= next_output_turning_point && !reverted) {
-            cur_footprint = -cur_footprint;
-            reverted = 1;
-        }
-        buffer[idx] = cur_footprint;
-    }
-}
-#endif
 
 void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     my_printf_debug("MaxPool!" NEWLINE);
@@ -369,15 +358,27 @@ finished:
     }
 }
 
+#if STATEFUL
+void strip_states_vector(int16_t* data_buffer, uint16_t len) {
+    start_cpu_counter(offsetof(Counters, stripping));
+    for (int16_t *dest_ptr = data_buffer + BATCH_SIZE - 1; dest_ptr < data_buffer + len; dest_ptr += BATCH_SIZE) {
+        strip_state(dest_ptr);
+    }
+    stop_cpu_counter();
+}
+#endif
+
 void alloc_global_average_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *data = input[0];
 
     MY_ASSERT(data->dims[0] == 1);
     uint16_t output_len = data->dims[1];
 
+    uint16_t H = data->dims[2];
+
     output->dims[0] = output->dims[2] = output->dims[3] = 1;
     output->dims[1] = output_len;
-    output->params_len = output_len * sizeof(int16_t);
+    output->params_len = H * output_len * sizeof(int16_t);
 }
 
 void handle_global_average_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
@@ -391,14 +392,13 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
     first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
     stop_cpu_counter();
 
-#if STATEFUL
+#if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, state_query));
     int16_t offset;
     uint16_t next_output_turning_point;
     uint8_t output_turning_point_idx;
     SlotInfo *output_slot_info;
     find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info, first_unfinished_value_offset, model, output);
-    offset = -offset;
     stop_cpu_counter();
 #endif
 
@@ -406,55 +406,147 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
 
     uint16_t CHANNEL = data->dims[1], H = data->dims[2], W = data->dims[3];
     uint16_t len = H * W;
-    uint16_t output_channel = first_unfinished_value_offset;
-    for (uint16_t input_channel = first_unfinished_value_offset; input_channel < CHANNEL; input_channel++) {
-        int16_t output_val;
-#if JAPARI
-        start_cpu_counter(offsetof(Counters, embedding));
-        bool need_embedding = offset_has_state(input_channel);
-        if (need_embedding) {
-            output_val = -param_state_bit(model, output, output_channel);
+
+    int32_t *accumulation_buffer = reinterpret_cast<int32_t*>(op_buffer);
+    int16_t *data_buffer = lea_buffer;
+
+    uint32_t vector_idx = first_unfinished_value_offset / CHANNEL, vector_offset = vector_idx * W;
+
+    for (; vector_offset < len; vector_offset += W, vector_idx++) {
+        memset(accumulation_buffer, 0, CHANNEL * sizeof(int32_t));
+
+        for (uint16_t vector_idx_inner = 0; vector_idx_inner < W; vector_idx_inner++) {
+            my_memcpy_from_param(model, data_buffer, data, (vector_offset + vector_idx_inner) * CHANNEL, CHANNEL * sizeof(int16_t));
+
+            my_printf_debug("Input vector %d" NEWLINE, vector_offset + vector_idx_inner);
+            dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+
+#if STATEFUL
+            strip_states_vector(data_buffer, CHANNEL);
+            my_printf_debug("Input vector %d after stripping states" NEWLINE, vector_offset + vector_idx_inner);
+            dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+#endif
+
+            my_printf_debug("Accumulated vector" NEWLINE);
+            for (uint16_t idx = 0; idx < CHANNEL; idx++) {
+                accumulation_buffer[idx] += data_buffer[idx];
+                my_printf_debug("% 6" PRId32 " ", accumulation_buffer[idx]);
+            }
+            my_printf_debug(NEWLINE NEWLINE);
         }
+
+        for (uint16_t idx = 0; idx < CHANNEL; idx++) {
+            MY_ASSERT(abs(accumulation_buffer[idx]) < W * 32768);
+            data_buffer[idx] = accumulation_buffer[idx] / W;
+        }
+
+#if INDIRECT_RECOVERY
+        start_cpu_counter(offsetof(Counters, state_query));
+        fill_state_offsets(vector_idx * CHANNEL, CHANNEL, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+        update_states(data_buffer, CHANNEL, true);
         stop_cpu_counter();
-        if (!need_embedding)
 #endif
-        {
-            uint32_t total = 0;
-            for (uint16_t h = 0; h < H; h++) {
-                my_printf_debug("Loading an input row");
-                for (uint16_t w = 0; w < W; w++) {
-                    // Input is from Conv, which uses NHWC
-                    int16_t val = get_q15_param(model, data, h * W * CHANNEL + w * CHANNEL + input_channel);
-                    my_printf_debug(".");
-#if STATEFUL
-                    start_cpu_counter(offsetof(Counters, stripping));
-                    if (offset_has_state(input_channel)) {
-                        strip_state(&val);
-                    }
-                    val *= 2;
-                    stop_cpu_counter();
+
+        my_printf_debug("Output vector %d, offset=%d" NEWLINE, vector_idx, vector_idx * CHANNEL);
+        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+
+        my_memcpy_to_param(output, vector_idx * CHANNEL, data_buffer, CHANNEL * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/0);
+
+#if HAWAII
+        hawaii_record_footprints(model, CHANNEL);
 #endif
-                    total += val;
-                }
-                my_printf_debug(NEWLINE);
-            }
-            output_val = total / len;
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, embedding));
-            output_val /= 2;
-            if (offset_has_state(output_channel)) {
-                start_cpu_counter(offsetof(Counters, state_query));
-                check_next_turning_point(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, output_channel);
-                stop_cpu_counter();
-                output_val += offset;
-            }
-            stop_cpu_counter();
-#endif
-        }
-        put_q15_param(output, output_channel, output_val, false);
-        my_printf_debug("Preserved output feature at offset %d" NEWLINE, output_channel);
-        output_channel++;
     }
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, table_updates));
+    flip_state_bit(model, output);
+    stop_cpu_counter();
+#endif
+
+    dump_params_debug(model, output, node->output_name, "GlobalAveragePool");
+}
+
+void alloc_global_average_pool_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
+    const ParameterInfo *data = input[0];
+
+    uint16_t output_len = data->dims[1];
+
+    output->dims[0] = output->dims[2] = output->dims[3] = 1;
+    output->dims[1] = output_len;
+    output->params_len = output_len * sizeof(int16_t);
+}
+
+void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
+    my_printf_debug("GlobalAveragePoolMerge!" NEWLINE);
+
+    const ParameterInfo *data = input[0];
+
+    uint32_t first_unfinished_value_offset = 0;
+#if INTERMITTENT
+    start_cpu_counter(offsetof(Counters, progress_seeking));
+    first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
+    stop_cpu_counter();
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, state_query));
+    int16_t offset;
+    uint16_t next_output_turning_point;
+    uint8_t output_turning_point_idx;
+    SlotInfo *output_slot_info;
+    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info, first_unfinished_value_offset, model, output);
+    stop_cpu_counter();
+#endif
+
+#endif
+
+    uint16_t CHANNEL = data->dims[1], H = data->params_len / sizeof(int16_t) / CHANNEL;
+
+    int32_t *accumulation_buffer = reinterpret_cast<int32_t*>(op_buffer);
+    int16_t *data_buffer = lea_buffer;
+
+    uint32_t vector_offset = first_unfinished_value_offset, vector_idx = first_unfinished_value_offset / CHANNEL;
+
+    memset(accumulation_buffer, 0, CHANNEL * sizeof(int32_t));
+
+    for (; vector_idx < H; vector_idx++, vector_offset += CHANNEL) {
+        my_memcpy_from_param(model, data_buffer, data, vector_offset, CHANNEL * sizeof(int16_t));
+
+        my_printf_debug("Input vector %d" NEWLINE, vector_idx);
+        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+
+#if STATEFUL
+        strip_states_vector(data_buffer, CHANNEL);
+        my_printf_debug("Input vector %d after stripping states" NEWLINE, vector_idx);
+        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+#endif
+
+        my_printf_debug("Accumulated vector" NEWLINE);
+        for (uint16_t idx = 0; idx < CHANNEL; idx++) {
+            accumulation_buffer[idx] += data_buffer[idx];
+            my_printf_debug("% 6" PRId32 " ", accumulation_buffer[idx]);
+        }
+        my_printf_debug(NEWLINE NEWLINE);
+    }
+
+    for (uint16_t idx = 0; idx < CHANNEL; idx++) {
+        data_buffer[idx] = accumulation_buffer[idx] / H;
+    }
+
+#if INDIRECT_RECOVERY
+    start_cpu_counter(offsetof(Counters, state_query));
+    fill_state_offsets(0, CHANNEL, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
+    update_states(data_buffer, CHANNEL, true);
+    stop_cpu_counter();
+#endif
+
+    my_printf_debug("Output vector" NEWLINE);
+    dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+
+    my_memcpy_to_param(output, 0, data_buffer, CHANNEL * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/0);
+
+#if HAWAII
+    hawaii_record_footprints(model, CHANNEL);
+#endif
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, table_updates));
