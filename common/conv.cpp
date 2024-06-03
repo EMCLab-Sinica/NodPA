@@ -1039,7 +1039,7 @@ void alloc_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo
 #if STATEFUL
 struct ConvMergeInputChunkHandlerParams {
     int16_t *to_add;
-    uint16_t input_offset;
+    uint32_t input_offset;
 };
 
 void ConvMergeInputChunkHandler(uint32_t range_offset, uint16_t range_len, int8_t state_bit, void* _params) {
