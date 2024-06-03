@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include "data.h"
 #include "platform.h"
@@ -38,7 +39,16 @@ void my_printf_wrapper();
 template<typename ...Args>
 void my_assert_impl(const char *file, uint16_t line, uint8_t cond, Args... args) {
     if (!cond) {
-        my_printf("Assertion failed at %s:%d" NEWLINE, file, line);
+        uint16_t path_len = strlen(file);
+        int16_t idx = path_len - 1;
+        while (idx > 0) {
+            if (file[idx] == '/') {
+                break;
+            }
+            idx--;
+        }
+
+        my_printf("Assertion failed at %s:%d" NEWLINE, file + (idx + 1), line);
         my_printf_wrapper(args...);
         ERROR_OCCURRED();
     }
