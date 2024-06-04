@@ -825,7 +825,9 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     my_printf_debug("initial output W = %d" NEWLINE, (conv_params->input_w - conv_params->input_w_first) / conv_params->layer_dims.STRIDE_W);
     my_printf_debug("initial output C = %d" NEWLINE, conv_params->filter_idx);
     // = happens when all values are finished
+#if BRANCH_AWARE_FOOTPRINTING
     MY_ASSERT(conv_params->input_tile_c_index <= conv_params->n_tiles_c);
+#endif
     stop_cpu_counter();
 #endif
 
@@ -902,7 +904,9 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
         }
 
+#if BRANCH_AWARE_FOOTPRINTING
         MY_ASSERT(conv_params->input_tile_c_index < conv_params->n_tiles_c);
+#endif
 
         conv_params->cur_input_tile_c = MIN_VAL(conv_params->input_tile_c, input_channels - conv_params->input_tile_c_offset);
         conv_params->cur_filter_tile_c = conv_params->cur_input_tile_c;

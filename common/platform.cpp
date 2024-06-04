@@ -11,6 +11,7 @@
 #include "my_debug.h"
 #include "intermittent-cnn.h" // for sample_idx
 #include "double_buffering.h"
+#include "op_utils.h"
 
 // put offset checks here as extra headers are used
 static_assert(COUNTERS_OFFSET >= PARAMETERS_OFFSET + PARAMETERS_DATA_LEN, "Incorrect NVM layout");
@@ -56,7 +57,15 @@ static void notify_progress(void) {
 void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const void *src, size_t n, uint16_t timer_delay, bool is_linear) {
     MY_ASSERT(param->slot < NUM_SLOTS);
     uint32_t total_offset = param->params_offset + offset_in_word * sizeof(int16_t);
+
+#if BRANCH_AWARE_FOOTPRINTING
     MY_ASSERT(total_offset + n <= param->params_len);
+#else
+    if (total_offset + n > param->params_len) {
+        return;
+    }
+#endif
+
 #if ENABLE_COUNTERS
     uint32_t n_jobs;
 #if JAPARI

@@ -268,6 +268,8 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
     my_printf(NEWLINE);
 }
 
+#if BRANCH_AWARE_FOOTPRINTING
+
 static const uint16_t BUFFER_TEMP_SIZE = 16;
 static int16_t buffer_temp[BUFFER_TEMP_SIZE];
 
@@ -285,6 +287,12 @@ void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* ou
     }
     enable_counters();
 }
+
+#else
+
+void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint32_t output_offset, uint16_t blockSize) {}
+
+#endif
 
 void check_nvm_write_address_impl(uint32_t nvm_offset, size_t n) {
     if (nvm_offset >= INTERMEDIATE_PARAMETERS_INFO_OFFSET && nvm_offset < MODEL_OFFSET) {
