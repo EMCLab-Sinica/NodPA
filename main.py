@@ -1,13 +1,11 @@
-from torchvision import transforms, datasets
 import torch.nn.functional as F
 import numpy as np
 import torch
 import os
 
-from decision import default_graph, apply_func, replace_func, \
-    collect_params, set_deterministic_value, normalize_head_weights, \
+from decision import default_graph, apply_func, \
+    set_deterministic_value, normalize_head_weights, \
     set_pruning_threshold
-import models
 import misc
 
 np.set_printoptions(precision=2, linewidth=160)
@@ -29,34 +27,10 @@ args.logdir = 'decision-%d/%s-%s/sparsity-%.2f' % (
 )
 misc.prepare_logging(args)
 
-print('==> Preparing data..')
+trainloader, testloader = misc.prepare_data(args.dataset, args.train_batch_size)
 
-if args.dataset == 'cifar10':
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
+model = misc.initialize_model(args.dataset, args.arch, args.num_classes)
 
-    trainset = datasets.CIFAR10(root='./data/cifar10', train=True, download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True, num_workers=2)
-
-    testset = datasets.CIFAR10(root='./data/cifar10', train=False, download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
-
-elif args.dataset == 'cifar100':
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    trainset = datasets.CIFAR100(root='./data/cifar100', train=True, download=True, transform=transform)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True, num_workers=2)
-
-    testset = datasets.CIFAR100(root='./data/cifar100', train=False, download=True, transform=transform)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
-
-print('==> Initializing model...')
-model = models.__dict__['cifar_' + args.arch](args.num_classes)
 model_params = []
 for p in model.parameters():
     model_params.append(p)
@@ -64,24 +38,8 @@ for p in model.parameters():
 print('==> Loading pretrained model...')
 model.load_state_dict(torch.load('logs/pretrained/%s/%s/checkpoint.pth' % (args.dataset, args.arch)))
 
-if args.arch.startswith('resnet'):
-    from decision import init_decision_basicblock, decision_basicblock_forward
-    init_func = init_decision_basicblock
-    new_forward = decision_basicblock_forward
-    module_type = 'BasicBlock'
+misc.transform_model(model, args.arch, args.action_num)
 
-else:
-    from decision import init_decision_convbn, decision_convbn_forward
-    init_func = init_decision_convbn
-    new_forward = decision_convbn_forward
-    module_type = 'ConvBNReLU'
-
-print('==> Transforming model...')
-
-apply_func(model, module_type, init_func, action_num=args.action_num)
-apply_func(model, 'DecisionHead', collect_params)
-replace_func(model, module_type, new_forward)
-apply_func(model, 'DecisionHead', normalize_head_weights)
 model = model.to(args.device)
 
 head_params = default_graph.get_tensor_list('head_params')

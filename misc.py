@@ -5,6 +5,16 @@ import shutil
 import pickle as pkl
 import time
 from datetime import datetime
+from torchvision import transforms, datasets
+import torch
+
+import models
+from decision import (
+    apply_func,
+    collect_params,
+    normalize_head_weights,
+    replace_func,
+)
 
 
 def pil_loader(path):
@@ -129,3 +139,74 @@ def get_basic_argument_parser(default_lr: float, default_wd: float):
     parser.add_argument('--pruning_threshold', default=0.5, type=float)
 
     return parser
+
+def prepare_data(dataset, train_batch_size):
+    print('==> Preparing data..')
+
+    if dataset == 'cifar10':
+        transform_train = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+
+        trainset = datasets.CIFAR10(root='./data/cifar10', train=True, download=True, transform=transform_train)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, shuffle=True, num_workers=2)
+
+        testset = datasets.CIFAR10(root='./data/cifar10', train=False, download=True, transform=transform_test)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+
+    elif dataset == 'cifar100':
+        transform_train = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+
+        transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+
+        trainset = datasets.CIFAR100(root='./data/cifar100', train=True, download=True, transform=transform_train)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, shuffle=True, num_workers=2)
+
+        testset = datasets.CIFAR100(root='./data/cifar100', train=False, download=True, transform=transform_test)
+        testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+
+    return trainloader, testloader
+
+
+def initialize_model(dataset, arch, num_classes):
+    print('==> Initializing model...')
+    if dataset in ['cifar10', 'cifar100']:
+        model = models.__dict__['cifar_' + arch](num_classes)
+
+    return model
+
+def transform_model(model, arch, action_num):
+    if arch.startswith('resnet'):
+        from decision import init_decision_basicblock, decision_basicblock_forward
+        init_func = init_decision_basicblock
+        new_forward = decision_basicblock_forward
+        module_type = 'BasicBlock'
+
+    else:
+        from decision import init_decision_convbn, decision_convbn_forward
+        init_func = init_decision_convbn
+        new_forward = decision_convbn_forward
+        module_type = 'ConvBNReLU'
+
+    print('==> Transforming model...')
+
+    apply_func(model, module_type, init_func, action_num=action_num)
+    apply_func(model, 'DecisionHead', collect_params)
+    replace_func(model, module_type, new_forward)
+    apply_func(model, 'DecisionHead', normalize_head_weights)

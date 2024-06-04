@@ -11,15 +11,9 @@ import onnxsim
 import misc
 from decision import (
     apply_func,
-    collect_params,
-    decision_basicblock_forward,
-    init_decision_basicblock,
-    normalize_head_weights,
-    replace_func,
     set_deterministic_value,
     set_pruning_threshold,
 )
-import models
 
 def optimize_model(pytorch_exported_model: IO[bytes], model_name: str):
     onnx_model = onnx.load_model(pytorch_exported_model)
@@ -40,8 +34,7 @@ def main():
     )
     misc.prepare_logging(args)
 
-    print('==> Initializing model...')
-    model = models.__dict__['cifar_' + args.arch](args.num_classes)
+    model = misc.initialize_model(args.dataset, args.arch, args.num_classes)
 
     print('==> Loading pretrained model...')
     checkpoint = torch.load(
@@ -49,16 +42,7 @@ def main():
         map_location=torch.device('cpu'),
     )
 
-    init_func = init_decision_basicblock
-    new_forward = decision_basicblock_forward
-    module_type = 'BasicBlock'
-
-    print('==> Transforming model...')
-
-    apply_func(model, module_type, init_func, action_num=args.action_num)
-    apply_func(model, 'DecisionHead', collect_params)
-    replace_func(model, module_type, new_forward)
-    apply_func(model, 'DecisionHead', normalize_head_weights)
+    misc.transform_model(model, args.arch, args.action_num)
 
     model.eval()
     apply_func(model, 'DecisionHead', set_deterministic_value, deterministic=True)

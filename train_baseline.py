@@ -1,9 +1,7 @@
-from torchvision import transforms, datasets
 import torch.nn.functional as F
 import torch
 import os
 
-import models
 import misc
 
 print = misc.logger.info
@@ -21,49 +19,9 @@ os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 args.logdir = 'pretrained/%s/%s' % (args.dataset, args.arch)
 misc.prepare_logging(args)
 
-print('==> Preparing data..')
+trainloader, testloader = misc.prepare_data(args.dataset, args.train_batch_size)
 
-if args.dataset == 'cifar10':
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    trainset = datasets.CIFAR10(root='./data/cifar10', train=True, download=True, transform=transform_train)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True, num_workers=2)
-
-    testset = datasets.CIFAR10(root='./data/cifar10', train=False, download=True, transform=transform_test)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
-
-elif args.dataset == 'cifar100':
-    transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
-
-    trainset = datasets.CIFAR100(root='./data/cifar100', train=True, download=True, transform=transform_train)
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.train_batch_size, shuffle=True, num_workers=2)
-
-    testset = datasets.CIFAR100(root='./data/cifar100', train=False, download=True, transform=transform_test)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
-
-print('==> Initializing model...')
-if args.dataset in ['cifar10', 'cifar100']:
-    model = models.__dict__['cifar_' + args.arch](args.num_classes)
+model = misc.initialize_model(args.dataset, args.arch, args.num_classes)
 
 model = model.to(args.device)
 
