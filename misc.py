@@ -7,6 +7,10 @@ import time
 from datetime import datetime
 from torchvision import transforms, datasets
 import torch
+import pathlib
+import numpy as np
+from torch.utils.data import TensorDataset
+import sys
 
 import models
 from decision import (
@@ -16,6 +20,7 @@ from decision import (
     replace_func,
 )
 
+THIS_DIR = pathlib.Path(__file__).absolute().parent
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
@@ -125,9 +130,9 @@ def accuracy(output, target, topk=(1,)):
 
 def get_basic_argument_parser(default_lr: float, default_wd: float):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='cifar10', type=str)
-    parser.add_argument('--arch', '-a', default='resnet10', type=str)
-    parser.add_argument('--action_num', default=40, type=int)
+    parser.add_argument('--dataset', default='har', type=str)
+    parser.add_argument('--arch', '-a', default='har_cnn', type=str)
+    parser.add_argument('--action_num', default=5, type=int)
     parser.add_argument('--sparsity_level', default=0.1, type=float)
     parser.add_argument('--lr', default=default_lr, type=float)
     parser.add_argument('--mm', default=0.9, type=float)
@@ -180,6 +185,31 @@ def prepare_data(dataset, train_batch_size):
         testset = datasets.CIFAR100(root='./data/cifar100', train=False, download=True, transform=transform_test)
         testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
 
+    elif dataset == 'har':
+        # Inspired by https://blog.csdn.net/bucan804228552/article/details/120143943
+        try:
+            orig_sys_path = sys.path.copy()
+            sys.path.append(str(THIS_DIR / 'deep-learning-HAR' / 'utils'))
+            from utilities import read_data, standardize
+
+            archive_dir = os.path.expanduser('~/.cache/UCI HAR Dataset')
+
+            X_train, train_labels, _ = read_data(archive_dir, split='train')
+            _, X_train = standardize(np.random.rand(*X_train.shape), X_train)
+            trainset = TensorDataset(torch.from_numpy(X_train.astype(np.float32)), torch.from_numpy(train_labels-1))
+            trainloader = torch.utils.data.DataLoader(trainset, batch_size=train_batch_size, shuffle=True, num_workers=2)
+
+            X_test, test_labels, _ = read_data(archive_dir, split='test')
+            _, X_test = standardize(np.random.rand(*X_test.shape), X_test)
+            testset = TensorDataset(torch.from_numpy(X_test.astype(np.float32)), torch.from_numpy(test_labels-1))
+            testloader = torch.utils.data.DataLoader(trainset, batch_size=100, shuffle=True, num_workers=2)
+
+        finally:
+            sys.path = orig_sys_path
+
+    else:
+        raise RuntimeError(f'Unknown dataset {dataset}')
+
     return trainloader, testloader
 
 
@@ -187,6 +217,9 @@ def initialize_model(dataset, arch, num_classes):
     print('==> Initializing model...')
     if dataset in ['cifar10', 'cifar100']:
         model = models.__dict__['cifar_' + arch](num_classes)
+
+    elif dataset in ['har']:
+        model = models.har_cnn()
 
     return model
 
@@ -196,6 +229,12 @@ def transform_model(model, arch, action_num):
         init_func = init_decision_basicblock
         new_forward = decision_basicblock_forward
         module_type = 'BasicBlock'
+
+    elif arch == 'har_cnn':
+        from decision import init_decision_conv, decision_conv_forward
+        init_func = init_decision_conv
+        new_forward = decision_conv_forward
+        module_type = 'ConvReLU'
 
     else:
         from decision import init_decision_convbn, decision_convbn_forward

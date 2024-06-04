@@ -51,7 +51,11 @@ def main():
 
     pytorch_exported_model_single = io.BytesIO()
     pytorch_exported_model_batched = io.BytesIO()
-    dummy_input = torch.zeros((1, 3, 32, 32))
+
+    if args.dataset.startswith('cifar'):
+        dummy_input = torch.zeros((1, 3, 32, 32))
+    elif args.dataset == 'har':
+        dummy_input = torch.zeros((1, 9, 128))
 
     onnx_opset = 11
 
@@ -78,8 +82,8 @@ def main():
     pytorch_exported_model_single.seek(0)
     pytorch_exported_model_batched.seek(0)
 
-    optimize_model(pytorch_exported_model_single, f'cifar_{args.arch}-single.onnx')
-    optimize_model(pytorch_exported_model_batched, f'cifar_{args.arch}-batched.onnx')
+    optimize_model(pytorch_exported_model_single, f'{args.dataset}_{args.arch}-single.onnx')
+    optimize_model(pytorch_exported_model_batched, f'{args.dataset}_{args.arch}-batched.onnx')
 
 if __name__ == '__main__':
     main()

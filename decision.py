@@ -137,6 +137,26 @@ def decision_convbn_forward(self, x):
 
 
 
+def init_decision_conv(m, action_num):
+    m.decision_head = DecisionHead(
+        m.conv.in_channels, m.conv.out_channels, action_num
+    )
+
+def decision_conv_forward(self, x):
+    out = self.conv(x)
+
+    sampled_actions, selected_channels = self.decision_head(x)
+
+    default_graph.append_tensor('sampled_actions', sampled_actions)
+    default_graph.append_tensor('selected_channels', selected_channels)
+
+    out = selected_channels.unsqueeze(2).unsqueeze(3) * out
+
+    out = self.relu(out)
+    return out
+
+
+
 def init_decision_basicblock(m, action_num):
     m.decision_head = DecisionHead(
         m.conv1.in_channels, m.conv1.out_channels, action_num
