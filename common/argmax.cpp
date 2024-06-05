@@ -91,7 +91,7 @@ void handle_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* o
             uint32_t base_input_value_offset = idx_before_axis * num_indices_at_axis;
             uint32_t output_value_offset = idx_before_axis;
 
-            my_memcpy_from_param(model, cur_val_buffer, data, base_input_value_offset, num_indices_at_axis);
+            my_memcpy_from_param(model, cur_val_buffer, data, base_input_value_offset, num_indices_at_axis * sizeof(int16_t));
 
             my_max_q15(cur_val_buffer, num_indices_at_axis, &cur_max_val, &cur_max_idx);
 
