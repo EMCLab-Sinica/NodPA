@@ -6,8 +6,6 @@
 #include "data_structures.h"
 #include "layer-defs.h"
 
-extern uint16_t inference_layer_idx;
-
 /**********************************
  *        Data structures         *
  **********************************/
@@ -93,7 +91,7 @@ static_assert(sizeof(Model) == 8 + NUM_SLOTS * (2 + INDIRECT_RECOVERY * (2 + TUR
 /**********************************
  *          Global data           *
  **********************************/
-extern uint16_t sample_idx;
+extern InferenceResults inference_results_vm;
 
 /**********************************
  *         The entry point        *

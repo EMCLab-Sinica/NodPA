@@ -6,6 +6,8 @@
 #include "cnn_common.h"
 #include "counters.h"
 #include "data.h"
+#include "data_structures.h"
+#include "double_buffering.h"
 #include "intermittent-cnn.h"
 #include "layers.h"
 #include "layer-defs.h"
@@ -14,8 +16,22 @@
 #include "op_utils.h"
 #include "platform.h"
 
-uint16_t sample_idx;
-uint16_t inference_layer_idx = 0;
+InferenceResults inference_results_vm;
+
+template<>
+uint32_t nvm_addr<InferenceResults>(uint8_t copy_id, uint16_t) {
+    return INFERENCE_RESULTS_OFFSET + copy_id * sizeof(InferenceResults);
+}
+
+template<>
+InferenceResults* vm_addr<InferenceResults>(uint16_t data_idx) {
+    return &inference_results_vm;
+}
+
+template<>
+const char* datatype_name<InferenceResults>(void) {
+    return "sample_idx";
+}
 
 const ParameterInfo* get_parameter_info(uint16_t i) {
     if (i < N_INPUT) {
@@ -236,7 +252,7 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
     ans_len = MIN_VAL(output_node->dims[1], ans_len);
 
     float output_max = 0;
-    if (sample_idx == 0) {
+    if (inference_results_vm.sample_idx == 0) {
         for (uint16_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
 #if JAPARI
             if (offset_has_state(buffer_idx)) {
@@ -269,7 +285,7 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         }
 #endif
 
-        if (sample_idx == 0) {
+        if (inference_results_vm.sample_idx == 0) {
             uint16_t ofm_idx = buffer_offset;
 #if JAPARI
             ofm_idx = offset_without_footprints(ofm_idx);
@@ -314,43 +330,51 @@ uint8_t run_cnn_tests(uint16_t n_samples) {
     const ParameterInfo *output_node;
 #if MY_DEBUG >= MY_DEBUG_NORMAL
     uint16_t label = -1;
-    uint32_t correct = 0, total = 0;
     if (!n_samples) {
         n_samples = LABELS_DATA_LEN / sizeof(int16_t);
     }
     const uint16_t *labels = reinterpret_cast<const uint16_t*>(labels_data);
 #endif
-    for (uint16_t i = 0; i < n_samples; i++) {
-        sample_idx = i;
+
+    get_versioned_data<InferenceResults>(0);
+    if (inference_results_vm.sample_idx >= n_samples) {
+        inference_results_vm.sample_idx = 0;
+        commit_versioned_data<InferenceResults>(0);
+    }
+
+    for (; inference_results_vm.sample_idx < n_samples; ) {
+        my_printf_debug("Running sample %d" NEWLINE, inference_results_vm.sample_idx);
         run_model(&predicted, &output_node);
 #if MY_DEBUG >= MY_DEBUG_NORMAL
-        label = labels[i];
-        total++;
+        label = labels[inference_results_vm.sample_idx];
+        inference_results_vm.total++;
         if (label == predicted) {
-            correct++;
+            inference_results_vm.correct++;
         }
-        if (i % 100 == 99) {
-            my_printf("Sample %d finished" NEWLINE, sample_idx);
+        if (inference_results_vm.sample_idx % 100 == 99) {
+            my_printf("Sample %d finished" NEWLINE, inference_results_vm.sample_idx);
             // stdout is not flushed at \n if it is not a terminal
             my_flush();
         }
-        my_printf_debug("idx=%d label=%d predicted=%d correct=%d" NEWLINE, i, label, predicted, label == predicted);
+        my_printf_debug("idx=%d label=%d predicted=%d correct=%d" NEWLINE, inference_results_vm.sample_idx, label, predicted, label == predicted);
 #endif
+        inference_results_vm.sample_idx++;
+        commit_versioned_data<InferenceResults>(0);
     }
 #if MY_DEBUG >= MY_DEBUG_NORMAL
     if (n_samples == 1) {
         dump_params(get_model(), output_node, "Output", "Output");
     }
-    my_printf("correct=%" PRId32 " ", correct);
-    my_printf("total=%" PRId32 " ", total);
+    my_printf("correct=%" PRId32 " ", inference_results_vm.correct);
+    my_printf("total=%" PRId32 " ", inference_results_vm.total);
 #ifndef __arm__
-    my_printf("rate=%f" NEWLINE, 1.0*correct/total);
+    my_printf("rate=%f" NEWLINE, 1.0*inference_results_vm.correct/inference_results_vm.total);
 #else
     my_printf(NEWLINE);
 #endif
 
     // Allow only 1% of accuracy drop
-    if (N_SAMPLES == N_ALL_SAMPLES && correct < (FP32_ACCURACY - 0.01) * total) {
+    if (N_SAMPLES == N_ALL_SAMPLES && inference_results_vm.correct < (FP32_ACCURACY - 0.01) * inference_results_vm.total) {
         return 1;
     }
 #endif

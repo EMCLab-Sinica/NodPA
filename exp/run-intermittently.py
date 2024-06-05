@@ -1,6 +1,7 @@
 import argparse
 import logging
 import pathlib
+import random
 import signal
 import tempfile
 import sys
@@ -12,27 +13,37 @@ logger = logging.getLogger('run-intermittently')
 CHUNK_SIZE = 2000
 CHUNK_LINES = 20
 
-def run_one_inference(program, interval, logfile, shutdown_after_writes, power_cycles_limit) -> int:
-    first_run = True
+def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[int, int], power_cycles_limit, n_samples: int) -> int:
+    num_power_cycles = 0
     timeout_counter = 0
+    shutdown_after_writes_lower, shutdown_after_writes_upper = shutdown_after_writes
+
     while True:
-        cmd = [program, '1']
-        if first_run and shutdown_after_writes:
-            cmd.extend(['-c', str(shutdown_after_writes)])
+        shutdown_args = []
+        if shutdown_after_writes_upper == 0:
+            # Only shutdown once
+            if num_power_cycles == 0 and shutdown_after_writes_lower:
+                shutdown_args = ['-c', str(shutdown_after_writes_lower)]
+        else:
+            if shutdown_after_writes_lower:
+                shutdown_args = ['-c', str(random.randint(shutdown_after_writes_lower, shutdown_after_writes_upper))]
+
+        cmd = [program, str(n_samples)] + shutdown_args
+
         with Popen(cmd, stdout=logfile, stderr=logfile) as proc:
             try:
                 kwargs = {}
-                if not shutdown_after_writes:
+                if not shutdown_args:
                     kwargs['timeout'] = interval
                 outs, errs = proc.communicate(**kwargs)
             except TimeoutExpired:
                 timeout_counter += 1
-                if timeout_counter >= power_cycles_limit:
+                if power_cycles_limit > 0 and timeout_counter >= power_cycles_limit:
                     logger.error('The program does not run intermittently')
                     return 3
                 proc.send_signal(signal.SIGINT)
             proc.wait()
-            first_run = False
+            num_power_cycles += 1
             if proc.returncode in (2, -signal.SIGINT):
                 # simulated power failure
                 continue
@@ -43,6 +54,8 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes, power_c
             last_chunk = logfile.read()
             print('\n'.join(last_chunk.decode('ascii').split('\n')[-CHUNK_LINES:]))
 
+            print(f'Number of power cycles: {num_power_cycles}')
+
             if proc.returncode in (1, -signal.SIGFPE, -signal.SIGSEGV, -signal.SIGBUS):
                 logger.error('Program crashed!')
                 return 2
@@ -50,13 +63,20 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes, power_c
                 return 0
 
 def main():
+    def parse_shutdown_after_writes(arg: str) -> tuple[int, int]:
+        ret = arg.split(',', maxsplit=1)
+        if len(ret) == 1:
+            ret.append(0)
+        return tuple(map(int, ret))
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--rounds', type=int, default=0)
     parser.add_argument('--interval', type=float, default=0.02)
-    parser.add_argument('--shutdown-after-writes', type=int, default=0)
+    parser.add_argument('--shutdown-after-writes', type=parse_shutdown_after_writes, default=[0, 0])
     parser.add_argument('--power-cycles-limit', type=int, default=200)
     parser.add_argument('--suffix', default='')
     parser.add_argument('--compress', default=False, action='store_true')
+    parser.add_argument('--n-samples', default=1, type=int)
     parser.add_argument('program')
     args = parser.parse_args()
 
@@ -77,7 +97,7 @@ def main():
             logfile_path = logdir / f'intermittent-cnn-{rounds}'
         compressed_logfile_path = logfile_path.with_suffix('.zst')
         with open(logfile_path, mode='w+b') as logfile:
-            ret = run_one_inference(args.program, args.interval, logfile, args.shutdown_after_writes, args.power_cycles_limit)
+            ret = run_one_inference(args.program, args.interval, logfile, args.shutdown_after_writes, args.power_cycles_limit, args.n_samples)
 
         if args.compress:
             check_call(['touch', log_archive])

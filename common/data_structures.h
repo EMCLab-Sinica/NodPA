@@ -138,3 +138,11 @@ struct Counters {
     // persistent counters
     uint32_t total_jobs;
 };
+
+struct InferenceResults {
+    uint16_t sample_idx;
+    uint16_t correct;
+    uint16_t total;
+    uint8_t dummy;
+    uint8_t version;
+};

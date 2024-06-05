@@ -486,6 +486,7 @@ ffi_objects: dict[str, list] = {
     'node_orig_flags': [],
     'footprints': [],
     'inference_stats': [],
+    'inference_results': [],
 }
 
 Constants.MODEL_NODES_LEN = len(nodes)
@@ -545,6 +546,9 @@ ffi_objects['footprints'].append(footprints_arr)
 
 inference_stats_arr = ffi.new('struct InferenceStats[]', 2 * 2)
 ffi_objects['inference_stats'].append(inference_stats_arr)
+
+inference_results_arr = ffi.new('struct InferenceResults[]', 2)
+ffi_objects['inference_results'].append(inference_results_arr)
 
 ffi_objects['node_orig_flags'].append(node_flags)
 
@@ -685,7 +689,7 @@ outputs['counters'].write(b'\0' * ffi.sizeof('struct Counters') * Constants.COUN
 
 def nvm_layout():
     # See common/platform.h; some items are duplicated for double buffering
-    nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'counters', 'parameters']
+    nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'counters', 'inference_results', 'parameters']
     remaining_size = Constants.ORIG_NVM_SIZE - 256
     for data_name in nvm_data_names:
         if data_name in outputs:

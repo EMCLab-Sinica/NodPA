@@ -109,7 +109,7 @@ void read_from_samples(void *dest, uint32_t offset_in_word, size_t n) {
     }
 #endif
 
-    read_from_nvm(dest, SAMPLES_OFFSET + (sample_idx % LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
+    read_from_nvm(dest, SAMPLES_OFFSET + (inference_results_vm.sample_idx % LABELS_DATA_LEN) * 2*TOTAL_SAMPLE_SIZE + offset_in_word * sizeof(int16_t), n);
 }
 
 static uint8_t get_available_parameter_info_slot() {
