@@ -1,6 +1,7 @@
 #include "cnn_common.h"
 #include "data.h"
 #include "data_structures.h"
+#include "layer-defs.h"
 #include "my_debug.h"
 #include "op_utils.h"
 #include "platform.h"
@@ -13,7 +14,7 @@ struct {
     uint16_t iterations_after_indices;
 } gather_params;
 
-void alloc_gather(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, const NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void alloc_gather(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *data = input[0], *indices = input[1];
 
     uint8_t axis = node_flags->gather.axis;
@@ -48,7 +49,7 @@ void alloc_gather(Model* model, const ParameterInfo* input[], ParameterInfo* out
 }
 
 // https://onnx.ai/onnx/operators/onnx__Gather.html#gather-13
-void handle_gather(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, const NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_gather(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     // let k = indices[i_{0}, ..., i_{q-1}]
     // If axis = 0, then output[       i_{0}, ..., i_{q-1}, j_{0}, j_{1}, ..., j_{r-2}] = input[k , j_{0},    j_{1}, ..., j_{r-2}]
     // If axis = 1, then output[j_{0}, i_{0}, ..., i_{q-1},        j_{1}, ..., j_{r-2}] = input[    j_{0}, k, j_{1}, ..., j_{r-2}]

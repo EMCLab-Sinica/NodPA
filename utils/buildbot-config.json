@@ -266,6 +266,20 @@
         }
     },
     {
+        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_b1",
+        "command_env": {
+            "CONFIG": "--target msp430 --hawaii --batch-size 1 cifar10-dnp",
+            "LOG_SUFFIX": "cifar10-dnp_hawaii_b1"
+        }
+    },
+    {
+        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_b1_cmsis",
+        "command_env": {
+            "CONFIG": "--target msp432 --hawaii --batch-size 1 cifar10-dnp",
+            "LOG_SUFFIX": "cifar10-dnp_hawaii_b1_cmsis"
+        }
+    },
+    {
         "builder_name": "stateful-cnn-har-dnp_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 har-dnp --all-samples",

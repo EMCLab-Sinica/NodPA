@@ -73,7 +73,7 @@ def main():
     parser.add_argument('--rounds', type=int, default=0)
     parser.add_argument('--interval', type=float, default=0.02)
     parser.add_argument('--shutdown-after-writes', type=parse_shutdown_after_writes, default=[0, 0])
-    parser.add_argument('--power-cycles-limit', type=int, default=200)
+    parser.add_argument('--power-cycles-limit', type=int, default=1000)
     parser.add_argument('--suffix', default='')
     parser.add_argument('--compress', default=False, action='store_true')
     parser.add_argument('--n-samples', default=1, type=int)

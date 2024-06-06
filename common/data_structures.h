@@ -80,12 +80,14 @@ struct NodeFlags {
         struct GatherNodeFlags gather;
         uint8_t as_bytes[NODE_FLAGS_SIZE];
     };
+    uint8_t general_flags;
+    uint8_t dummy;
     // `canary` contains some non-zero value for detecting whether data are already in VM or not
     uint8_t canary;
     uint8_t version;
 };
 
-static_assert(sizeof(struct NodeFlags) == NODE_FLAGS_SIZE + 2, "Unexpected size for NodeFlags");
+static_assert(sizeof(struct NodeFlags) == NODE_FLAGS_SIZE + 4, "Unexpected size for NodeFlags");
 
 struct Footprint {
     uint32_t value;

@@ -7,7 +7,9 @@
 #include "data.h"
 #include "my_debug.h"
 #include "cnn_common.h"
+#include "data_structures.h"
 #include "intermittent-cnn.h"
+#include "layers.h"
 #include "my_dsplib.h"
 #include "op_utils.h"
 #include "platform.h"
@@ -151,8 +153,33 @@ static void extract_dimensions(const ParameterInfo* cur_param, uint16_t* NUM, ui
     }
 }
 
+static bool check_ofm_dumped(const ParameterInfo* cur_param) {
+    uint16_t node_idx = cur_param->parameter_info_idx - N_INPUT;
+    NodeFlags* node_flags = get_node_flags(node_idx);
+
+    if (get_model()->run_counter % 2) {
+        if ((node_flags->general_flags & OFM_DUMPED) == OFM_DUMPED) {
+            return false;
+        }
+    } else {
+        if ((node_flags->general_flags & OFM_DUMPED) == 0) {
+            return false;
+        }
+    }
+
+    node_flags->general_flags ^= OFM_DUMPED;
+    commit_node_flags(node_flags);
+
+    return true;
+}
+
 void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* layer_name, const char* op_type) {
     uint16_t NUM, H, W, CHANNEL;
+
+    if (!check_ofm_dumped(cur_param)) {
+        return;
+    }
+
     disable_counters();
     extract_dimensions(cur_param, &NUM, &H, &W, &CHANNEL);
     LayerOutput* layer_out = nullptr;
@@ -197,6 +224,12 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
 // dump in NCHW format
 void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer_name, const char* op_type) {
     uint16_t NUM, H, W, CHANNEL;
+
+    if (!check_ofm_dumped(cur_param)) {
+        return;
+    }
+
+    disable_counters();
     extract_dimensions(cur_param, &NUM, &H, &W, &CHANNEL);
     LayerOutput* layer_out = nullptr;
     dump_params_common(model, cur_param, layer_name, op_type, &layer_out);
@@ -223,6 +256,7 @@ void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer
         }
         PRINT_NEWLINE_IF_DATA_NOT_SAVED
     }
+    enable_counters();
 }
 
 void dump_turning_points(Model *model, const ParameterInfo *output) {

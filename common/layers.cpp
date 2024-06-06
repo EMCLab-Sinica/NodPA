@@ -21,8 +21,6 @@ const Node* get_node(const ParameterInfo* param) {
     return get_node(param->parameter_info_idx - N_INPUT);
 }
 
-#if RuntimeConfiguration != Fixed
-
 NodeFlags node_flags_vm[MODEL_NODES_LEN];
 
 template<>
@@ -52,11 +50,3 @@ void commit_node_flags(const NodeFlags* node_flags) {
     uint16_t node_idx = node_flags - node_flags_vm;
     commit_versioned_data<NodeFlags>(node_idx);
 }
-
-#else
-
-CurNodeFlags* get_node_flags(uint16_t node_idx) {
-    return get_node_orig_flags(node_idx);
-}
-
-#endif

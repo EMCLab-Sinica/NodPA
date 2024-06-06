@@ -1,13 +1,14 @@
 #include "cnn_common.h"
 #include "data.h"
 #include "data_structures.h"
+#include "layer-defs.h"
 #include "my_debug.h"
 #include "my_dsplib.h"
 #include "op_utils.h"
 
 #include <cstdint>
 
-void alloc_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, const NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void alloc_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *data = input[0];
 
     const ArgMaxNodeFlags& flags = node_flags->arg_max;
@@ -33,7 +34,7 @@ void alloc_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* ou
 }
 
 // Inspired by ChatGPT
-void handle_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, const NodeFlags* node_flags, const NodeFlags* orig_node_flags) {
+void handle_arg_max(Model* model, const ParameterInfo* input[], ParameterInfo* output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo* data = input[0];
 
     const uint8_t axis = node_flags->arg_max.axis;
