@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import graphlib
 import itertools
 import logging
 import os.path
@@ -577,3 +578,22 @@ def remove_trailing_softmax(onnx_model: onnx.ModelProto):
 # https://stackoverflow.com/questions/1175208/elegant-python-function-to-convert-camelcase-to-snake-case
 def op_name(op: str) -> str:
     return re.sub(r'(?<!^)(?=[A-Z])', '_', op).lower()
+
+def sort_nodes(nodes: list[onnx.NodeProto]) -> list[onnx.NodeProto]:
+    ts = graphlib.TopologicalSorter()
+
+    for node_idx, node in enumerate(nodes):
+        for node_input in node.input:
+            input_node_idx, _ = find_node_and_idx_by_output(nodes, node_input)
+            if input_node_idx == -1:
+                # Not found in nodes, probably a graph input or a constant
+                logger.debug(f'sort_nodes: skipping {node_input}')
+                continue
+            ts.add(node_idx, input_node_idx)
+
+    new_nodes = []
+
+    for sorted_node_idx in ts.static_order():
+        new_nodes.append(nodes[sorted_node_idx])
+
+    return new_nodes

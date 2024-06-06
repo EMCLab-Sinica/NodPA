@@ -89,6 +89,18 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 2947,
         'op_filters': 4,
     },
+    'har-dnp': {
+        'onnx_model': 'har_har_cnn-batched',
+        'onnx_model_single': 'har_har_cnn-single',
+        'scale': 1,
+        'input_scale': 16,
+        'num_slots': 3,
+        'data_loader': load_har,
+        'n_all_samples': 2947,
+        'op_filters': 4,
+        'pruning_threshold': 0.5,
+        'sparsity': 0.99,
+    },
     'transformers': {
         # TODO: use the single model in both onnx_model and onnx_model_single for now,
         # as I cannot get two working models with the identical weights

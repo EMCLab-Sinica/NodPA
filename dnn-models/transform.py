@@ -43,6 +43,7 @@ from utils import (
     run_model_batched,
     run_model_single,
     to_bytes,
+    sort_nodes,
 )
 from onnx_utils import (
     compute_parameter_scales,
@@ -304,6 +305,12 @@ for cur_node_flags in node_flags:
 
 conv_param_names = set()
 
+apply_dynamic_channel_pruning(onnx_model, nodes, node_flags, config)
+
+# apply_dynamic_channel_pruning may add more dependencies to some nodes - sort nodes again
+# Note that nodes should be sorted before node_flags[idx] are used
+nodes = sort_nodes(nodes)
+
 for idx, inp in enumerate(onnx_model.graph.input):
     names[inp.name] = idx
 
@@ -430,8 +437,6 @@ for idx, n in enumerate(nodes):
 
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
-
-apply_dynamic_channel_pruning(nodes, node_flags, config)
 
 for idx, node in enumerate(nodes):
     node.inputs = [names[i] for i in node.input]
