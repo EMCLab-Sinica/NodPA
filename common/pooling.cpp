@@ -504,11 +504,13 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
     int32_t *accumulation_buffer = reinterpret_cast<int32_t*>(op_buffer);
     int16_t *data_buffer = lea_buffer;
 
-    uint32_t vector_offset = first_unfinished_value_offset, vector_idx = first_unfinished_value_offset / CHANNEL;
+    if (first_unfinished_value_offset == CHANNEL) {
+        goto finished;
+    }
 
     memset(accumulation_buffer, 0, CHANNEL * sizeof(int32_t));
 
-    for (; vector_idx < H; vector_idx++, vector_offset += CHANNEL) {
+    for (uint32_t vector_idx = 0, vector_offset = 0; vector_idx < H; vector_idx++, vector_offset += CHANNEL) {
         my_memcpy_from_param(model, data_buffer, data, vector_offset, CHANNEL * sizeof(int16_t));
 
         my_printf_debug("Input vector %d" NEWLINE, vector_idx);
@@ -547,6 +549,8 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
 #if HAWAII
     hawaii_record_footprints(model, CHANNEL);
 #endif
+
+finished:
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, table_updates));
