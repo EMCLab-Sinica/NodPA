@@ -20,7 +20,6 @@ args.num_classes = 10 if args.dataset == 'cifar10' else 100
 
 args.device = 'cuda'
 torch.backends.cudnn.benchmark = True
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 args.logdir = 'decision-%d/%s-%s/sparsity-%.2f' % (
     args.action_num, args.dataset, args.arch, args.sparsity_level

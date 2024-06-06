@@ -14,7 +14,6 @@ args.num_classes = 10 if args.dataset == 'cifar10' else 100
 
 args.device = 'cuda'
 torch.backends.cudnn.benchmark = True
-os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 args.logdir = 'pretrained/%s/%s' % (args.dataset, args.arch)
 misc.prepare_logging(args)
