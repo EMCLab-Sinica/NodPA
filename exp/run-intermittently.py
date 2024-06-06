@@ -21,9 +21,12 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[i
     while True:
         shutdown_args = []
         if shutdown_after_writes_upper == 0:
-            # Only shutdown once
-            if num_power_cycles == 0 and shutdown_after_writes_lower:
-                shutdown_args = ['-c', str(shutdown_after_writes_lower)]
+            if shutdown_after_writes_lower:
+                # Only shutdown once
+                if num_power_cycles == 0:
+                    shutdown_args = ['-c', str(shutdown_after_writes_lower)]
+                else:
+                    shutdown_args = ['-c', str(2**32-1)]
         else:
             if shutdown_after_writes_lower:
                 shutdown_args = ['-c', str(random.randint(shutdown_after_writes_lower, shutdown_after_writes_upper))]
