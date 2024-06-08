@@ -24,7 +24,7 @@ vm_size = {
     # (4096 - 0x138 (LEASTACK) - 2 * 8 (MSP_LEA_MAC_PARAMS)) / sizeof(int16_t)
     'msp430': 1884,
     # determined by trial and error
-    'msp432': 26704,  # includes space for pState
+    'msp432': 25000,  # includes space for pState
 }
 
 class DataLoader(Protocol):

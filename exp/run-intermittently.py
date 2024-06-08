@@ -31,7 +31,10 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[i
             if shutdown_after_writes_lower:
                 shutdown_args = ['-c', str(random.randint(shutdown_after_writes_lower, shutdown_after_writes_upper))]
 
-        cmd = [program, str(n_samples)] + shutdown_args
+        cmd = [program] + shutdown_args
+
+        if n_samples:
+            cmd.append(str(n_samples))
 
         with Popen(cmd, stdout=logfile, stderr=logfile) as proc:
             try:
