@@ -231,10 +231,10 @@ def transform_model(model, arch, action_num):
         module_type = 'BasicBlock'
 
     elif arch == 'har_cnn':
-        from decision import init_decision_conv, decision_conv_forward
-        init_func = init_decision_conv
-        new_forward = decision_conv_forward
-        module_type = 'ConvReLU'
+        from decision import init_decision_conv_block, decision_conv_block_forward
+        init_func = init_decision_conv_block
+        new_forward = decision_conv_block_forward
+        module_type = 'ConvBlock'
 
     else:
         from decision import init_decision_convbn, decision_convbn_forward
