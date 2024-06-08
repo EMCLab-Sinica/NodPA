@@ -163,6 +163,7 @@ def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.
         conv_flags.pruning_target = PRUNING_OUTPUT_CHANNELS
         conv_flags.pruning_threshold = pruning_threshold_q15
         conv_flags.sparsity = sparsity_q15
+        logger.debug('Conv node %s, pruning target = PRUNING_OUTPUT_CHANNELS', conv_node.name)
 
         if conv_node_after.op_type == 'Conv':
             conv_node_after.input.append(decision_map)
@@ -170,5 +171,6 @@ def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.
             conv_after_flags.pruning_target = PRUNING_INPUT_CHANNELS
             conv_after_flags.pruning_threshold = pruning_threshold_q15
             conv_after_flags.sparsity = sparsity_q15
+            logger.debug('Conv node %s, pruning target = PRUNING_INPUT_CHANNELS', conv_node_after.name)
 
         logger.debug('Conv node idx=%d, pruning_threshold=%d', conv_node_idx, node_flags[conv_node_idx].conv.pruning_threshold)

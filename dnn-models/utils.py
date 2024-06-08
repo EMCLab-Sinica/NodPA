@@ -178,8 +178,15 @@ def infer_auto_pad(model, node):
         kernel_shape = find_kernel_shape(model, node)
         pads[0] = pads[2] = kernel_shape[0] // 2
         pads[1] = pads[3] = kernel_shape[1] // 2
-        if pads[0]*2+1 != kernel_shape[0] or pads[1]*2+1 != kernel_shape[1]:
-            raise NotImplementedError
+        # In case the padding is an odd number, the extra padding is added at the end for SAME_UPPER and at the beginning for SAME_LOWER.
+        # https://onnx.ai/onnx/operators/onnx__Conv.html#conv-11
+        for dim_idx in (0, 1):
+            if kernel_shape[dim_idx] % 2 == 0:
+                if auto_pad == b'SAME_UPPER':
+                    pads[dim_idx] -= 1
+                else:
+                    pads[dim_idx + 2] -= 1
+    logger.debug('Inferred pads: %r', pads)
     return pads
 
 def numpy_type_to_onnx_elem_type(numpy_type):
