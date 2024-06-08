@@ -59,8 +59,8 @@ configs: dict[str, ConfigType] = {
         'op_filters': 2,
     },
     'cifar10-dnp': {
-        'onnx_model': 'cifar_resnet10-batched',
-        'onnx_model_single': 'cifar_resnet10-single',
+        'onnx_model': 'cifar10_resnet10-batched',
+        'onnx_model_single': 'cifar10_resnet10-single',
         'scale': 1,
         'input_scale': 5,
         'num_slots': 4,
