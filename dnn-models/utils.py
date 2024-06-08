@@ -448,9 +448,10 @@ def run_model_batched(model: onnx.ModelProto, model_data: ModelData, verbose: bo
     layer_outs = onnxruntime_prepare_model(model).run(images)[0]
     for idx, layer_out in enumerate(layer_outs):
         predicted = np.argmax(layer_out)
+        if verbose:
+            correct_marker = 1 if predicted == labels[idx] else 0
+            print(f'idx={idx} label={labels[idx]} predicted={predicted} correct={correct_marker}')
         if predicted == labels[idx]:
-            if verbose:
-                print(f'Correct at idx={idx}')
             correct += 1
     total = len(labels)
     accuracy = correct/total
