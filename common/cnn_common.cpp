@@ -285,6 +285,7 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         }
 #endif
 
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
         if (inference_results_vm.sample_idx == 0) {
             uint16_t ofm_idx = buffer_offset;
 #if JAPARI
@@ -308,6 +309,7 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
                 }
             }
         }
+#endif
 
         int16_t cur_max = INT16_MIN;
         uint16_t cur_ans = 0;

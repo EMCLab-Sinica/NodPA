@@ -302,7 +302,7 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
     my_printf(NEWLINE);
 }
 
-#if BRANCH_AWARE_FOOTPRINTING
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
 
 static const uint16_t BUFFER_TEMP_SIZE = 16;
 static int16_t buffer_temp[BUFFER_TEMP_SIZE];

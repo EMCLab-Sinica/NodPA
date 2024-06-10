@@ -58,7 +58,7 @@ void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const voi
     MY_ASSERT(param->slot < NUM_SLOTS);
     uint32_t total_offset = param->params_offset + offset_in_word * sizeof(int16_t);
 
-#if BRANCH_AWARE_FOOTPRINTING
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
     MY_ASSERT(total_offset + n <= param->params_len);
 #else
     if (total_offset + n > param->params_len) {
@@ -247,11 +247,13 @@ uint32_t get_hawaii_layer_footprint(uint16_t layer_idx) {
 }
 
 void set_hawaii_layer_footprint(uint16_t layer_idx, uint32_t footprint) {
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
     Footprint* footprint_vm = footprints_vm + layer_idx;
     footprint_vm->value = footprint;
     commit_versioned_data<Footprint>(layer_idx);
     my_printf_debug("Write HAWAII layer footprint %d (0x%08x) for layer %d" NEWLINE, footprint_vm->value, footprint_vm->value, layer_idx);
     MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
+#endif
 }
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {

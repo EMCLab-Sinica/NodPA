@@ -766,7 +766,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 
-#if HAWAII && BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
     uint16_t branch_information = hawaii_extract_branch_information(&first_unfinished_job_idx);
 #endif
 
@@ -796,7 +796,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     uint16_t slice_size_input_channel_tiling = layer_dims->OUTPUT_W * layer_dims->OUTPUT_H * layer_dims->OUTPUT_CHANNEL;
 
     conv_params->input_tile_c_index = first_unfinished_value_offset / slice_size_input_channel_tiling;
-#if HAWAII && BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         conv_params->input_tile_c_offset = branch_information;
     } else
@@ -804,6 +804,25 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     {
         // Not extending for JAPARI footprints here as input_tile_c_offset will be extended later
         conv_params->input_tile_c_offset = conv_params->input_tile_c_index * conv_params->input_tile_c;
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_ONE_INDICATOR
+        uint16_t original_input_tile_c_offset  = conv_params->input_tile_c_offset,
+                 non_skipped_channels = 0;
+        if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
+            // Go through the decision map to derive the actual job index from the preserved footprint
+            my_memcpy_from_param(model, lea_buffer, conv_channel_pruning_mask, /*offset_in_word=*/0, CHANNEL * sizeof(int16_t));
+            for (uint16_t idx = 0; idx < CHANNEL; idx++) {
+                my_printf_debug("input channel=%d channel_mask=%d... ", idx, lea_buffer[idx]);
+                if (lea_buffer[idx] == 0) {
+                    conv_params->input_tile_c_offset++;
+                } else {
+                    non_skipped_channels++;
+                }
+                if (non_skipped_channels >= original_input_tile_c_offset) {
+                    break;
+                }
+            }
+        }
+#endif
     }
     first_unfinished_value_offset %= slice_size_input_channel_tiling;
 
@@ -825,7 +844,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     my_printf_debug("initial output W = %d" NEWLINE, (conv_params->input_w - conv_params->input_w_first) / conv_params->layer_dims.STRIDE_W);
     my_printf_debug("initial output C = %d" NEWLINE, conv_params->filter_idx);
     // = happens when all values are finished
-#if BRANCH_AWARE_FOOTPRINTING
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
     MY_ASSERT(conv_params->input_tile_c_index <= conv_params->n_tiles_c);
 #endif
     stop_cpu_counter();
@@ -895,7 +914,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 conv_params->input_tile_c_offset += conv_params->input_tile_c;
             }
 
-#if HAWAII && BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
             hawaii_record_branch_information(model, conv_params->input_tile_c_offset);
 #endif
 
@@ -904,7 +923,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
         }
 
-#if BRANCH_AWARE_FOOTPRINTING
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
         MY_ASSERT(conv_params->input_tile_c_index < conv_params->n_tiles_c);
 #endif
 
@@ -962,7 +981,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                     report_progress();
                 }
             } else {
-#if HAWAII && BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
                 hawaii_record_footprints(model, conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W);
 #endif
             }
@@ -1001,7 +1020,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     output->params_len = conv_params->input_tile_c_index * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
 
-#if HAWAII && BRANCH_AWARE_FOOTPRINTING
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         hawaii_record_branch_information(model, conv_params->input_tile_c_offset);
     }
