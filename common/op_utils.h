@@ -31,8 +31,6 @@ void determine_tile_c(ParameterInfo *param, const ParameterInfo* input, const Pa
 
 #if HAWAII
 void hawaii_record_footprints(Model* model, uint32_t vector_len);
-void hawaii_record_branch_information(Model* model, uint16_t branch_information);
-uint16_t hawaii_extract_branch_information(uint32_t* footprint_value);
 #endif
 
 #if JAPARI

@@ -246,26 +246,39 @@ uint32_t get_hawaii_layer_footprint(uint16_t layer_idx) {
     return footprint_vm->value;
 }
 
-void set_hawaii_layer_footprint(uint16_t layer_idx, uint32_t footprint) {
+uint32_t get_hawaii_dynamic_dnn_information(uint16_t layer_idx) {
+    Footprint* footprint_vm = footprints_vm + layer_idx;
+    return footprint_vm->dynamic_dnn_information;
+}
+
+static void set_hawaii_layer_footprint(uint16_t layer_idx, uint32_t footprint, uint32_t dynamic_dnn_information) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
     Footprint* footprint_vm = footprints_vm + layer_idx;
     footprint_vm->value = footprint;
+    footprint_vm->dynamic_dnn_information = dynamic_dnn_information;
     commit_versioned_data<Footprint>(layer_idx);
-    my_printf_debug("Write HAWAII layer footprint %d (0x%08x) for layer %d" NEWLINE, footprint_vm->value, footprint_vm->value, layer_idx);
+    my_printf_debug("Write HAWAII layer footprint %d, dynamic DNN information %d for layer %d" NEWLINE,
+                    footprint_vm->value, footprint_vm->dynamic_dnn_information, layer_idx);
     MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
 #endif
 }
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
     Footprint* footprint_vm = footprints_vm + layer_idx;
-    set_hawaii_layer_footprint(layer_idx, footprint_vm->value + n_jobs);
+    set_hawaii_layer_footprint(layer_idx, footprint_vm->value + n_jobs, footprint_vm->dynamic_dnn_information);
+}
+
+void write_hawaii_dynamic_dnn_information(uint16_t layer_idx, uint32_t value) {
+    Footprint* footprint_vm = footprints_vm + layer_idx;
+    set_hawaii_layer_footprint(layer_idx, footprint_vm->value, footprint_vm->dynamic_dnn_information + value);
 }
 
 uint32_t read_hawaii_layer_footprint(uint16_t layer_idx) {
-    uint32_t footprint = get_versioned_data<Footprint>(layer_idx)->value;
-    my_printf_debug("HAWAII layer footprint=%d (0x%08x) for layer %d" NEWLINE, footprint, footprint, layer_idx);
-    MY_ASSERT(footprint % BATCH_SIZE == 0);
-    return footprint;
+    const Footprint* footprint = get_versioned_data<Footprint>(layer_idx);
+    my_printf_debug("HAWAII layer footprint=%d, dynamic DNN information %d for layer %d" NEWLINE,
+                    footprint->value, footprint->dynamic_dnn_information, layer_idx);
+    MY_ASSERT(footprint->value % BATCH_SIZE == 0);
+    return footprint->value;
 }
 
 void reset_hawaii_layer_footprint(uint16_t layer_idx) {

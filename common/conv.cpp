@@ -766,10 +766,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
-    uint16_t branch_information = hawaii_extract_branch_information(&first_unfinished_job_idx);
-#endif
-
     uint32_t first_unfinished_value_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
 #if DYNBAL_REPORT_PARAMETERS
     conv_params->first_unfinished_job_idx = first_unfinished_job_idx;
@@ -778,10 +774,20 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
+    uint32_t first_unfinished_value_offset_with_skipped_jobs = first_unfinished_value_offset;
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+    uint32_t dynamic_dnn_skipped_jobs = get_hawaii_dynamic_dnn_information(model->layer_idx);
+    if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
+        // For dynamic channel pruning, the number of skipped jobs equals to the offset for those jobs
+        first_unfinished_value_offset_with_skipped_jobs += dynamic_dnn_skipped_jobs;
+    }
+#endif
+
+
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, state_query));
     find_initial_state_bit(&conv_params->old_output_offset, &conv_params->turning_point_idx, &conv_params->next_turning_point,
-                           &conv_params->cur_slot_info, job_index_to_offset(output, first_unfinished_job_idx), model, output);
+                           &conv_params->cur_slot_info, first_unfinished_value_offset, model, output);
     stop_cpu_counter();
 
     my_printf_debug("old_output_offset = %d" NEWLINE, conv_params->old_output_offset);
@@ -796,14 +802,9 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     uint16_t slice_size_input_channel_tiling = layer_dims->OUTPUT_W * layer_dims->OUTPUT_H * layer_dims->OUTPUT_CHANNEL;
 
     conv_params->input_tile_c_index = first_unfinished_value_offset / slice_size_input_channel_tiling;
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
-    if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
-        conv_params->input_tile_c_offset = branch_information;
-    } else
-#endif
     {
         // Not extending for JAPARI footprints here as input_tile_c_offset will be extended later
-        conv_params->input_tile_c_offset = conv_params->input_tile_c_index * conv_params->input_tile_c;
+        conv_params->input_tile_c_offset = first_unfinished_value_offset_with_skipped_jobs / slice_size_input_channel_tiling * conv_params->input_tile_c;
 #if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_ONE_INDICATOR
         uint16_t original_input_tile_c_offset  = conv_params->input_tile_c_offset,
                  non_skipped_channels = 0;
@@ -839,7 +840,8 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     conv_params->input_h += first_unfinished_value_offset * conv_params->layer_dims.STRIDE_H;
 
-    my_printf_debug("initial output N = %d" NEWLINE, conv_params->input_tile_c_index);
+    my_printf_debug("initial input_tile_c_index = %d" NEWLINE, conv_params->input_tile_c_index);
+    my_printf_debug("initial input_tile_c_offset = %d" NEWLINE, conv_params->input_tile_c_offset);
     my_printf_debug("initial output H = %d" NEWLINE, (conv_params->input_h - conv_params->input_h_first) / conv_params->layer_dims.STRIDE_H);
     my_printf_debug("initial output W = %d" NEWLINE, (conv_params->input_w - conv_params->input_w_first) / conv_params->layer_dims.STRIDE_W);
     my_printf_debug("initial output C = %d" NEWLINE, conv_params->filter_idx);
@@ -912,11 +914,11 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 my_printf_debug("skipping" NEWLINE);
 
                 conv_params->input_tile_c_offset += conv_params->input_tile_c;
-            }
 
 #if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
-            hawaii_record_branch_information(model, conv_params->input_tile_c_offset);
+                write_hawaii_dynamic_dnn_information(model->layer_idx, slice_size_input_channel_tiling);
 #endif
+            }
 
             if (conv_params->input_tile_c_offset >= input_channels) {
                 break;
@@ -1019,12 +1021,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     }
 
     output->params_len = conv_params->input_tile_c_index * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
-
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
-    if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
-        hawaii_record_branch_information(model, conv_params->input_tile_c_offset);
-    }
-#endif
 
 #if INDIRECT_RECOVERY
     start_cpu_counter(offsetof(Counters, table_updates));
