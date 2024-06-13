@@ -283,7 +283,7 @@ uint32_t read_hawaii_layer_footprint(uint16_t layer_idx) {
 
 void reset_hawaii_layer_footprint(uint16_t layer_idx) {
     Footprint footprint;
-    footprint.value = footprint.version = 0;
+    memset(&footprint, 0, sizeof(Footprint));
     write_to_nvm(&footprint, nvm_addr<Footprint>(0, layer_idx), sizeof(Footprint));
     write_to_nvm(&footprint, nvm_addr<Footprint>(1, layer_idx), sizeof(Footprint));
     my_printf_debug("Reset HAWAII layer footprint for layer %d" NEWLINE, layer_idx);
