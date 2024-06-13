@@ -20,7 +20,19 @@ template<typename T>
 const char* datatype_name(void);
 
 template<typename T>
+uint8_t* copy_id_cache_addr(void) {
+    // No copy_id cache by default
+    return nullptr;
+}
+
+template<typename T>
 static uint8_t get_newer_copy_id(uint16_t data_idx) {
+    uint8_t* copy_id_cache = copy_id_cache_addr<T>();
+    // Use 1 for copy 0 and 2 for copy 1. 0, which comes after power resumption, is considerd invalid (not cached yet)
+    if (copy_id_cache && *copy_id_cache > 0) {
+        return *copy_id_cache - 1;
+    }
+
     uint8_t version1, version2;
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     add_counter(offsetof(Counters, nvm_read_shadow_data), 2);
@@ -29,20 +41,27 @@ static uint8_t get_newer_copy_id(uint16_t data_idx) {
     read_from_nvm(&version2, nvm_addr<T>(1, data_idx) + offsetof(T, version), sizeof(uint8_t));
     my_printf_debug("Versions of shadow %s copies for data item %d: %d, %d" NEWLINE, datatype_name<T>(), data_idx, version1, version2);
 
+    uint8_t copy_id;
     if (abs(static_cast<int>(version1 - version2)) == 1) {
         if (version1 > version2) {
-            return 0;
+            copy_id = 0;
         } else {
-            return 1;
+            copy_id = 1;
         }
     } else {
         if (version1 > version2) {
             // ex: versions = 65535, 1
-            return 1;
+            copy_id = 1;
         } else {
-            return 0;
+            copy_id = 0;
         }
     }
+
+    if (copy_id_cache) {
+        *copy_id_cache = copy_id + 1;
+    }
+
+    return copy_id;
 }
 
 template<typename T>
@@ -82,4 +101,9 @@ void commit_versioned_data(uint16_t data_idx) {
 #endif
     write_to_nvm(vm_ptr, nvm_addr<T>(older_copy_id, data_idx), sizeof(T));
     my_printf_debug("Committing version %d to %s copy %d" NEWLINE, vm_ptr->version, datatype_name<T>(), older_copy_id);
+
+    uint8_t* copy_id_cache = copy_id_cache_addr<T>();
+    if (copy_id_cache) {
+        *copy_id_cache = older_copy_id + 1;
+    }
 }

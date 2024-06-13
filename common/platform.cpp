@@ -226,6 +226,8 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 #if HAWAII
 static Footprint footprints_vm[MODEL_NODES_LEN];
 static FootprintForDynamicDNN footprints_for_dynamic_dnn_vm[MODEL_NODES_LEN];
+static uint8_t footprint_copy_id = 0;
+static uint8_t footprint_for_dynamic_dnn_copy_id = 0;
 
 template<>
 uint32_t nvm_addr<Footprint>(uint8_t copy_id, uint16_t layer_idx) {
@@ -255,6 +257,16 @@ const char* datatype_name<Footprint>(void) {
 template<>
 const char* datatype_name<FootprintForDynamicDNN>(void) {
     return "dynamic information";
+}
+
+template<>
+uint8_t* copy_id_cache_addr<Footprint>(void) {
+    return &footprint_copy_id;
+}
+
+template<>
+uint8_t* copy_id_cache_addr<FootprintForDynamicDNN>(void) {
+    return &footprint_for_dynamic_dnn_copy_id;
 }
 
 template<typename T>
