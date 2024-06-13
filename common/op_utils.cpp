@@ -12,13 +12,19 @@
 #include "counters.h"
 
 // Not using DSPLIB_DATA here as it does not work under C++ (?)
+#ifdef __MSP432__
+#define NOINIT [[gnu::section(".noinit")]]
+#else
+#define NOINIT
+#endif
+
 #ifdef __MSP430__
 #pragma DATA_SECTION(".leaRAM")
 #endif
-int16_t lea_buffer[LEA_BUFFER_SIZE];
+NOINIT int16_t lea_buffer[LEA_BUFFER_SIZE];
 
-int16_t state_offsets[OUTPUT_LEN];
-int16_t op_buffer[OP_BUFFER_LEN];
+NOINIT int16_t state_offsets[OUTPUT_LEN];
+NOINIT int16_t op_buffer[OP_BUFFER_LEN];
 static_assert(OUTPUT_LEN <= OP_BUFFER_LEN, "invalid OP buffer size");
 
 #if HAWAII
