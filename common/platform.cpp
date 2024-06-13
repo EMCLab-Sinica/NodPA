@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include "c_callbacks.h"
 #include "counters.h"
 #include "data.h"
@@ -270,20 +271,41 @@ uint8_t* copy_id_cache_addr<FootprintForDynamicDNN>(void) {
 }
 
 template<typename T>
-static void set_hawaii_layer_footprint(uint16_t layer_idx, uint32_t footprint) {
+void write_hawaii_layer_footprint_impl(uint16_t layer_idx, int16_t value) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
     T* footprint_vm = vm_addr<T>(layer_idx);
-    footprint_vm->value = footprint;
-    commit_versioned_data<T>(layer_idx);
-    my_printf_debug("Write HAWAII layer %s %d for layer %d" NEWLINE, datatype_name<T>(), footprint_vm->value, layer_idx);
+
+    uint32_t old_value = footprint_vm->value;
+    footprint_vm->value += value;
+
+    // Comparing old and new values. If only the least significant byte is changed, update that byte only.
+    // Otherwise, update the whole value via double buffering.
+    constexpr decltype(T::value) mask = std::numeric_limits<decltype(T::value)>::max() - 0xff;
+    if ((footprint_vm->value & mask) == (old_value & mask)) {
+        uint8_t* copy_id_cache = copy_id_cache_addr<T>();
+        MY_ASSERT(copy_id_cache && *copy_id_cache);
+
+        uint32_t footprint_nvm_addr = nvm_addr<T>(*copy_id_cache - 1, layer_idx);
+        // Calculate the address for the least significant byte according to system endianness
+        // Note that __BYTE_ORDER__ here is a GCC extension
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        uint32_t last_byte_nvm_addr = footprint_nvm_addr + offsetof(T, value) + sizeof(T::value) - 1;
+#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        uint32_t last_byte_nvm_addr = footprint_nvm_addr + offsetof(T, value);
+#else
+#error "Unsupported endian"
+#endif
+        uint8_t last_byte = static_cast<uint8_t>(footprint_vm->value & 0xff);
+        write_to_nvm(&last_byte, last_byte_nvm_addr, /*n=*/1);
+
+        my_printf_debug("Update the least significant byte (%x) for HAWAII layer %s %d for layer %d" NEWLINE,
+                        last_byte, datatype_name<T>(), footprint_vm->value, layer_idx);
+    } else {
+        commit_versioned_data<T>(layer_idx);
+        my_printf_debug("Commit HAWAII layer %s %d for layer %d" NEWLINE, datatype_name<T>(), footprint_vm->value, layer_idx);
+    }
     MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
 #endif
-}
-
-template<typename T>
-void write_hawaii_layer_footprint_impl(uint16_t layer_idx, int16_t n_jobs) {
-    T* footprint_vm = vm_addr<T>(layer_idx);
-    set_hawaii_layer_footprint<T>(layer_idx, footprint_vm->value + n_jobs);
 }
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
