@@ -6,6 +6,7 @@
 #include "cnn_common.h"
 #include "counters.h"
 #include "data.h"
+#include "data_structures.h"
 #include "layers.h"
 #include "my_debug.h"
 #include "op_utils.h"
@@ -132,7 +133,7 @@ int8_t param_state_bit(Model *model, const ParameterInfo *param, uint16_t offset
 
 #if HAWAII
 uint32_t run_recovery(Model* model, ParameterInfo*) {
-    uint32_t footprint = read_hawaii_layer_footprint(model->layer_idx);
+    uint32_t footprint = read_hawaii_layer_footprint<Footprint>(model->layer_idx);
     return footprint / BATCH_SIZE;
 }
 #endif

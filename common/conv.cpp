@@ -7,6 +7,7 @@
 #include "conv.h"
 #include "counters.h"
 #include "data.h"
+#include "data_structures.h"
 #include "my_debug.h"
 #include "op_utils.h"
 #include "intermittent-cnn.h"
@@ -776,7 +777,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     uint32_t first_unfinished_value_offset_with_skipped_jobs = first_unfinished_value_offset;
 #if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
-    uint32_t dynamic_dnn_skipped_jobs = get_hawaii_dynamic_dnn_information(model->layer_idx);
+    uint32_t dynamic_dnn_skipped_jobs = read_hawaii_layer_footprint<FootprintForDynamicDNN>(model->layer_idx);
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         // For dynamic channel pruning, the number of skipped jobs equals to the offset for those jobs
         first_unfinished_value_offset_with_skipped_jobs += dynamic_dnn_skipped_jobs;

@@ -26,7 +26,8 @@
 #define NODE_FLAGS_OFFSET (INTERMEDIATE_PARAMETERS_INFO_OFFSET - NODE_FLAGS_DATA_LEN)
 #define NODES_OFFSET (NODE_FLAGS_OFFSET - NODES_DATA_LEN)
 #define FOOTPRINTS_OFFSET (NODES_OFFSET - FOOTPRINTS_DATA_LEN)
-#define COUNTERS_OFFSET (FOOTPRINTS_OFFSET - COUNTERS_DATA_LEN)
+#define FOOTPRINTS_FOR_DYNAMIC_DNN_OFFSET (FOOTPRINTS_OFFSET - FOOTPRINTS_FOR_DYNAMIC_DNN_DATA_LEN)
+#define COUNTERS_OFFSET (FOOTPRINTS_FOR_DYNAMIC_DNN_OFFSET - COUNTERS_DATA_LEN)
 #define INFERENCE_RESULTS_OFFSET (COUNTERS_OFFSET - INFERENCE_RESULTS_DATA_LEN)
 
 struct ParameterInfo;
@@ -69,10 +70,8 @@ void notify_indicator(uint8_t idx);
 bool read_gpio_flag(GPIOFlag flag);
 void save_model_output_data();
 #if HAWAII
-uint32_t get_hawaii_layer_footprint(uint16_t layer_idx);
-uint32_t get_hawaii_dynamic_dnn_information(uint16_t layer_idx);
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
 void write_hawaii_dynamic_dnn_information(uint16_t layer_idx, uint32_t value);
-uint32_t read_hawaii_layer_footprint(uint16_t layer_idx);
-void reset_hawaii_layer_footprint(uint16_t layer_idx);
+template<typename T> uint32_t read_hawaii_layer_footprint(uint16_t layer_idx);
+template<typename T> void reset_hawaii_layer_footprint(uint16_t layer_idx);
 #endif

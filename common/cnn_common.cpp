@@ -218,7 +218,8 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         }
 #if HAWAII
         for (uint16_t node_idx = 0; node_idx < MODEL_NODES_LEN; node_idx++) {
-            reset_hawaii_layer_footprint(node_idx);
+            reset_hawaii_layer_footprint<Footprint>(node_idx);
+            reset_hawaii_layer_footprint<FootprintForDynamicDNN>(node_idx);
         }
 #endif
         model->running = 1;
