@@ -8,7 +8,6 @@ import onnx
 
 from utils import (
     DMA_Q15_LIMIT,
-    PRUNING_INPUT_CHANNELS,
     PRUNING_OUTPUT_CHANNELS,
     find_initializer,
     find_tensor_value_info,
@@ -25,7 +24,7 @@ logger = logging.getLogger('intermittent-cnn.layer_utils')
 def extend_for_footprints(batch_size, n):
     return n + n // batch_size
 
-def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_japari, intermediate_values_size, target, node, conv_flags):
+def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_japari, intermediate_values_size, target, node):
     logger.debug('Determine tile size for Conv node %s', node.name)
 
     output_value_info = find_tensor_value_info(onnx_model, node.output[0])
@@ -39,6 +38,8 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
     CHANNEL = filter_info.dims[1]
     kH = filter_info.dims[2]
     kW = filter_info.dims[3]
+
+    conv_flags = node.flags.conv
 
     sparsity = conv_flags.sparsity / 2**15 or 1.0
 
@@ -146,7 +147,7 @@ def check_gemm_vm_usage(A, tile_channel, tile_a_rows, tile_b_cols, batch_size, t
 
     return ret
 
-def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, batch_size, target, node, gemm_flags):
+def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, batch_size, target, node):
     logger.debug('Determine tile size for Gemm node %s', node.name)
 
     A = find_tensor_value_info(onnx_model, node.input[0])
@@ -172,6 +173,7 @@ def determine_gemm_tile_sizes(onnx_model: onnx.ModelProto, config: ConfigType, b
     # writing a batch at a time is simpler and faster
     tile_size_unit = config['op_filters']
 
+    gemm_flags = node.flags.gemm
     gemm_flags.tile_a_rows = 1
     gemm_flags.tile_b_cols = tile_size_unit
 

@@ -17,9 +17,7 @@ from utils import (
     PRUNING_INPUT_CHANNELS,
     PRUNING_OUTPUT_CHANNELS,
     find_tensor_value_info,
-    find_node_and_idx_by_input,
     find_node_by_input,
-    find_node_and_idx_by_output,
     find_node_by_output,
 )
 from onnx_utils import (
@@ -55,7 +53,7 @@ def get_next_slot(onnx_model: onnx.ModelProto, slots: list[SlotInfo], nodes: lis
     slots[next_slot_id].user = layer_idx
     return next_slot_id
 
-def find_min_range(onnx_model: onnx.ModelProto, nodes: list, node_flags, config: ConfigType, N_INPUT: int):
+def find_min_range(onnx_model: onnx.ModelProto, nodes: list, config: ConfigType, N_INPUT: int):
     slots = [SlotInfo(user=-1) for _ in range(config['num_slots'])]
     layer_slots = [None] * len(nodes)
     ofm_sizes = [[] for _ in range(config['num_slots'])]
@@ -84,12 +82,12 @@ def find_min_range(onnx_model: onnx.ModelProto, nodes: list, node_flags, config:
             input_dims = dims_from_value_info(input_value_info)
 
             # find tile input channel
-            wrapped_node_idx, wrapped_node = find_node_and_idx_by_output(nodes, node.output[0])
+            wrapped_node = find_node_by_output(nodes, node.output[0])
 
             if node.op_type == 'Conv':
-                tile_channel = node_flags[wrapped_node_idx].conv.input_tile_c
+                tile_channel = wrapped_node.flags.conv.input_tile_c
             elif node.op_type in ('Gemm', 'MatMul'):
-                tile_channel = node_flags[wrapped_node_idx].gemm.tile_channel
+                tile_channel = wrapped_node.flags.gemm.tile_channel
 
             n_tiles = math.ceil(input_dims[0] / tile_channel)
             ofm_sizes[next_slot_id].append(n_tiles * output_len)
@@ -120,7 +118,7 @@ def remove_tensorflow_input_transpose(onnx_model: onnx.ModelProto):
 
     return onnx_model
 
-def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.NodeProto], node_flags: list[Any], config: ConfigType):
+def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.NodeProto], config: ConfigType):
     pruning_threshold = config.get('pruning_threshold', 0)
 
     if not pruning_threshold:
@@ -150,16 +148,16 @@ def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.
         ))
 
         conv_stage2_node = find_node_by_output(nodes, node.input[1])
-        conv_node_idx, conv_node = find_node_and_idx_by_output(nodes, conv_stage2_node.input[0])
+        conv_node = find_node_by_output(nodes, conv_stage2_node.input[0])
 
         relu_node = find_node_by_input(nodes, node.output[0])
-        conv_node_after_idx, conv_node_after = find_node_and_idx_by_input(nodes, relu_node.output[0])
+        conv_node_after = find_node_by_input(nodes, relu_node.output[0])
 
         pruning_threshold_q15 = int(pruning_threshold * 2**15)
         sparsity_q15 = int(config['sparsity'] * 2**15)
 
         conv_node.input.append(decision_map)
-        conv_flags = node_flags[conv_node_idx].conv
+        conv_flags = conv_node.flags.conv
         conv_flags.pruning_target = PRUNING_OUTPUT_CHANNELS
         conv_flags.pruning_threshold = pruning_threshold_q15
         conv_flags.sparsity = sparsity_q15
@@ -167,10 +165,10 @@ def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.
 
         if conv_node_after.op_type == 'Conv':
             conv_node_after.input.append(decision_map)
-            conv_after_flags = node_flags[conv_node_after_idx].conv
+            conv_after_flags = conv_node_after.flags.conv
             conv_after_flags.pruning_target = PRUNING_INPUT_CHANNELS
             conv_after_flags.pruning_threshold = pruning_threshold_q15
             conv_after_flags.sparsity = sparsity_q15
             logger.debug('Conv node %s, pruning target = PRUNING_INPUT_CHANNELS', conv_node_after.name)
 
-        logger.debug('Conv node idx=%d, pruning_threshold=%d', conv_node_idx, node_flags[conv_node_idx].conv.pruning_threshold)
+        logger.debug('Conv node %s, pruning_threshold=%d', conv_node.name, conv_node.flags.conv.pruning_threshold)

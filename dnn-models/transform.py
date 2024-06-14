@@ -35,7 +35,7 @@ from utils import (
     find_kernel_shape,
     find_initializer,
     find_node_by_input,
-    find_node_and_idx_by_output,
+    find_node_by_output,
     get_model_ops,
     infer_auto_pad,
     load_model,
@@ -167,6 +167,8 @@ class ONNXNodeWrapper:
         self.name = orig_node.name or orig_node.output[0] or orig_node.op_type
         self.inputs: list[int] = []
         self.parameters_by_importance = [-1, -1]
+        self.flags = ffi.new('struct NodeFlags*')
+        self.flags.canary = 0x55
 
     def __getattr__(self, name):
         return getattr(self.orig_node, name)
@@ -299,16 +301,12 @@ del onnx_model.graph.node[:]
 onnx_model.graph.node.extend(new_nodes)
 
 nodes = [ONNXNodeWrapper(n) for n in onnx_model.graph.node]
-node_flags = ffi.new('struct NodeFlags[]', len(nodes))
-for cur_node_flags in node_flags:
-    cur_node_flags.canary = 0x55
 
 conv_param_names = set()
 
-apply_dynamic_channel_pruning(onnx_model, nodes, node_flags, config)
+apply_dynamic_channel_pruning(onnx_model, nodes, config)
 
 # apply_dynamic_channel_pruning may add more dependencies to some nodes - sort nodes again
-# Note that nodes should be sorted before node_flags[idx] are used
 nodes = sort_nodes(nodes)
 
 for idx, inp in enumerate(onnx_model.graph.input):
@@ -333,10 +331,10 @@ for idx, n in enumerate(nodes):
         output = n.output
     if n.op_type == 'Conv':
         conv_param_names.add(n.input[1])
-        node_flags[idx].conv.pads = infer_auto_pad(onnx_model, n)
-        node_flags[idx].conv.group = get_attr(n, 'group') or 1
+        n.flags.conv.pads = infer_auto_pad(onnx_model, n)
+        n.flags.conv.group = get_attr(n, 'group') or 1
     if n.op_type in ('Conv', 'MaxPool'):
-        extra_flags = getattr(node_flags[idx], op_name(n.op_type))
+        extra_flags = getattr(n.flags, op_name(n.op_type))
         kernel_shape = find_kernel_shape(onnx_model, n)
         extra_flags.kernel_shape = kernel_shape
         strides = get_attr(n, 'strides')
@@ -350,13 +348,13 @@ for idx, n in enumerate(nodes):
     if n.op_type == 'MaxPool':
         ceil_mode = get_attr(n, 'ceil_mode')
         if ceil_mode:
-            node_flags[idx].max_pool.ceil = 1
+            n.flags.max_pool.ceil = 1
     if n.op_type == 'Reshape':
         prev_node = n
         while prev_node and prev_node.op_type in INPLACE_UPDATE_OPS:
-            prev_node_idx, prev_node = find_node_and_idx_by_output(nodes, prev_node.input[0])
+            prev_node = find_node_by_output(nodes, prev_node.input[0])
         if prev_node and prev_node.op_type == 'MaxPool':
-            node_flags[prev_node_idx].max_pool.nhwc2nchw = 1
+            prev_node.flags.max_pool.nhwc2nchw = 1
     if n.op_type in ('Squeeze', 'Unsqueeze'):
         # axes is an input fo Squeeze and Unsqueeze since opset 13
         # https://onnx.ai/onnx/operators/onnx__Squeeze.html
@@ -370,23 +368,23 @@ for idx, n in enumerate(nodes):
         else:
             # For Squeeze, axes is optional. Here I use an empty list to indicate the default (squeeze all the single dimensions)
             axes = axes or []
-        node_flags[idx].squeeze.axes = 0
+        n.flags.squeeze.axes = 0
         for axis in axes:
-            node_flags[idx].squeeze.axes |= (1 << ensure_non_negative_axis(onnx_model, n, axis))
+            n.flags.squeeze.axes |= (1 << ensure_non_negative_axis(onnx_model, n, axis))
 
     if n.op_type in ('Gemm', 'MatMul'):
-        node_flags[idx].gemm.input_dims = len(get_parameter_dims(onnx_model, n.input[0]))
-        node_flags[idx].gemm.weight_dims = len(get_parameter_dims(onnx_model, n.input[1]))
-        logger.debug('%s: input_dims=%d weight_dims=%d', n.name, node_flags[idx].gemm.input_dims, node_flags[idx].gemm.weight_dims)
+        n.flags.gemm.input_dims = len(get_parameter_dims(onnx_model, n.input[0]))
+        n.flags.gemm.weight_dims = len(get_parameter_dims(onnx_model, n.input[1]))
+        logger.debug('%s: input_dims=%d weight_dims=%d', n.name, n.flags.gemm.input_dims, n.flags.gemm.weight_dims)
     if n.op_type in ('GemmStage2', 'MatMulStage2'):
-        node_flags[idx].gemm_stage2.input_dims = len(get_parameter_dims(onnx_model, n.input[0]))
-        node_flags[idx].gemm_stage2.tile_length = config['gemm_tile_length']
+        n.flags.gemm_stage2.input_dims = len(get_parameter_dims(onnx_model, n.input[0]))
+        n.flags.gemm_stage2.tile_length = config['gemm_tile_length']
 
     if n.op_type == 'Concat':
         # https://onnx.ai/onnx/operators/onnx__Concat.html#concat-13
         axis = get_attr(n, 'axis')
         assert axis
-        node_flags[idx].concat.axis = ensure_non_negative_axis(onnx_model, n, axis)
+        n.flags.concat.axis = ensure_non_negative_axis(onnx_model, n, axis)
 
     if n.op_type == 'Transpose':
         perm = get_attr(n, 'perm')
@@ -396,15 +394,16 @@ for idx, n in enumerate(nodes):
             for original_index, mapped_index in enumerate(perm)
         }
         inverse_perm = [inverse_mapping[mapped_index] for mapped_index in range(len(perm))]
-        node_flags[idx].transpose.perm = perm + [-1]*(4-len(perm))
-        node_flags[idx].transpose.inverse_perm = inverse_perm + [-1]*(4-len(perm))
+        n.flags.transpose.perm = perm + [-1]*(4-len(perm))
+        n.flags.transpose.inverse_perm = inverse_perm + [-1]*(4-len(perm))
     if n.op_type == 'Softmax':
         # The default value for 'axis' is -1 since opset 13
         # https://onnx.ai/onnx/operators/onnx__Softmax.html
         axis = get_attr(n, 'axis') or - 1
         axis = ensure_non_negative_axis(onnx_model, n, axis)
-        node_flags[idx].softmax.axis = axis
-        node_flags[idx+1].softmax.axis = axis # stage 2
+        n.flags.softmax.axis = axis
+        stage2_node = find_node_by_input(nodes, n.output[0])
+        stage2_node.flags.softmax.axis = axis # stage 2
 
     if n.op_type == 'Add':
         # Make sure constants are in the second input is one of inputs contain constants
@@ -416,13 +415,13 @@ for idx, n in enumerate(nodes):
     if n.op_type == 'ArgMax':
         # https://onnx.ai/onnx/operators/onnx__ArgMax.html#argmax-13
         axis = get_attr(n, 'axis') or 0
-        node_flags[idx].arg_max.axis = ensure_non_negative_axis(onnx_model, n, axis)
-        node_flags[idx].arg_max.keepdims = get_attr(n, 'keepdims')
+        n.flags.arg_max.axis = ensure_non_negative_axis(onnx_model, n, axis)
+        n.flags.arg_max.keepdims = get_attr(n, 'keepdims')
 
     if n.op_type == 'Gather':
         # https://onnx.ai/onnx/operators/onnx__Gather.html#gather-13
         axis = get_attr(n, 'axis') or 0
-        node_flags[idx].gather.axis = ensure_non_negative_axis(onnx_model, n, axis)
+        n.flags.gather.axis = ensure_non_negative_axis(onnx_model, n, axis)
 
     if n.op_type == 'AveragePool':
         # https://onnx.ai/onnx/operators/onnx__AveragePool.html#averagepool-11
@@ -558,6 +557,10 @@ ffi_objects['inference_stats'].append(inference_stats_arr)
 
 inference_results_arr = ffi.new('struct InferenceResults[]', 2)
 ffi_objects['inference_results'].append(inference_results_arr)
+
+# Allocate memory for NodeFlags but not fill in flags, as some flags (ex: tile sizes) depend on remaining NVM space.
+# Actual flags will be filled later
+node_flags = ffi.new('struct NodeFlags[]', len(nodes))
 
 ffi_objects['node_orig_flags'].append(node_flags)
 
@@ -718,18 +721,26 @@ nvm_layout()
 max_output_tile_size = 0
 for idx, n in enumerate(nodes):
     if n.op_type == 'Conv':
-        cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.JAPARI, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n,  node_flags[idx].conv)
+        cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.JAPARI, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
     if n.op_type in ('Gemm', 'MatMul'):
-        cur_output_tile_c = determine_gemm_tile_sizes(onnx_model, config, Constants.BATCH_SIZE, args.target, n, node_flags[idx].gemm)
+        cur_output_tile_c = determine_gemm_tile_sizes(onnx_model, config, Constants.BATCH_SIZE, args.target, n)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
 
 if Constants.STATEFUL:
-    min_range = find_min_range(onnx_model, nodes, node_flags, config, Constants.N_INPUT)
+    min_range = find_min_range(onnx_model, nodes, config, Constants.N_INPUT)
     if min_range < max_output_tile_size:
         Constants.USE_STATES_ARRAY = 1
 
-walk_search_space(nodes, node_flags, outputs['exhaustive_lookup_table'])
+walk_search_space(nodes, outputs['exhaustive_lookup_table'])
+
+# Fill in actual flags
+for node_idx, node in enumerate(nodes):
+    # Dereferencing the pointer to flags via `node.flags[0]` as something like `*node.flags` is not valid Python
+    # https://cffi.readthedocs.io/en/latest/using.html
+    ffi_objects['node_orig_flags'][0][node_idx] = node.flags[0]
+    for node_flags_copy_idx in range(2):
+        ffi_objects['node_flags'][node_flags_copy_idx][node_idx] = node.flags[0]
 
 pathlib.Path(args.data_output_dir).mkdir(exist_ok=True)
 

@@ -177,11 +177,12 @@ def parameter_importance(onnx_model, nodes):
         elif node.op_type == 'Gemm':
             parameter_importance_fc(onnx_model, node, power_cycle_energy)
 
-def walk_search_space(nodes, node_flags, exhaustive_lookup_table):
+def walk_search_space(nodes, exhaustive_lookup_table):
     search_space_size = 0
     exhaustive_search_step = 4
     search_step = 2
-    for node_idx, (node, cur_node_flags) in enumerate(zip(nodes, node_flags)):
+    for node_idx, node in enumerate(nodes):
+        cur_node_flags = node.flags
         if node.op_type == 'Conv':
             for input_tile_c in range(exhaustive_search_step, cur_node_flags.conv.input_tile_c, exhaustive_search_step):
                 exhaustive_lookup_table.write(to_bytes(node_idx))
