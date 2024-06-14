@@ -185,7 +185,11 @@ void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
             if (!shutdown_counter) {
                 exit_with_status(2);
             }
-            my_printf_debug("Remaining shutdown counter: %" PRIu32 NEWLINE, shutdown_counter);
+            if (shutdown_counter > 1UL<<31) {
+                my_printf_debug("Remaining shutdown counter: 2**32-%ld" NEWLINE, (1UL<<32) - shutdown_counter);
+            } else {
+                my_printf_debug("Remaining shutdown counter: %" PRIu32 NEWLINE, shutdown_counter);
+            }
         }
     }
 }

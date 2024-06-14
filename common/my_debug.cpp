@@ -157,14 +157,11 @@ static bool check_ofm_dumped(const ParameterInfo* cur_param) {
     uint16_t node_idx = cur_param->parameter_info_idx - N_INPUT;
     NodeFlags* node_flags = get_node_flags(node_idx);
 
-    if (get_model()->run_counter % 2) {
-        if ((node_flags->general_flags & OFM_DUMPED) == OFM_DUMPED) {
-            return false;
-        }
-    } else {
-        if ((node_flags->general_flags & OFM_DUMPED) == 0) {
-            return false;
-        }
+    uint8_t odd_run_counter = get_model()->run_counter % 2;
+    uint8_t has_ofm_dumped_flag = static_cast<uint8_t>((node_flags->general_flags & OFM_DUMPED) == OFM_DUMPED);
+    if ((odd_run_counter + has_ofm_dumped_flag) % 2 == 1) {
+        my_printf("check_ofm_dumped: skipped" NEWLINE);
+        return false;
     }
 
     node_flags->general_flags ^= OFM_DUMPED;
