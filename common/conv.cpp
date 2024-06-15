@@ -767,7 +767,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
     uint32_t dynamic_dnn_skipped_jobs = read_hawaii_layer_footprint<FootprintForDynamicDNN>(model->layer_idx);
 
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
@@ -784,7 +784,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
     uint32_t first_unfinished_value_offset_with_skipped_jobs = first_unfinished_value_offset;
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         // For dynamic channel pruning, the number of skipped jobs equals to the offset for those jobs
         first_unfinished_value_offset_with_skipped_jobs += dynamic_dnn_skipped_jobs;
@@ -923,7 +923,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
                 conv_params->input_tile_c_offset += conv_params->input_tile_c;
 
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
                 write_hawaii_dynamic_dnn_information(model->layer_idx, slice_size_input_channel_tiling);
 #endif
             }
@@ -991,7 +991,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                     report_progress();
                 }
             } else {
-#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
                 write_hawaii_dynamic_dnn_information(model->layer_idx, conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W);
 #endif
             }

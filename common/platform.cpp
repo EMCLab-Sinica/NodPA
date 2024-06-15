@@ -275,6 +275,9 @@ void write_hawaii_layer_footprint_impl(uint16_t layer_idx, int16_t value) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
     T* footprint_vm = vm_addr<T>(layer_idx);
 
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_TWO_INDICATOR
+    footprint_vm->value += value;
+#else
     uint32_t old_value = footprint_vm->value;
     footprint_vm->value += value;
 
@@ -300,9 +303,17 @@ void write_hawaii_layer_footprint_impl(uint16_t layer_idx, int16_t value) {
 
         my_printf_debug("Update the least significant byte (%x) for HAWAII layer %s %d for layer %d" NEWLINE,
                         last_byte, datatype_name<T>(), footprint_vm->value, layer_idx);
-    } else {
+    } else
+#endif
+    {
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE
+        commit_versioned_data<Footprint>(layer_idx);
+        commit_versioned_data<FootprintForDynamicDNN>(layer_idx);
+        my_printf_debug("Commit HAWAII layer footprint and dynamic information for layer %d" NEWLINE, layer_idx);
+#else
         commit_versioned_data<T>(layer_idx);
         my_printf_debug("Commit HAWAII layer %s %d for layer %d" NEWLINE, datatype_name<T>(), footprint_vm->value, layer_idx);
+#endif
     }
     MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
 #endif
