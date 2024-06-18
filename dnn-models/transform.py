@@ -749,7 +749,7 @@ with open(f'{args.data_output_dir}/data.cpp', 'w') as output_c, open(f'{args.dat
 #pragma once
 
 #include <stdint.h>
-#include "dynbal-config.h"
+#include "config.h"
 #include "layer-defs.h"
 
 struct ParameterInfo;

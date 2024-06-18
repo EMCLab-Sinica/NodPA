@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cinttypes>
+#include "config.h"
 #include "data_structures.h"
 #include "double_buffering.h"
 #include "dynbal.h"

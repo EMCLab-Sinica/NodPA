@@ -15,7 +15,7 @@
 #include "platform.h"
 #include "dynbal.h"
 #include "dynbal-conv.h"
-#include "dynbal-config.h"
+#include "config.h"
 #include "layers.h"
 #include "layer-defs.h"
 

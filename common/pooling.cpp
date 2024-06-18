@@ -3,6 +3,7 @@
 #include <cinttypes>
 #include <cstdlib>
 #include <cstring>
+#include "config.h"
 #include "data.h"
 #include "data_structures.h"
 #include "cnn_common.h"

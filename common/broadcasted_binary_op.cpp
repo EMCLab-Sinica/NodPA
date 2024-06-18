@@ -1,4 +1,5 @@
 #include "cnn_common.h"
+#include "config.h"
 #include "counters.h"
 #include "data.h"
 #include "intermittent-cnn.h"

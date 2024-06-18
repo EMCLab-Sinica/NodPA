@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cinttypes>
 #include "cnn_common.h"
+#include "config.h"
 #include "counters.h"
 #include "data.h"
 #include "layer-defs.h"

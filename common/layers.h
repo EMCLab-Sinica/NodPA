@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include "dynbal-config.h"
+#include "config.h"
 #include "layer-defs.h"
 
 #define OFM_DUMPED 1

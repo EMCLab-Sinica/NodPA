@@ -8,7 +8,7 @@
 #include "data_structures.h"
 #include "dynbal.h"
 #include "dynbal-conv.h"
-#include "dynbal-config.h"
+#include "config.h"
 #include "layers.h"
 #include "my_debug.h"
 #include "op_utils.h"

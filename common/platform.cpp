@@ -4,6 +4,7 @@
 #include <cstring>
 #include <limits>
 #include "c_callbacks.h"
+#include "config.h"
 #include "counters.h"
 #include "data.h"
 #include "data_structures.h"
@@ -12,7 +13,6 @@
 #include "my_debug.h"
 #include "intermittent-cnn.h" // for sample_idx
 #include "double_buffering.h"
-#include "op_utils.h"
 
 // put offset checks here as extra headers are used
 static_assert(COUNTERS_OFFSET >= PARAMETERS_OFFSET + PARAMETERS_DATA_LEN, "Incorrect NVM layout");

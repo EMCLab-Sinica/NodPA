@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include "data_structures.h"
-#include "dynbal-config.h"
+#include "config.h"
 
 #define DYNBAL_REPORT_PARAMETERS 0
 

@@ -4,7 +4,7 @@
 #include "counters.h"
 #include "data.h"
 #include "dynbal.h"
-#include "dynbal-config.h"
+#include "config.h"
 #include "dynbal-fc.h"
 #include "fc.h"
 #include "layer-defs.h"

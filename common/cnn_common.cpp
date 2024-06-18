@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "cnn_common.h"
+#include "config.h"
 #include "counters.h"
 #include "data.h"
 #include "data_structures.h"

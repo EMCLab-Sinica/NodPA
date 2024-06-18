@@ -1,3 +1,4 @@
+#include "config.h"
 #ifdef PC_BUILD
 
 #include "intermittent-cnn.h"
