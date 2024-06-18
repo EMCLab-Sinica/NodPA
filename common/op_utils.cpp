@@ -12,12 +12,6 @@
 #include "counters.h"
 
 // Not using DSPLIB_DATA here as it does not work under C++ (?)
-#ifdef __MSP432__
-#define NOINIT [[gnu::section(".noinit")]]
-#else
-#define NOINIT
-#endif
-
 #ifdef __MSP430__
 #pragma DATA_SECTION(".leaRAM")
 #endif

@@ -30,6 +30,12 @@
 #define COUNTERS_OFFSET (FOOTPRINTS_FOR_DYNAMIC_DNN_OFFSET - COUNTERS_DATA_LEN)
 #define INFERENCE_RESULTS_OFFSET (COUNTERS_OFFSET - INFERENCE_RESULTS_DATA_LEN)
 
+#ifdef __MSP432__
+#define NOINIT [[gnu::section(".noinit")]]
+#else
+#define NOINIT
+#endif
+
 struct ParameterInfo;
 struct Model;
 struct Counters;

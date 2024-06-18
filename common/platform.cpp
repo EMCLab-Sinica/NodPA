@@ -225,8 +225,8 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 }
 
 #if HAWAII
-static Footprint footprints_vm[MODEL_NODES_LEN];
-static FootprintForDynamicDNN footprints_for_dynamic_dnn_vm[MODEL_NODES_LEN];
+NOINIT static Footprint footprints_vm[MODEL_NODES_LEN];
+NOINIT static FootprintForDynamicDNN footprints_for_dynamic_dnn_vm[MODEL_NODES_LEN];
 static uint8_t footprint_copy_id = 0;
 static uint8_t footprint_for_dynamic_dnn_copy_id = 0;
 

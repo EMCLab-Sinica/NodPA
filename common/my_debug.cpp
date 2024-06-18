@@ -3,6 +3,7 @@
 #include <cinttypes> // for PRId64
 #include <cstdint>
 #include <memory>
+#include "config.h"
 #include "counters.h"
 #include "data.h"
 #include "my_debug.h"
@@ -154,6 +155,7 @@ static void extract_dimensions(const ParameterInfo* cur_param, uint16_t* NUM, ui
 }
 
 static bool check_ofm_dumped(const ParameterInfo* cur_param) {
+#if MY_DEBUG >= MY_DEBUG_LAYERS
     uint16_t node_idx = cur_param->parameter_info_idx - N_INPUT;
     NodeFlags* node_flags = get_node_flags(node_idx);
 
@@ -166,6 +168,7 @@ static bool check_ofm_dumped(const ParameterInfo* cur_param) {
 
     node_flags->general_flags ^= OFM_DUMPED;
     commit_node_flags(node_flags);
+#endif
 
     return true;
 }
@@ -299,7 +302,7 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
     my_printf(NEWLINE);
 }
 
-#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
+#if MY_DEBUG >= MY_DEBUG_NORMAL && DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
 
 static const uint16_t BUFFER_TEMP_SIZE = 16;
 static int16_t buffer_temp[BUFFER_TEMP_SIZE];

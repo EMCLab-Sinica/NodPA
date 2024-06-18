@@ -16,4 +16,6 @@ const NodeFlags* get_node_orig_flags(size_t i);
 const Node* get_node(const ParameterInfo* param);
 
 CurNodeFlags* get_node_flags(uint16_t node_idx);
+#if MY_DEBUG >= MY_DEBUG_LAYERS || RuntimeConfiguration != Fixed
 void commit_node_flags(const NodeFlags* node_flags);
+#endif
