@@ -69,6 +69,7 @@ class DataLayout(enum.Enum):
 class ModelData(NamedTuple):
     dataset: Dataset
     data_layout: DataLayout
+    label_names: Optional[list[str]] = None
 
     def data_loader(self, limit):
         return DataLoader(self.dataset, batch_size=(limit or len(self.dataset)))

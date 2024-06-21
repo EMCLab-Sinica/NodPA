@@ -691,7 +691,10 @@ for label in labels:
 
 if args.write_images:
     with open('images/ans.txt', 'w') as f:
-        f.write(' '.join(map(str, labels)))
+        f.write(' '.join(map(lambda label: str(label.item()), labels)))
+    if model_data.label_names:
+        with open('images/ans-texts.txt', 'w') as f:
+            f.write(' '.join(map(lambda label: model_data.label_names[label.item()], labels)))
 
 if Constants.ENABLE_PER_LAYER_COUNTERS:
     Constants.COUNTERS_LEN = Constants.MODEL_NODES_LEN + 1

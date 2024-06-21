@@ -27,10 +27,11 @@ def load_data_cifar10(train: bool, target_size: tuple[int, int], normalized: boo
     if normalized:
         transforms.append(Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)))
     transforms.append(Resize(size=target_size[-2:], antialias=True))  # H and W from NCHW of ONNX
-    
+
     with filelock.FileLock(xdg_cache_home / 'cifar10.lock'):
         dataset = torchvision.datasets.CIFAR10(root=xdg_cache_home, train=train, download=True, transform=Compose(transforms))
-    return ModelData(dataset=dataset, data_layout=DataLayout.NCHW)
+    # XXX: CIFAR10.classes is likely a private field
+    return ModelData(dataset=dataset, data_layout=DataLayout.NCHW, label_names=dataset.classes)
 
 def preprocess_kws_dataset(original_dataset):
     GOOGLE_SPEECH_SAMPLE_RATE = 16000
