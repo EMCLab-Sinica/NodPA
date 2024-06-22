@@ -24,7 +24,7 @@ logger = logging.getLogger('intermittent-cnn.layer_utils')
 def extend_for_footprints(batch_size, n):
     return n + n // batch_size
 
-def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_japari, intermediate_values_size, target, node):
+def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_japari, intermediate_values_size, target, node, model_variant):
     logger.debug('Determine tile size for Conv node %s', node.name)
 
     output_value_info = find_tensor_value_info(onnx_model, node.output[0])
@@ -46,7 +46,11 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
     if not conv_flags.pruning_threshold or conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:
         conv_flags.input_tile_c = CHANNEL
     else:
-        conv_flags.input_tile_c = 1
+        if model_variant == 'static':
+            # NVM is too small to store all output features with input_tile_c = 1
+            conv_flags.input_tile_c = 2
+        else:
+            conv_flags.input_tile_c = 1
         CHANNEL = math.ceil(CHANNEL * sparsity)
 
     if conv_flags.pruning_threshold and conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:

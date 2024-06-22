@@ -13,7 +13,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('config', choices=configs.keys())
     parser.add_argument('--limit', type=int, default=0)
-    parser.add_argument('--model-variant', type=str, default='')
     parser.add_argument('--save-file')
     args = parser.parse_args()
 
@@ -21,7 +20,7 @@ def main():
         args.limit = None
 
     config = configs[args.config]
-    models = load_model(config, model_variant=args.model_variant)
+    models = load_model(config)
     model = models['batched']
     model_data = config['data_loader'](train=False, target_size=get_sample_size(model))
     if args.limit == 1:

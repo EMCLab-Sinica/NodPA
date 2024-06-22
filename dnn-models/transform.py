@@ -84,7 +84,7 @@ class Constants:
     NUM_INPUTS = 0  # will be filled during parsing
     N_INPUT = 0
     # Match the size of external FRAM
-    NVM_SIZE = 1024 * 1024
+    NVM_SIZE = 2048 * 1024
     ORIG_NVM_SIZE = NVM_SIZE
     INTERMEDIATE_VALUES_SIZE = 0  # will be filled by nvm_layout()
     N_SAMPLES = 1
@@ -92,6 +92,7 @@ class Constants:
     OUTPUT_LEN = OUTPUT_LEN
     USE_ARM_CMSIS = 0
     CONFIG: Optional[str] = None
+    FORCE_STATIC_NETWORKS = 0
 
     BATCH_SIZE = 1
     STATEFUL = 0
@@ -198,7 +199,7 @@ else:
     logging.getLogger('intermittent-cnn').setLevel(logging.INFO)
 
 config: ConfigType = configs[args.config]
-onnx_models = load_model(config, model_variant=args.model_variant)
+onnx_models = load_model(config)
 onnx_model = onnx_models['single']
 onnx_model_batched = onnx_models['batched']
 
@@ -234,6 +235,10 @@ Constants.INDIRECT_RECOVERY = Constants.STATEFUL | Constants.JAPARI
 if args.target == 'msp432':
     Constants.USE_ARM_CMSIS = 1
 Constants.LEA_BUFFER_SIZE = vm_size[args.target]
+
+if args.model_variant == 'static':
+    Constants.FORCE_STATIC_NETWORKS = 1
+    config['sparsity'] = 0
 
 names = {}
 
@@ -724,7 +729,7 @@ nvm_layout()
 max_output_tile_size = 0
 for idx, n in enumerate(nodes):
     if n.op_type == 'Conv':
-        cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.JAPARI, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n)
+        cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.JAPARI, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n, args.model_variant)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
     if n.op_type in ('Gemm', 'MatMul'):
         cur_output_tile_c = determine_gemm_tile_sizes(onnx_model, config, Constants.BATCH_SIZE, args.target, n)

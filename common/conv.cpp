@@ -904,6 +904,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     int16_t input_channels = conv_filter->dims[1];
     for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {
+#if !FORCE_STATIC_NETWORKS
         if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
             int16_t channel_mask;
             while (conv_params->input_tile_c_offset < input_channels) {
@@ -932,6 +933,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 break;
             }
         }
+#endif
 
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
         MY_ASSERT(conv_params->input_tile_c_index < conv_params->n_tiles_c);
@@ -963,6 +965,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
         while (true) {
             bool skip_current_output_channel = false;
+#if !FORCE_STATIC_NETWORKS
             if (conv_params->conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
                 int16_t channel_masks[2];
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
@@ -981,6 +984,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                     my_printf_debug("running" NEWLINE);
                 }
             }
+#endif
 
             if (!skip_current_output_channel) {
                 for (; conv_params->input_w <= conv_params->input_w_last; conv_params->input_w += conv_params->layer_dims.STRIDE_W) {
