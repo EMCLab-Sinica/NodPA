@@ -199,7 +199,8 @@ void first_run(void) {
     write_to_nvm(model_data, nvm_addr<Model>(0, 0), MODEL_DATA_LEN);
     write_to_nvm(model_data, nvm_addr<Model>(1, 0), MODEL_DATA_LEN);
 
-    load_model_from_nvm(); // refresh model_vm
+    Model* model = load_model_from_nvm(); // refresh model_vm
+    model->first_run_done = 1;
     commit_model();
 
     my_printf_debug("Init for " CONFIG "/" METHOD " with batch size=%d" NEWLINE, BATCH_SIZE);

@@ -78,7 +78,7 @@ typedef struct Model {
     uint16_t run_counter;
     uint16_t layer_idx;
     SlotInfo slots_info[NUM_SLOTS];
-    uint8_t dummy;
+    uint8_t first_run_done;
     uint8_t version; // must be the last field in this struct
 } Model;
 

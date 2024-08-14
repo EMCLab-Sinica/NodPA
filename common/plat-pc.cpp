@@ -125,7 +125,7 @@ int main(int argc, char* argv[]) {
 
     model = load_model_from_nvm();
 
-    if (!model->version) {
+    if (!model->first_run_done) {
         // the first time
         first_run();
     }
