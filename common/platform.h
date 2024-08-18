@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include "data.h"
+#include "data_structures.h"
 
 #if defined(__MSP430__) || defined(__MSP432__)
 #  include "plat-mcu.h"
@@ -26,8 +27,7 @@
 #define NODE_FLAGS_OFFSET (INTERMEDIATE_PARAMETERS_INFO_OFFSET - NODE_FLAGS_DATA_LEN)
 #define NODES_OFFSET (NODE_FLAGS_OFFSET - NODES_DATA_LEN)
 #define FOOTPRINTS_OFFSET (NODES_OFFSET - FOOTPRINTS_DATA_LEN)
-#define FOOTPRINTS_FOR_DYNAMIC_DNN_OFFSET (FOOTPRINTS_OFFSET - FOOTPRINTS_FOR_DYNAMIC_DNN_DATA_LEN)
-#define COUNTERS_OFFSET (FOOTPRINTS_FOR_DYNAMIC_DNN_OFFSET - COUNTERS_DATA_LEN)
+#define COUNTERS_OFFSET (FOOTPRINTS_OFFSET - COUNTERS_DATA_LEN)
 #define INFERENCE_RESULTS_OFFSET (COUNTERS_OFFSET - INFERENCE_RESULTS_DATA_LEN)
 
 #ifdef __MSP432__
@@ -76,8 +76,21 @@ void notify_indicator(uint8_t idx);
 bool read_gpio_flag(GPIOFlag flag);
 void save_model_output_data();
 #if HAWAII
+
+enum class FootprintOffset {
+    NUM_COMPLETED_JOBS = 0,
+    COMPUTATION_UNIT_INDEX = 1,
+    NUM_SKIPPED_JOBS = 2,
+};
+
+#if USE_EXTENDED_FOOTPRINTS
+typedef _ExtendedFootprint Footprint;
+#else
+typedef _Footprint Footprint;
+#endif
+
+uint32_t combine_footprint_value(const Footprint* footprint, FootprintOffset footprint_offset);
+void increment_hawaii_layer_extended_footprint(Footprint* footprint, int16_t value, FootprintOffset footprint_offset);
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
-void write_hawaii_dynamic_dnn_information(uint16_t layer_idx, uint32_t value);
-template<typename T> uint32_t read_hawaii_layer_footprint(uint16_t layer_idx);
-template<typename T> void reset_hawaii_layer_footprint(uint16_t layer_idx);
+void reset_hawaii_layer_footprint(uint16_t layer_idx);
 #endif

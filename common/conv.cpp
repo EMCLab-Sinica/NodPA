@@ -8,6 +8,7 @@
 #include "counters.h"
 #include "data.h"
 #include "data_structures.h"
+#include "double_buffering.h"
 #include "my_debug.h"
 #include "op_utils.h"
 #include "intermittent-cnn.h"
@@ -61,6 +62,9 @@ typedef struct ConvTaskParams {
     uint8_t turning_point_idx;
     uint16_t next_turning_point;
     SlotInfo* cur_slot_info;
+#endif
+#if HAWAII
+    Footprint* footprint;
 #endif
 #if JAPARI
     uint8_t conv_input_has_footprints;
@@ -365,7 +369,33 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
     MY_ASSERT(cur_output_data_offset + n_filters < INTERMEDIATE_VALUES_SIZE * NUM_SLOTS);
 
 #if HAWAII
-    hawaii_record_footprints(conv_params->model, values_to_preserve);
+
+    uint8_t num_completed_units = 0;
+#if !FORCE_STATIC_NETWORKS
+    if (conv_params->conv_channel_pruning_mask) {
+        if (conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
+            if ((conv_params->input_w + conv_params->layer_dims.STRIDE_W > conv_params->input_w_last) &&
+                (conv_params->input_h + conv_params->layer_dims.STRIDE_H > conv_params->input_h_last)) {
+                num_completed_units = 2;
+            }
+        } else {
+            my_printf_debug("input_w=%d STRIDE_W=%d input_w_last=%d input_h=%d STRIDE_H=%d input_h_last=%d filter_tile_index+1=%d output_tile_c=%d N_FILTERS=%d" NEWLINE,
+                            conv_params->input_w, conv_params->layer_dims.STRIDE_W, conv_params->input_w_last,
+                            conv_params->input_h, conv_params->layer_dims.STRIDE_H, conv_params->input_h_last,
+                            conv_params->filter_tile_index + 1, conv_params->flags->conv.output_tile_c, layer_dims->N_FILTERS);
+            if ((conv_params->input_w + conv_params->layer_dims.STRIDE_W > conv_params->input_w_last) &&
+                (conv_params->input_h + conv_params->layer_dims.STRIDE_H > conv_params->input_h_last) &&
+                ((conv_params->filter_tile_index + 1) * conv_params->flags->conv.output_tile_c >= layer_dims->N_FILTERS)) {
+                num_completed_units = 1;
+            }
+        }
+    }
+#endif
+    if (num_completed_units) {
+        increment_hawaii_layer_extended_footprint(conv_params->footprint, num_completed_units, FootprintOffset::COMPUTATION_UNIT_INDEX);
+    }
+    increment_hawaii_layer_extended_footprint(conv_params->footprint, values_to_preserve, FootprintOffset::NUM_COMPLETED_JOBS);
+    commit_versioned_data<Footprint>(conv_params->model->layer_idx);
 #endif
 }
 
@@ -757,10 +787,11 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     conv_params->filter_idx = 0;
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
-    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+    conv_params->footprint = get_versioned_data<Footprint>(model->layer_idx);
+    uint32_t first_unfinished_job_idx = combine_footprint_value(conv_params->footprint, FootprintOffset::NUM_COMPLETED_JOBS);
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-    uint32_t dynamic_dnn_skipped_jobs = read_hawaii_layer_footprint<FootprintForDynamicDNN>(model->layer_idx);
+    uint32_t dynamic_dnn_skipped_jobs = combine_footprint_value(conv_params->footprint, FootprintOffset::NUM_SKIPPED_JOBS);
 
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
         first_unfinished_job_idx += dynamic_dnn_skipped_jobs;
@@ -901,9 +932,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             int16_t channel_mask;
             while (conv_params->input_tile_c_offset < input_channels) {
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
-                channel_mask = get_q15_param(model, conv_channel_pruning_mask, conv_params->input_tile_c_offset);
+                uint16_t computation_unit_index = combine_footprint_value(conv_params->footprint, FootprintOffset::COMPUTATION_UNIT_INDEX);
+                channel_mask = get_q15_param(model, conv_channel_pruning_mask, computation_unit_index);
 
-                my_printf_debug("input_tile_c_offset=%d channel_mask=%d... ", conv_params->input_tile_c_offset, channel_mask);
+                my_printf_debug("input_tile_c_offset=%d computation_unit_index=%d channel_mask=%d... ",
+                                conv_params->input_tile_c_offset, computation_unit_index, channel_mask);
+                MY_ASSERT(conv_params->input_tile_c_offset == computation_unit_index);
 
                 Scale inverse_scale = SCALE_ONE / conv_channel_pruning_mask->scale;
                 my_scale_q15(&pruning_threshold, inverse_scale.fract, inverse_scale.shift, &pruning_threshold, 1);
@@ -917,7 +951,9 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 conv_params->input_tile_c_offset += conv_params->input_tile_c;
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-                write_hawaii_dynamic_dnn_information(model->layer_idx, slice_size_input_channel_tiling);
+                increment_hawaii_layer_extended_footprint(conv_params->footprint, slice_size_input_channel_tiling, FootprintOffset::NUM_SKIPPED_JOBS);
+                increment_hawaii_layer_extended_footprint(conv_params->footprint, 1, FootprintOffset::COMPUTATION_UNIT_INDEX);
+                commit_versioned_data<Footprint>(model->layer_idx);
 #endif
             }
 
@@ -962,9 +998,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 int16_t channel_masks[2];
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
 
-                my_memcpy_from_param(model, channel_masks, conv_params->conv_channel_pruning_mask, conv_params->filter_idx, 2*sizeof(int16_t));
+                uint16_t computation_unit_index = combine_footprint_value(conv_params->footprint, FootprintOffset::COMPUTATION_UNIT_INDEX);
+                my_memcpy_from_param(model, channel_masks, conv_params->conv_channel_pruning_mask, computation_unit_index, 2*sizeof(int16_t));
 
-                my_printf_debug("filter_idx=%d channel_masks=[%d, %d]... ", conv_params->filter_idx, channel_masks[0], channel_masks[1]);
+                my_printf_debug("filter_idx=%d computation_unit_index=%d channel_masks=[%d, %d]... ",
+                                conv_params->filter_idx, computation_unit_index, channel_masks[0], channel_masks[1]);
+                MY_ASSERT(conv_params->filter_idx == computation_unit_index);
 
                 Scale inverse_scale = SCALE_ONE / conv_channel_pruning_mask->scale;
                 my_scale_q15(&pruning_threshold, inverse_scale.fract, inverse_scale.shift, &pruning_threshold, 1);
@@ -988,7 +1027,11 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 }
             } else {
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-                write_hawaii_dynamic_dnn_information(model->layer_idx, conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W);
+                increment_hawaii_layer_extended_footprint(conv_params->footprint,
+                        conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W,
+                        FootprintOffset::NUM_SKIPPED_JOBS);
+                increment_hawaii_layer_extended_footprint(conv_params->footprint, 2, FootprintOffset::COMPUTATION_UNIT_INDEX);
+                commit_versioned_data<Footprint>(model->layer_idx);
 #endif
             }
 

@@ -11,7 +11,7 @@
 
 // Templates to be filled by users
 template<typename T>
-static uint32_t nvm_addr(uint8_t, uint16_t);
+uint32_t nvm_addr(uint8_t, uint16_t);
 
 template<typename T>
 T* vm_addr(uint16_t data_idx);

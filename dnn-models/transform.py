@@ -109,6 +109,7 @@ class Constants:
 
     FP32_ACCURACY: float = 0.0  # will be filled
 
+    USE_EXTENDED_FOOTPRINTS = 0
     PRUNING_INPUT_CHANNELS = PRUNING_INPUT_CHANNELS
     PRUNING_OUTPUT_CHANNELS = PRUNING_OUTPUT_CHANNELS
 
@@ -493,7 +494,6 @@ ffi_objects: dict[str, list] = {
     'node_flags': [],
     'node_orig_flags': [],
     'footprints': [],
-    'footprints_for_dynamic_dnn': [],
     'inference_stats': [],
     'inference_results': [],
 }
@@ -550,11 +550,13 @@ for node in nodes:
     for parameter_idx in node.parameters_by_importance:
         output_nodes.write(to_bytes(parameter_idx))
 
-footprints_arr = ffi.new('struct Footprint[]', 2 * len(nodes))
+if config.get('pruning_threshold'):
+    Constants.USE_EXTENDED_FOOTPRINTS = 1
+    footprint_struct = 'struct _ExtendedFootprint[]'
+else:
+    footprint_struct = 'struct _Footprint[]'
+footprints_arr = ffi.new(footprint_struct, 2 * len(nodes))
 ffi_objects['footprints'].append(footprints_arr)
-
-footprints_for_dynamic_dnn_arr = ffi.new('struct FootprintForDynamicDNN[]', 2 * len(nodes))
-ffi_objects['footprints_for_dynamic_dnn'].append(footprints_for_dynamic_dnn_arr)
 
 inference_stats_arr = ffi.new('struct InferenceStats[]', 2 * 2)
 ffi_objects['inference_stats'].append(inference_stats_arr)
@@ -708,7 +710,7 @@ outputs['counters'].write(b'\0' * ffi.sizeof('struct Counters') * Constants.COUN
 
 def nvm_layout():
     # See common/platform.h; some items are duplicated for double buffering
-    nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'footprints_for_dynamic_dnn', 'counters', 'inference_results', 'parameters']
+    nvm_data_names = ['inference_stats', 'model', 'model', 'intermediate_parameters_info', 'node_flags', 'nodes', 'footprints', 'counters', 'inference_results', 'parameters']
     remaining_size = Constants.ORIG_NVM_SIZE - 256
     for data_name in nvm_data_names:
         if data_name in outputs:

@@ -227,18 +227,11 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 
 #if HAWAII
 NOINIT static Footprint footprints_vm[MODEL_NODES_LEN];
-NOINIT static FootprintForDynamicDNN footprints_for_dynamic_dnn_vm[MODEL_NODES_LEN];
 static uint8_t footprint_copy_id = 0;
-static uint8_t footprint_for_dynamic_dnn_copy_id = 0;
 
 template<>
 uint32_t nvm_addr<Footprint>(uint8_t copy_id, uint16_t layer_idx) {
     return FOOTPRINTS_OFFSET + (copy_id * MODEL_NODES_LEN + layer_idx) * sizeof(Footprint);
-}
-
-template<>
-uint32_t nvm_addr<FootprintForDynamicDNN>(uint8_t copy_id, uint16_t layer_idx) {
-    return FOOTPRINTS_FOR_DYNAMIC_DNN_OFFSET + (copy_id * MODEL_NODES_LEN + layer_idx) * sizeof(FootprintForDynamicDNN);
 }
 
 template<>
@@ -247,18 +240,8 @@ Footprint* vm_addr<Footprint>(uint16_t layer_idx) {
 }
 
 template<>
-FootprintForDynamicDNN* vm_addr<FootprintForDynamicDNN>(uint16_t layer_idx) {
-    return &footprints_for_dynamic_dnn_vm[layer_idx];
-}
-
-template<>
 const char* datatype_name<Footprint>(void) {
     return "footprint";
-}
-
-template<>
-const char* datatype_name<FootprintForDynamicDNN>(void) {
-    return "dynamic information";
 }
 
 template<>
@@ -266,89 +249,52 @@ uint8_t* copy_id_cache_addr<Footprint>(void) {
     return &footprint_copy_id;
 }
 
-template<>
-uint8_t* copy_id_cache_addr<FootprintForDynamicDNN>(void) {
-    return &footprint_for_dynamic_dnn_copy_id;
+#if USE_EXTENDED_FOOTPRINTS
+uint32_t combine_footprint_value(const Footprint* footprint, FootprintOffset footprint_offset) {
+    uint8_t _footprint_offset = static_cast<uint8_t>(footprint_offset);
+    uint32_t footprint_value = (footprint->values[_footprint_offset+0] <<  0) +
+                               (footprint->values[_footprint_offset+3] <<  8) +
+                               (footprint->values[_footprint_offset+6] << 16) +
+                               (footprint->values[_footprint_offset+9] << 24);
+    my_printf_debug("Combined footprint %d value = %d" NEWLINE, _footprint_offset, footprint_value);
+    return footprint_value;
 }
-
-template<typename T>
-void write_hawaii_layer_footprint_impl(uint16_t layer_idx, int16_t value) {
-#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
-    T* footprint_vm = vm_addr<T>(layer_idx);
-
-#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_TWO_INDICATOR
-    footprint_vm->value += value;
+static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, FootprintOffset footprint_offset) {
+    uint8_t _footprint_offset = static_cast<uint8_t>(footprint_offset);
+    my_printf_debug("Split value %d to footprint %d" NEWLINE, footprint_value, _footprint_offset);
+    footprint->values[_footprint_offset+0] = (footprint_value >>  0) & 0xff;
+    footprint->values[_footprint_offset+3] = (footprint_value >>  8) & 0xff;
+    footprint->values[_footprint_offset+6] = (footprint_value >> 16) & 0xff;
+    footprint->values[_footprint_offset+9] = (footprint_value >> 24) & 0xff;
+}
 #else
-    uint32_t old_value = footprint_vm->value;
-    footprint_vm->value += value;
+uint32_t combine_footprint_value(const Footprint* footprint, FootprintOffset /*footprint_offset*/) {
+    return footprint->value;
+}
+static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, FootprintOffset /*footprint_offset*/) {
+    footprint->value = footprint_value;
+}
+#endif
 
-    // Comparing old and new values. If only the least significant byte is changed, update that byte only.
-    // Otherwise, update the whole value via double buffering.
-    constexpr decltype(T::value) mask = std::numeric_limits<decltype(T::value)>::max() - 0xff;
-    if ((footprint_vm->value & mask) == (old_value & mask)) {
-        uint8_t* copy_id_cache = copy_id_cache_addr<T>();
-        MY_ASSERT(copy_id_cache && *copy_id_cache);
-
-        uint32_t footprint_nvm_addr = nvm_addr<T>(*copy_id_cache - 1, layer_idx);
-        // Calculate the address for the least significant byte according to system endianness
-        // Note that __BYTE_ORDER__ here is a GCC extension
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-        uint32_t last_byte_nvm_addr = footprint_nvm_addr + offsetof(T, value) + sizeof(T::value) - 1;
-#elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        uint32_t last_byte_nvm_addr = footprint_nvm_addr + offsetof(T, value);
-#else
-#error "Unsupported endian"
-#endif
-        uint8_t last_byte = static_cast<uint8_t>(footprint_vm->value & 0xff);
-        write_to_nvm(&last_byte, last_byte_nvm_addr, /*n=*/1);
-
-        my_printf_debug("Update the least significant byte (%x) for HAWAII layer %s %d for layer %d" NEWLINE,
-                        last_byte, datatype_name<T>(), footprint_vm->value, layer_idx);
-    } else
-#endif
-    {
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE
-        commit_versioned_data<Footprint>(layer_idx);
-        commit_versioned_data<FootprintForDynamicDNN>(layer_idx);
-        my_printf_debug("Commit HAWAII layer footprint and dynamic information for layer %d" NEWLINE, layer_idx);
-#else
-        commit_versioned_data<T>(layer_idx);
-        my_printf_debug("Commit HAWAII layer %s %d for layer %d" NEWLINE, datatype_name<T>(), footprint_vm->value, layer_idx);
-#endif
-    }
-    MY_ASSERT(footprint_vm->value % BATCH_SIZE == 0);
-#endif
+void increment_hawaii_layer_extended_footprint(Footprint* footprint, int16_t value, FootprintOffset footprint_offset) {
+    uint32_t new_footprint_value = combine_footprint_value(footprint, footprint_offset) + value;
+    split_footprint_value(footprint, new_footprint_value, footprint_offset);
 }
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
-    write_hawaii_layer_footprint_impl<Footprint>(layer_idx, n_jobs);
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
+    Footprint* footprint = vm_addr<Footprint>(layer_idx);
+    increment_hawaii_layer_extended_footprint(footprint, n_jobs, FootprintOffset::NUM_COMPLETED_JOBS);
+    commit_versioned_data<Footprint>(layer_idx);
+#endif
 }
 
-void write_hawaii_dynamic_dnn_information(uint16_t layer_idx, uint32_t value) {
-    write_hawaii_layer_footprint_impl<FootprintForDynamicDNN>(layer_idx, value);
-}
-
-template<typename T>
-uint32_t read_hawaii_layer_footprint(uint16_t layer_idx) {
-    const T* footprint = get_versioned_data<T>(layer_idx);
-    my_printf_debug("HAWAII layer %s=%d for layer %d" NEWLINE, datatype_name<T>(), footprint->value, layer_idx);
-    MY_ASSERT(footprint->value % BATCH_SIZE == 0);
-    return footprint->value;
-}
-
-template<typename T>
 void reset_hawaii_layer_footprint(uint16_t layer_idx) {
-    T footprint;
-    memset(&footprint, 0, sizeof(T));
-    write_to_nvm(&footprint, nvm_addr<T>(0, layer_idx), sizeof(T));
-    write_to_nvm(&footprint, nvm_addr<T>(1, layer_idx), sizeof(T));
-    my_printf_debug("Reset HAWAII layer %s for layer %d" NEWLINE, datatype_name<T>(), layer_idx);
+    Footprint footprint;
+    memset(&footprint, 0, sizeof(Footprint));
+    write_to_nvm(&footprint, nvm_addr<Footprint>(0, layer_idx), sizeof(Footprint));
+    write_to_nvm(&footprint, nvm_addr<Footprint>(1, layer_idx), sizeof(Footprint));
+    my_printf_debug("Reset HAWAII layer footprint for layer %d" NEWLINE, layer_idx);
 }
-
-// Explicit instantiations
-template uint32_t read_hawaii_layer_footprint<Footprint>(uint16_t layer_idx);
-template uint32_t read_hawaii_layer_footprint<FootprintForDynamicDNN>(uint16_t layer_idx);
-template void reset_hawaii_layer_footprint<Footprint>(uint16_t layer_idx);
-template void reset_hawaii_layer_footprint<FootprintForDynamicDNN>(uint16_t layer_idx);
 
 #endif

@@ -88,14 +88,14 @@ struct NodeFlags {
 
 static_assert(sizeof(struct NodeFlags) == NODE_FLAGS_SIZE + 4, "Unexpected size for NodeFlags");
 
-struct Footprint {
+struct _Footprint {
     uint32_t value;
     uint8_t version;
     uint8_t dummy;
 };
 
-struct FootprintForDynamicDNN {
-    uint32_t value;
+struct _ExtendedFootprint {
+    uint8_t values[12];
     uint8_t version;
     uint8_t dummy;
 };
