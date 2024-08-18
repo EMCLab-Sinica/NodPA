@@ -46,7 +46,6 @@ class ConfigType(TypedDict):
 
     # For dynamic channel pruning
     pruning_threshold: NotRequired[float]
-    sparsity: NotRequired[float]
 
 configs: dict[str, ConfigType] = {
     'cifar10': {
@@ -68,7 +67,6 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 10000,
         'op_filters': 2,
         'pruning_threshold': 0.5,
-        'sparsity': 0.4,
         'swap_add': True,
     },
     'kws': {
@@ -99,7 +97,6 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 2947,
         'op_filters': 4,
         'pruning_threshold': 0.5,
-        'sparsity': 0.99,
     },
     'transformers': {
         # TODO: use the single model in both onnx_model and onnx_model_single for now,

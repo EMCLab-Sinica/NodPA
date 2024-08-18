@@ -238,7 +238,6 @@ Constants.LEA_BUFFER_SIZE = vm_size[args.target]
 
 if args.model_variant == 'static':
     Constants.FORCE_STATIC_NETWORKS = 1
-    config['sparsity'] = 0
 
 names = {}
 

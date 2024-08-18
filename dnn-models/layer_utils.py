@@ -41,8 +41,6 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
 
     conv_flags = node.flags.conv
 
-    sparsity = conv_flags.sparsity / 2**15 or 1.0
-
     if not conv_flags.pruning_threshold or conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:
         conv_flags.input_tile_c = CHANNEL
     else:
@@ -51,10 +49,6 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
             conv_flags.input_tile_c = 2
         else:
             conv_flags.input_tile_c = 1
-        CHANNEL = math.ceil(CHANNEL * sparsity)
-
-    if conv_flags.pruning_threshold and conv_flags.pruning_target == PRUNING_OUTPUT_CHANNELS:
-        OUTPUT_CHANNEL = math.ceil(OUTPUT_CHANNEL * sparsity)
 
     logger.debug('Initial input_tile_c=%d', conv_flags.input_tile_c)
 

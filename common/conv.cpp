@@ -607,14 +607,6 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
     return tile_h;
 }
 
-static void calculate_n_tiles_c(ConvTaskParams* conv_params, const uint16_t CHANNEL) {
-    if (conv_params->flags->conv.sparsity && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
-        conv_params->n_tiles_c = upper_gauss(CHANNEL * conv_params->flags->conv.sparsity >> 15, conv_params->input_tile_c);
-    } else {
-        conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->input_tile_c);
-    }
-}
-
 void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {
     const ParameterInfo *conv_input = input[0], *conv_filter = input[1];
 
@@ -662,7 +654,7 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 #endif
 
     conv_params->input_tile_c = conv_params->flags->conv.input_tile_c;
-    calculate_n_tiles_c(conv_params, CHANNEL);
+    conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->input_tile_c);
 
 #if STATEFUL
     start_cpu_counter(offsetof(Counters, memory_layout));
@@ -880,7 +872,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
     // recalculate n_tiles_c, as tile sizes may be changed during dynamic reconfiguration
-    calculate_n_tiles_c(conv_params, CHANNEL);
+    conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->input_tile_c);
     output->params_len = conv_params->n_tiles_c * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
 
 #if ENABLE_DEMO_COUNTERS
@@ -1043,7 +1035,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #if MY_DEBUG >= MY_DEBUG_LAYERS
     my_printf_debug("handle_conv output" NEWLINE);
     dump_params_nhwc_debug(model, output, node->output_name, "Conv");
-    if (conv_params->flags->conv.sparsity && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
+    if (conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
         char output_name[NODE_NAME_LEN];
         strcpy(output_name, node->output_name);
         char* replaced = strstr(output_name, ":stage1");

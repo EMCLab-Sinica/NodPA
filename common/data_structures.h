@@ -11,7 +11,6 @@ struct ConvNodeFlags {
     uint8_t group;
     uint8_t pruning_target;
     int16_t pruning_threshold;
-    int16_t sparsity;
     uint16_t pState_len;
 };
 
