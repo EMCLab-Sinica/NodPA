@@ -237,7 +237,8 @@ if args.target == 'msp432':
     Constants.USE_ARM_CMSIS = 1
 Constants.LEA_BUFFER_SIZE = vm_size[args.target]
 
-if args.model_variant == 'static':
+if args.model_variant == 'static' or not args.hawaii:
+    # XXX: Currently, dynamic networks are supported only with HAWAII
     Constants.FORCE_STATIC_NETWORKS = 1
 
 names = {}

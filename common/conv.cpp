@@ -787,8 +787,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     conv_params->filter_idx = 0;
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
+#if HAWAII
     conv_params->footprint = get_versioned_data<Footprint>(model->layer_idx);
     uint32_t first_unfinished_job_idx = combine_footprint_value(conv_params->footprint, FootprintOffset::NUM_COMPLETED_JOBS);
+#else
+    uint32_t first_unfinished_job_idx = run_recovery(model, output);
+#endif
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
     uint32_t dynamic_dnn_skipped_jobs = combine_footprint_value(conv_params->footprint, FootprintOffset::NUM_SKIPPED_JOBS);
