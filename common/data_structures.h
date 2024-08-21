@@ -142,6 +142,11 @@ struct Counters {
     uint32_t nvm_write_non_linear_jobs;
     uint32_t nvm_write_footprints;
 
+    uint32_t num_processed_units;
+    uint32_t num_processed_jobs;
+    uint32_t num_skipped_units;
+    uint32_t num_skipped_jobs;
+
     // persistent counters
     uint32_t total_jobs;
 };

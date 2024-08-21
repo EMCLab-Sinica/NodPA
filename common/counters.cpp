@@ -59,6 +59,7 @@ void print_all_counters() {
     }
 #endif
     uint32_t total_dma_bytes = 0, total_macs = 0, total_overhead = 0;
+    uint32_t total_num_skipped_jobs = 0, total_num_processed_jobs = 0, total_num_skipped_units = 0, total_num_processed_units = 0;
 #if !ENABLE_DEMO_COUNTERS
     my_printf(NEWLINE "Power counters:          "); print_counters<&Counters::power_counters>();
     my_printf(NEWLINE "MACs:                    "); total_macs = print_counters<&Counters::macs>();
@@ -96,6 +97,14 @@ void print_all_counters() {
     my_printf(NEWLINE "NVM write (NL jobs):     "); total_overhead += print_counters<&Counters::nvm_write_non_linear_jobs>();
     my_printf(NEWLINE "NVM write (footprints):  "); total_overhead += print_counters<&Counters::nvm_write_footprints>();
 
+    my_printf(NEWLINE "Processed units:         "); total_num_processed_units = print_counters<&Counters::num_processed_units>();
+    my_printf(NEWLINE "Skipped units:           "); total_num_skipped_units   = print_counters<&Counters::num_skipped_units>();
+    my_printf(NEWLINE "Processed jobs:          "); total_num_processed_jobs  = print_counters<&Counters::num_processed_jobs>();
+    my_printf(NEWLINE "Skipped jobs:            "); total_num_skipped_jobs    = print_counters<&Counters::num_skipped_jobs>();
+
+    my_printf(NEWLINE "Ratio of skipped jobs: %f", 1.0 * total_num_skipped_jobs / (total_num_skipped_jobs + total_num_processed_jobs));
+    my_printf(NEWLINE "Ratio of skipped units: %f", 1.0 * total_num_skipped_units / (total_num_skipped_units + total_num_processed_units));
+
     my_printf(NEWLINE "Total DMA bytes: %d", total_dma_bytes);
     my_printf(NEWLINE "Total MACs: %d", total_macs);
     my_printf(NEWLINE "Communication-to-computation ratio: %f", 1.0f*total_dma_bytes/total_macs);
@@ -119,6 +128,7 @@ void add_counter(uint8_t counter, uint32_t value) {
     counters_enabled = 0;
     *get_counter_ptr(counter) += value;
     write_to_nvm(get_counter_ptr(counter), counter_offset(counter), sizeof(uint32_t), 0);
+    my_printf_debug("Increment counter %d to %d" NEWLINE, counter, *get_counter_ptr(counter));
     counters_enabled = 1;
 }
 

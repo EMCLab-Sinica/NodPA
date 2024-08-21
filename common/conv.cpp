@@ -947,11 +947,16 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
                 if (abs(channel_mask) >= pruning_threshold) {
                     my_printf_debug("running" NEWLINE);
+                    add_counter(offsetof(Counters, num_processed_units), 1);
+                    add_counter(offsetof(Counters, num_processed_jobs), slice_size_input_channel_tiling);
                     break;
                 }
                 my_printf_debug("skipping" NEWLINE);
 
                 conv_params->input_tile_c_offset += conv_params->input_tile_c;
+
+                add_counter(offsetof(Counters, num_skipped_units), 1);
+                add_counter(offsetof(Counters, num_skipped_jobs), slice_size_input_channel_tiling);
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
                 increment_hawaii_layer_extended_footprint(conv_params->footprint, slice_size_input_channel_tiling, FootprintOffset::NUM_SKIPPED_JOBS);
@@ -1020,6 +1025,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
 #endif
 
+            uint32_t num_jobs_in_unit = conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W;
             if (!skip_current_output_channel) {
                 for (; conv_params->input_w <= conv_params->input_w_last; conv_params->input_w += conv_params->layer_dims.STRIDE_W) {
                     for (; conv_params->input_h <= conv_params->input_h_last;) {
@@ -1028,11 +1034,15 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                     conv_params->input_h = conv_params->input_h_first;
                     report_progress();
                 }
+
+                add_counter(offsetof(Counters, num_processed_units), 2);
+                add_counter(offsetof(Counters, num_processed_jobs), num_jobs_in_unit);
             } else {
+                add_counter(offsetof(Counters, num_skipped_units), 2);
+                add_counter(offsetof(Counters, num_skipped_jobs), num_jobs_in_unit);
+
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-                increment_hawaii_layer_extended_footprint(conv_params->footprint,
-                        conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W,
-                        FootprintOffset::NUM_SKIPPED_JOBS);
+                increment_hawaii_layer_extended_footprint(conv_params->footprint, num_jobs_in_unit, FootprintOffset::NUM_SKIPPED_JOBS);
                 increment_hawaii_layer_extended_footprint(conv_params->footprint, 2, FootprintOffset::COMPUTATION_UNIT_INDEX);
                 commit_versioned_data<Footprint>(model->layer_idx);
 #endif

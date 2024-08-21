@@ -136,10 +136,6 @@ int main(int argc, char* argv[]) {
 
     ret = run_cnn_tests(n_samples);
 
-#if ENABLE_COUNTERS
-    print_all_counters();
-#endif
-
 #ifndef __linux__
     delete [] nvm;
 #endif

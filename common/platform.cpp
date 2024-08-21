@@ -170,11 +170,10 @@ Model* get_model(void) {
 }
 
 void commit_model(void) {
-#if ENABLE_DEMO_COUNTERS
     if (!model_vm.running) {
+        print_all_counters();
         reset_counters();
     }
-#endif
     start_cpu_counter(offsetof(Counters, table_preservation));
     commit_versioned_data<Model>(0);
     // send finish signals only after the whole network has really finished

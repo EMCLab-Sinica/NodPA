@@ -34,6 +34,7 @@ bool counters_cleared();
 void report_progress();
 
 #else
+#define add_counter(counter, value)
 #define start_cpu_counter(mem_ptr)
 #define stop_cpu_counter()
 #define print_all_counters()
