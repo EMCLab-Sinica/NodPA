@@ -371,26 +371,25 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
 #if HAWAII
 
     uint8_t num_completed_units = 0;
-#if !FORCE_STATIC_NETWORKS
     if (conv_params->conv_channel_pruning_mask) {
+        my_printf_debug("input_w=%d STRIDE_W=%d input_w_last=%d cur_input_h=%d STRIDE_H=%d input_h_last=%d" NEWLINE,
+                        conv_params->input_w, conv_params->layer_dims.STRIDE_W, conv_params->input_w_last,
+                        cur_input_h, conv_params->layer_dims.STRIDE_H, conv_params->input_h_last);
         if (conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
             if ((conv_params->input_w + conv_params->layer_dims.STRIDE_W > conv_params->input_w_last) &&
-                (conv_params->input_h + conv_params->layer_dims.STRIDE_H > conv_params->input_h_last)) {
+                (cur_input_h + conv_params->layer_dims.STRIDE_H > conv_params->input_h_last)) {
                 num_completed_units = 2;
             }
         } else {
-            my_printf_debug("input_w=%d STRIDE_W=%d input_w_last=%d input_h=%d STRIDE_H=%d input_h_last=%d filter_tile_index+1=%d output_tile_c=%d N_FILTERS=%d" NEWLINE,
-                            conv_params->input_w, conv_params->layer_dims.STRIDE_W, conv_params->input_w_last,
-                            conv_params->input_h, conv_params->layer_dims.STRIDE_H, conv_params->input_h_last,
+            my_printf_debug("filter_tile_index+1=%d output_tile_c=%d N_FILTERS=%d" NEWLINE,
                             conv_params->filter_tile_index + 1, conv_params->flags->conv.output_tile_c, layer_dims->N_FILTERS);
             if ((conv_params->input_w + conv_params->layer_dims.STRIDE_W > conv_params->input_w_last) &&
-                (conv_params->input_h + conv_params->layer_dims.STRIDE_H > conv_params->input_h_last) &&
+                (cur_input_h + conv_params->layer_dims.STRIDE_H > conv_params->input_h_last) &&
                 ((conv_params->filter_tile_index + 1) * conv_params->flags->conv.output_tile_c >= layer_dims->N_FILTERS)) {
                 num_completed_units = 1;
             }
         }
     }
-#endif
     if (num_completed_units) {
         increment_hawaii_layer_extended_footprint(conv_params->footprint, num_completed_units, FootprintOffset::COMPUTATION_UNIT_INDEX);
     }
