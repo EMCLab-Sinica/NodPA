@@ -63,9 +63,6 @@ typedef struct ConvTaskParams {
     uint16_t next_turning_point;
     SlotInfo* cur_slot_info;
 #endif
-#if HAWAII
-    Footprint* footprint;
-#endif
 #if JAPARI
     uint8_t conv_input_has_footprints;
     uint16_t input_tile_c_offset_with_footprints;
@@ -370,6 +367,7 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
 
 #if HAWAII
 
+#if USE_EXTENDED_FOOTPRINTS
     uint8_t num_completed_units = 0;
     if (conv_params->conv_channel_pruning_mask) {
         my_printf_debug("input_w=%d STRIDE_W=%d input_w_last=%d cur_input_h=%d STRIDE_H=%d input_h_last=%d" NEWLINE,
@@ -391,10 +389,14 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
         }
     }
     if (num_completed_units) {
-        increment_hawaii_layer_extended_footprint(conv_params->footprint, num_completed_units, FootprintOffset::COMPUTATION_UNIT_INDEX);
+        write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
+                                          &UnshuffledFootprint::computation_unit_index, num_completed_units,
+                                          &UnshuffledFootprint::num_completed_jobs, values_to_preserve);
+    } else
+#endif
+    {
+        write_hawaii_layer_footprint(conv_params->model->layer_idx, values_to_preserve);
     }
-    increment_hawaii_layer_extended_footprint(conv_params->footprint, values_to_preserve, FootprintOffset::NUM_COMPLETED_JOBS);
-    commit_versioned_data<Footprint>(conv_params->model->layer_idx);
 #endif
 }
 
@@ -787,14 +789,15 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
 #if HAWAII
-    conv_params->footprint = get_versioned_data<Footprint>(model->layer_idx);
-    uint32_t first_unfinished_job_idx = combine_footprint_value(conv_params->footprint, FootprintOffset::NUM_COMPLETED_JOBS);
+    const Footprint* footprint = get_versioned_data<Footprint>(model->layer_idx);
+    unshuffle_footprint_values(footprint);
+    uint32_t first_unfinished_job_idx = unshuffled_footprint.num_completed_jobs;
 #else
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 #endif
 
-#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-    uint32_t dynamic_dnn_skipped_jobs = combine_footprint_value(conv_params->footprint, FootprintOffset::NUM_SKIPPED_JOBS);
+#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+    uint32_t dynamic_dnn_skipped_jobs = unshuffled_footprint.num_skipped_jobs;
 
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
         first_unfinished_job_idx += dynamic_dnn_skipped_jobs;
@@ -810,7 +813,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
     uint32_t first_unfinished_value_offset_with_skipped_jobs = first_unfinished_value_offset;
-#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         // For dynamic channel pruning, the number of skipped jobs equals to the offset for those jobs
         first_unfinished_value_offset_with_skipped_jobs += dynamic_dnn_skipped_jobs;
@@ -930,12 +933,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     int16_t input_channels = conv_filter->dims[1];
     for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {
-#if !FORCE_STATIC_NETWORKS
+#if USE_EXTENDED_FOOTPRINTS && !FORCE_STATIC_NETWORKS
         if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
             int16_t channel_mask;
             while (conv_params->input_tile_c_offset < input_channels) {
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
-                uint16_t computation_unit_index = combine_footprint_value(conv_params->footprint, FootprintOffset::COMPUTATION_UNIT_INDEX);
+                uint16_t computation_unit_index = unshuffled_footprint.computation_unit_index;
                 channel_mask = get_q15_param(model, conv_channel_pruning_mask, computation_unit_index);
 
                 my_printf_debug("input_tile_c_offset=%d computation_unit_index=%d channel_mask=%d... ",
@@ -958,10 +961,10 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 add_counter(offsetof(Counters, num_skipped_units), 1);
                 add_counter(offsetof(Counters, num_skipped_jobs), slice_size_input_channel_tiling);
 
-#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-                increment_hawaii_layer_extended_footprint(conv_params->footprint, slice_size_input_channel_tiling, FootprintOffset::NUM_SKIPPED_JOBS);
-                increment_hawaii_layer_extended_footprint(conv_params->footprint, 1, FootprintOffset::COMPUTATION_UNIT_INDEX);
-                commit_versioned_data<Footprint>(model->layer_idx);
+#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+                write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
+                                                  &UnshuffledFootprint::num_skipped_jobs, slice_size_input_channel_tiling,
+                                                  &UnshuffledFootprint::computation_unit_index, 1);
 #endif
             }
 
@@ -1001,12 +1004,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
         while (true) {
             bool skip_current_output_channel = false;
-#if !FORCE_STATIC_NETWORKS
+#if USE_EXTENDED_FOOTPRINTS && !FORCE_STATIC_NETWORKS
             if (conv_params->conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
                 int16_t channel_masks[2];
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
 
-                uint16_t computation_unit_index = combine_footprint_value(conv_params->footprint, FootprintOffset::COMPUTATION_UNIT_INDEX);
+                uint16_t computation_unit_index = unshuffled_footprint.computation_unit_index;
                 my_memcpy_from_param(model, channel_masks, conv_params->conv_channel_pruning_mask, computation_unit_index, 2*sizeof(int16_t));
 
                 my_printf_debug("filter_idx=%d computation_unit_index=%d channel_masks=[%d, %d]... ",
@@ -1041,10 +1044,10 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 add_counter(offsetof(Counters, num_skipped_units), 2);
                 add_counter(offsetof(Counters, num_skipped_jobs), num_jobs_in_unit);
 
-#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-                increment_hawaii_layer_extended_footprint(conv_params->footprint, num_jobs_in_unit, FootprintOffset::NUM_SKIPPED_JOBS);
-                increment_hawaii_layer_extended_footprint(conv_params->footprint, 2, FootprintOffset::COMPUTATION_UNIT_INDEX);
-                commit_versioned_data<Footprint>(model->layer_idx);
+#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+                write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
+                                                  &UnshuffledFootprint::num_skipped_jobs, num_jobs_in_unit,
+                                                  &UnshuffledFootprint::computation_unit_index, 2);
 #endif
             }
 

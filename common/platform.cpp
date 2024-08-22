@@ -226,6 +226,7 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 
 #if HAWAII
 NOINIT static Footprint footprints_vm[MODEL_NODES_LEN];
+NOINIT UnshuffledFootprint unshuffled_footprint;
 static uint8_t footprint_copy_id = 0;
 
 template<>
@@ -249,44 +250,68 @@ uint8_t* copy_id_cache_addr<Footprint>(void) {
 }
 
 #if USE_EXTENDED_FOOTPRINTS
-uint32_t combine_footprint_value(const Footprint* footprint, FootprintOffset footprint_offset) {
-    uint8_t _footprint_offset = static_cast<uint8_t>(footprint_offset);
+static uint32_t combine_footprint_value(const Footprint* footprint, uint8_t footprint_offset) {
+    uint8_t _footprint_offset = footprint_offset / sizeof(uint32_t);
     uint32_t footprint_value = (footprint->values[_footprint_offset+0] <<  0) +
                                (footprint->values[_footprint_offset+3] <<  8) +
                                (footprint->values[_footprint_offset+6] << 16) +
                                (footprint->values[_footprint_offset+9] << 24);
-    my_printf_debug("Combined footprint %d value = %d" NEWLINE, _footprint_offset, footprint_value);
+    my_printf_debug("Combined footprint %d value = %d" NEWLINE, footprint_offset, footprint_value);
     return footprint_value;
 }
-static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, FootprintOffset footprint_offset) {
-    uint8_t _footprint_offset = static_cast<uint8_t>(footprint_offset);
+
+static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, uint8_t footprint_offset) {
+    uint8_t _footprint_offset = footprint_offset / sizeof(uint32_t);
     my_printf_debug("Split value %d to footprint %d" NEWLINE, footprint_value, _footprint_offset);
     footprint->values[_footprint_offset+0] = (footprint_value >>  0) & 0xff;
     footprint->values[_footprint_offset+3] = (footprint_value >>  8) & 0xff;
     footprint->values[_footprint_offset+6] = (footprint_value >> 16) & 0xff;
     footprint->values[_footprint_offset+9] = (footprint_value >> 24) & 0xff;
 }
-#else
-uint32_t combine_footprint_value(const Footprint* footprint, FootprintOffset /*footprint_offset*/) {
-    return footprint->value;
+
+void unshuffle_footprint_values(const Footprint* footprint) {
+    unshuffled_footprint.num_completed_jobs     = combine_footprint_value(footprint, offsetof(UnshuffledFootprint, num_completed_jobs));
+    unshuffled_footprint.computation_unit_index = combine_footprint_value(footprint, offsetof(UnshuffledFootprint, computation_unit_index));
+    unshuffled_footprint.num_skipped_jobs       = combine_footprint_value(footprint, offsetof(UnshuffledFootprint, num_skipped_jobs));
 }
-static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, FootprintOffset /*footprint_offset*/) {
+#else
+static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, uint8_t footprint_offset) {
+    MY_ASSERT(footprint_offset == 0);
     footprint->value = footprint_value;
 }
-#endif
-
-void increment_hawaii_layer_extended_footprint(Footprint* footprint, int16_t value, FootprintOffset footprint_offset) {
-    uint32_t new_footprint_value = combine_footprint_value(footprint, footprint_offset) + value;
-    split_footprint_value(footprint, new_footprint_value, footprint_offset);
+void unshuffle_footprint_values(const Footprint* footprint) {
+    unshuffled_footprint.num_completed_jobs = footprint->value;
 }
+#endif
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
+    unshuffled_footprint.num_completed_jobs += n_jobs;
+
     Footprint* footprint = vm_addr<Footprint>(layer_idx);
-    increment_hawaii_layer_extended_footprint(footprint, n_jobs, FootprintOffset::NUM_COMPLETED_JOBS);
+    split_footprint_value(footprint, unshuffled_footprint.num_completed_jobs, offsetof(UnshuffledFootprint, num_completed_jobs));
     commit_versioned_data<Footprint>(layer_idx);
 #endif
 }
+
+#if USE_EXTENDED_FOOTPRINTS
+void write_hawaii_layer_two_footprints(uint16_t layer_idx,
+                                       uint32_t UnshuffledFootprint::*footprint_ptr1, int16_t increment1,
+                                       uint32_t UnshuffledFootprint::*footprint_ptr2, int16_t increment2) {
+#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
+    unshuffled_footprint.*footprint_ptr1 += increment1;
+    unshuffled_footprint.*footprint_ptr2 += increment2;
+
+    Footprint* footprint = vm_addr<Footprint>(layer_idx);
+#define offsetof_memptr(var, ptr) (&(var.*ptr) - reinterpret_cast<uint32_t*>(&var)) * sizeof(uint32_t) // omit parantheses for macro arguments for readability
+    split_footprint_value(footprint, unshuffled_footprint.*footprint_ptr1, offsetof_memptr(unshuffled_footprint, footprint_ptr1));
+    split_footprint_value(footprint, unshuffled_footprint.*footprint_ptr2, offsetof_memptr(unshuffled_footprint, footprint_ptr2));
+#undef offset_memptr
+
+    commit_versioned_data<Footprint>(layer_idx);
+#endif
+}
+#endif
 
 void reset_hawaii_layer_footprint(uint16_t layer_idx) {
     Footprint footprint;

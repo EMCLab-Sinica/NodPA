@@ -77,20 +77,25 @@ bool read_gpio_flag(GPIOFlag flag);
 void save_model_output_data();
 #if HAWAII
 
-enum class FootprintOffset {
-    NUM_COMPLETED_JOBS = 0,
-    COMPUTATION_UNIT_INDEX = 1,
-    NUM_SKIPPED_JOBS = 2,
-};
-
 #if USE_EXTENDED_FOOTPRINTS
 typedef _ExtendedFootprint Footprint;
+struct UnshuffledFootprint {
+    uint32_t num_completed_jobs;
+    uint32_t computation_unit_index;
+    uint32_t num_skipped_jobs;
+};
+void write_hawaii_layer_two_footprints(uint16_t layer_idx,
+                                       uint32_t UnshuffledFootprint::*footprint_ptr1, int16_t increment1,
+                                       uint32_t UnshuffledFootprint::*footprint_ptr2, int16_t increment2);
 #else
 typedef _Footprint Footprint;
+struct UnshuffledFootprint {
+    uint32_t num_completed_jobs;
+};
 #endif
 
-uint32_t combine_footprint_value(const Footprint* footprint, FootprintOffset footprint_offset);
-void increment_hawaii_layer_extended_footprint(Footprint* footprint, int16_t value, FootprintOffset footprint_offset);
+extern UnshuffledFootprint unshuffled_footprint;
+void unshuffle_footprint_values(const Footprint* footprint);
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
 void reset_hawaii_layer_footprint(uint16_t layer_idx);
 #endif

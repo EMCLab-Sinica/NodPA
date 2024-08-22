@@ -134,9 +134,9 @@ int8_t param_state_bit(Model *model, const ParameterInfo *param, uint16_t offset
 
 #if HAWAII
 uint32_t run_recovery(Model* model, ParameterInfo*) {
-    Footprint* footprint = get_versioned_data<Footprint>(model->layer_idx);
-    uint32_t footprint_value = combine_footprint_value(footprint, FootprintOffset::NUM_COMPLETED_JOBS);
-    return footprint_value / BATCH_SIZE;
+    const Footprint* footprint = get_versioned_data<Footprint>(model->layer_idx);
+    unshuffle_footprint_values(footprint);
+    return unshuffled_footprint.num_completed_jobs / BATCH_SIZE;
 }
 #endif
 
