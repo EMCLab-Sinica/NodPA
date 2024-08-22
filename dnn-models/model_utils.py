@@ -140,6 +140,9 @@ def apply_dynamic_channel_pruning(onnx_model: onnx.ModelProto, nodes: list[onnx.
         decision_map_candidates = find_initializer(onnx_model, decision_head_gather_node.input[0])
         decision_map_candidates_arr = np.copy(onnx.numpy_helper.to_array(decision_map_candidates))
         decision_map_candidates_arr[decision_map_candidates_arr < config['pruning_threshold']] = 0
+        print(decision_map_candidates_arr.shape)
+        print(decision_map_candidates_arr)
+        print(np.count_nonzero(decision_map_candidates_arr, axis=1))
         decision_map_candidates.CopyFrom(onnx.helper.make_tensor(
             name=decision_map_candidates.name,
             data_type=decision_map_candidates.data_type,
