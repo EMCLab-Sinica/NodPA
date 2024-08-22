@@ -1209,12 +1209,13 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
 
     // A special case - when all channels are pruned
     if (!n_tiles_c) {
+        my_printf_debug("All channels are skipped - appending biases" NEWLINE);
         if (bias) {
             my_memcpy_from_param(model, lea_buffer, bias, /*offset_in_word=*/0, chunk_len * sizeof(int16_t));
-            Scale newScale = bias->scale / data->scale;
-            my_scale_q15(lea_buffer, newScale.fract, newScale.shift, lea_buffer, chunk_len);
+            output->scale = bias->scale;
         } else {
             my_fill_q15(0, lea_buffer, chunk_len);
+            output->scale = SCALE_ONE;
         }
     }
 

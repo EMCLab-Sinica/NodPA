@@ -551,7 +551,7 @@ for node in nodes:
     for parameter_idx in node.parameters_by_importance:
         output_nodes.write(to_bytes(parameter_idx))
 
-if config.get('pruning_threshold'):
+if Constants.HAWAII and config.get('pruning_threshold'):
     Constants.USE_EXTENDED_FOOTPRINTS = 1
     footprint_struct = 'struct _ExtendedFootprint[]'
 else:
