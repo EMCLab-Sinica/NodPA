@@ -305,10 +305,6 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
                                        FootprintOffset footprint_offset1, int16_t increment1,
                                        FootprintOffset footprint_offset2, int16_t increment2) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
-
-#define offsetof_memptr(var, ptr) (&(var.*ptr) - reinterpret_cast<uint32_t*>(&var)) * sizeof(uint32_t) // omit parantheses for macro arguments for readability
-#undef offset_memptr
-
     my_printf_debug("Increment footprint at offset %d by %d" NEWLINE, footprint_offset1, increment1);
     my_printf_debug("Increment footprint at offset %d by %d" NEWLINE, footprint_offset2, increment2);
 
@@ -377,6 +373,10 @@ void reset_hawaii_layer_footprint(uint16_t layer_idx) {
     write_to_nvm(&footprint, nvm_addr<Footprint>(0, layer_idx), sizeof(Footprint));
     write_to_nvm(&footprint, nvm_addr<Footprint>(1, layer_idx), sizeof(Footprint));
     my_printf_debug("Reset HAWAII layer footprint for layer %d" NEWLINE, layer_idx);
+}
+
+void reset_footprint_copy_id_cache(void) {
+    *copy_id_cache_addr<Footprint>() = 0;
 }
 
 #endif

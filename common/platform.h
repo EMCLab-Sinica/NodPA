@@ -106,4 +106,5 @@ extern UnshuffledFootprint unshuffled_footprint, unshuffled_footprint_mirror[2];
 void unshuffle_footprint_values(const Footprint* footprint);
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
 void reset_hawaii_layer_footprint(uint16_t layer_idx);
+void reset_footprint_copy_id_cache(void);
 #endif
