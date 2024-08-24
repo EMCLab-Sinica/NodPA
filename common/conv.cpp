@@ -390,8 +390,8 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
     }
     if (num_completed_units) {
         write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
-                                          &UnshuffledFootprint::computation_unit_index, num_completed_units,
-                                          &UnshuffledFootprint::num_completed_jobs, values_to_preserve);
+                                          FootprintOffset::COMPUTATION_UNIT_INDEX, num_completed_units,
+                                          FootprintOffset::NUM_COMPLETED_JOBS, values_to_preserve);
     } else
 #endif
     {
@@ -789,15 +789,17 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
 #if HAWAII
+    dump_footprints_debug(model->layer_idx);
+
     const Footprint* footprint = get_versioned_data<Footprint>(model->layer_idx);
     unshuffle_footprint_values(footprint);
-    uint32_t first_unfinished_job_idx = unshuffled_footprint.num_completed_jobs;
+    uint32_t first_unfinished_job_idx = unshuffled_footprint.values[FootprintOffset::NUM_COMPLETED_JOBS];
 #else
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 #endif
 
 #if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
-    uint32_t dynamic_dnn_skipped_jobs = unshuffled_footprint.num_skipped_jobs;
+    uint32_t dynamic_dnn_skipped_jobs = unshuffled_footprint.values[FootprintOffset::NUM_SKIPPED_JOBS];
 
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
         first_unfinished_job_idx += dynamic_dnn_skipped_jobs;
@@ -938,7 +940,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             int16_t channel_mask;
             while (conv_params->input_tile_c_offset < input_channels) {
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
-                uint16_t computation_unit_index = unshuffled_footprint.computation_unit_index;
+                uint16_t computation_unit_index = unshuffled_footprint.values[COMPUTATION_UNIT_INDEX];
                 channel_mask = get_q15_param(model, conv_channel_pruning_mask, computation_unit_index);
 
                 my_printf_debug("input_tile_c_offset=%d computation_unit_index=%d channel_mask=%d... ",
@@ -963,8 +965,8 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 #if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
-                                                  &UnshuffledFootprint::num_skipped_jobs, slice_size_input_channel_tiling,
-                                                  &UnshuffledFootprint::computation_unit_index, 1);
+                                                  FootprintOffset::NUM_SKIPPED_JOBS, slice_size_input_channel_tiling,
+                                                  FootprintOffset::COMPUTATION_UNIT_INDEX, 1);
 #endif
             }
 
@@ -1009,7 +1011,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 int16_t channel_masks[2];
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
 
-                uint16_t computation_unit_index = unshuffled_footprint.computation_unit_index;
+                uint16_t computation_unit_index = unshuffled_footprint.values[COMPUTATION_UNIT_INDEX];
                 my_memcpy_from_param(model, channel_masks, conv_params->conv_channel_pruning_mask, computation_unit_index, 2*sizeof(int16_t));
 
                 my_printf_debug("filter_idx=%d computation_unit_index=%d channel_masks=[%d, %d]... ",
@@ -1046,8 +1048,8 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
 #if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
-                                                  &UnshuffledFootprint::num_skipped_jobs, num_jobs_in_unit,
-                                                  &UnshuffledFootprint::computation_unit_index, 2);
+                                                  FootprintOffset::NUM_SKIPPED_JOBS, num_jobs_in_unit,
+                                                  FootprintOffset::COMPUTATION_UNIT_INDEX, 2);
 #endif
             }
 

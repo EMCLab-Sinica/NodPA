@@ -9,6 +9,7 @@
 #include "my_debug.h"
 #include "cnn_common.h"
 #include "data_structures.h"
+#include "double_buffering.h"
 #include "intermittent-cnn.h"
 #include "layers.h"
 #include "my_dsplib.h"
@@ -335,3 +336,36 @@ void check_nvm_write_address_impl(uint32_t nvm_offset, size_t n) {
         MY_ASSERT(n <= INTERMEDIATE_PARAMETERS_INFO_OFFSET - nvm_offset, "Size %d too large!!! nvm_offset=%d" NEWLINE, n, nvm_offset);
     }
 }
+
+void dump_footprints(uint16_t layer_idx) {
+#if USE_EXTENDED_FOOTPRINTS && MY_DEBUG >= MY_DEBUG_VERBOSE
+    for (uint8_t copy_id = 0; copy_id < 2; copy_id++) {
+        Footprint tmp_footprint;
+
+        read_from_nvm(&tmp_footprint, nvm_addr<Footprint>(copy_id, layer_idx), sizeof(Footprint));
+
+        if (copy_id == 0) {
+            uint8_t cached_copy_id = *copy_id_cache_addr<Footprint>();
+            my_printf_debug("Footprint NVM pointer=%d, cached pointer=%d" NEWLINE, tmp_footprint.version, cached_copy_id);
+            MY_ASSERT(cached_copy_id == 0 || cached_copy_id == tmp_footprint.version + 1);
+        }
+
+        my_printf_debug("Footprint copy %d NVM values=", copy_id);
+        for (const uint8_t& value : tmp_footprint.values) {
+            my_printf_debug("%d ", value);
+        }
+        const UnshuffledFootprint& mirror = unshuffled_footprint_mirror[copy_id];
+        my_printf_debug(" mirror values=%d %d %d",
+                        mirror.values[FootprintOffset::NUM_COMPLETED_JOBS],
+                        mirror.values[FootprintOffset::COMPUTATION_UNIT_INDEX],
+                        mirror.values[FootprintOffset::NUM_SKIPPED_JOBS]);
+        my_printf_debug(NEWLINE);
+    }
+    my_printf_debug("Footprint VM values=");
+    for (const uint8_t& value : vm_addr<Footprint>(layer_idx)->values) {
+        my_printf_debug("%d ", value);
+    }
+    my_printf_debug(NEWLINE);
+#endif
+}
+

@@ -80,21 +80,29 @@ void save_model_output_data();
 #if USE_EXTENDED_FOOTPRINTS
 typedef _ExtendedFootprint Footprint;
 struct UnshuffledFootprint {
-    uint32_t num_completed_jobs;
-    uint32_t computation_unit_index;
-    uint32_t num_skipped_jobs;
+    uint32_t values[3];
+};
+enum FootprintOffset {
+    NUM_COMPLETED_JOBS = 0,
+    COMPUTATION_UNIT_INDEX = 1,
+    NUM_SKIPPED_JOBS = 2,
+    NUM_FOOTPRINTS = 3,
 };
 void write_hawaii_layer_two_footprints(uint16_t layer_idx,
-                                       uint32_t UnshuffledFootprint::*footprint_ptr1, int16_t increment1,
-                                       uint32_t UnshuffledFootprint::*footprint_ptr2, int16_t increment2);
+                                       FootprintOffset footprint_offset1, int16_t increment1,
+                                       FootprintOffset footprint_offset2, int16_t increment2);
 #else
 typedef _Footprint Footprint;
 struct UnshuffledFootprint {
-    uint32_t num_completed_jobs;
+    uint32_t values[1];
+};
+enum FootprintOffset {
+    NUM_COMPLETED_JOBS = 0,
+    NUM_FOOTPRINTS = 1,
 };
 #endif
 
-extern UnshuffledFootprint unshuffled_footprint;
+extern UnshuffledFootprint unshuffled_footprint, unshuffled_footprint_mirror[2];
 void unshuffle_footprint_values(const Footprint* footprint);
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
 void reset_hawaii_layer_footprint(uint16_t layer_idx);

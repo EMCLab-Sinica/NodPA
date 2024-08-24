@@ -63,17 +63,21 @@ T* get_versioned_data(uint16_t data_idx) {
 }
 
 template<typename T>
-void commit_versioned_data(uint16_t data_idx) {
+void commit_versioned_data(uint16_t data_idx, uint8_t commit_offset = 0, uint16_t num_bytes = 0) {
     uint8_t newer_copy_id = get_newer_copy_id<T>(data_idx);
     uint8_t older_copy_id = newer_copy_id ^ 1;
 
     T* vm_ptr = vm_addr<T>(data_idx);
 
+    if (!num_bytes) {
+        num_bytes = sizeof(T) - sizeof(uint8_t);
+    }
+
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
-    add_counter(offsetof(Counters, nvm_write_shadow_data), sizeof(T));
-    my_printf_debug("Recorded %lu bytes of shadow data written to NVM" NEWLINE, sizeof(T));
+    add_counter(offsetof(Counters, nvm_write_shadow_data), num_bytes);
+    my_printf_debug("Recorded %lu bytes of shadow data written to NVM" NEWLINE, num_bytes);
 #endif
-    write_to_nvm(vm_ptr, nvm_addr<T>(older_copy_id, data_idx), sizeof(T) - sizeof(uint8_t));
+    write_to_nvm(reinterpret_cast<uint8_t*>(vm_ptr) + commit_offset, nvm_addr<T>(older_copy_id, data_idx) + commit_offset, num_bytes);
     my_printf_debug("Committing to %s copy %d" NEWLINE, datatype_name<T>(), older_copy_id);
 
     write_to_nvm(&older_copy_id, nvm_addr<T>(0, data_idx) + offsetof(T, version), sizeof(uint8_t));

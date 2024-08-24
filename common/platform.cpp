@@ -1,6 +1,7 @@
 #include <cinttypes>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include "c_callbacks.h"
@@ -226,7 +227,7 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 
 #if HAWAII
 NOINIT static Footprint footprints_vm[MODEL_NODES_LEN];
-NOINIT UnshuffledFootprint unshuffled_footprint;
+NOINIT UnshuffledFootprint unshuffled_footprint, unshuffled_footprint_mirror[2];
 static uint8_t footprint_copy_id = 0;
 
 template<>
@@ -251,64 +252,121 @@ uint8_t* copy_id_cache_addr<Footprint>(void) {
 
 #if USE_EXTENDED_FOOTPRINTS
 static uint32_t combine_footprint_value(const Footprint* footprint, uint8_t footprint_offset) {
-    uint8_t _footprint_offset = footprint_offset / sizeof(uint32_t);
-    uint32_t footprint_value = (footprint->values[_footprint_offset+0] <<  0) +
-                               (footprint->values[_footprint_offset+3] <<  8) +
-                               (footprint->values[_footprint_offset+6] << 16) +
-                               (footprint->values[_footprint_offset+9] << 24);
+    uint32_t footprint_value = (footprint->values[footprint_offset+0] <<  0) +
+                               (footprint->values[footprint_offset+3] <<  8) +
+                               (footprint->values[footprint_offset+6] << 16) +
+                               (footprint->values[footprint_offset+9] << 24);
     my_printf_debug("Combined footprint %d value = %d" NEWLINE, footprint_offset, footprint_value);
     return footprint_value;
 }
 
-static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, uint8_t footprint_offset) {
-    uint8_t _footprint_offset = footprint_offset / sizeof(uint32_t);
-    my_printf_debug("Split value %d to footprint %d" NEWLINE, footprint_value, _footprint_offset);
-    footprint->values[_footprint_offset+0] = (footprint_value >>  0) & 0xff;
-    footprint->values[_footprint_offset+3] = (footprint_value >>  8) & 0xff;
-    footprint->values[_footprint_offset+6] = (footprint_value >> 16) & 0xff;
-    footprint->values[_footprint_offset+9] = (footprint_value >> 24) & 0xff;
+static inline void split_footprint_value(Footprint* footprint, const uint32_t* footprint_values, uint8_t footprint_offset) {
+    uint32_t footprint_value = footprint_values[footprint_offset];
+    my_printf_debug("Split value %d to footprint %d" NEWLINE, footprint_value, footprint_offset);
+    footprint->values[footprint_offset+0] = (footprint_value >>  0) & 0xff;
+    footprint->values[footprint_offset+3] = (footprint_value >>  8) & 0xff;
+    footprint->values[footprint_offset+6] = (footprint_value >> 16) & 0xff;
+    footprint->values[footprint_offset+9] = (footprint_value >> 24) & 0xff;
 }
 
 void unshuffle_footprint_values(const Footprint* footprint) {
-    unshuffled_footprint.num_completed_jobs     = combine_footprint_value(footprint, offsetof(UnshuffledFootprint, num_completed_jobs));
-    unshuffled_footprint.computation_unit_index = combine_footprint_value(footprint, offsetof(UnshuffledFootprint, computation_unit_index));
-    unshuffled_footprint.num_skipped_jobs       = combine_footprint_value(footprint, offsetof(UnshuffledFootprint, num_skipped_jobs));
+    for (uint8_t footprint_offset = 0; footprint_offset < FootprintOffset::NUM_FOOTPRINTS; footprint_offset++) {
+        unshuffled_footprint.values[footprint_offset] = combine_footprint_value(footprint, footprint_offset);
+    }
 }
 #else
-static inline void split_footprint_value(Footprint* footprint, uint32_t footprint_value, uint8_t footprint_offset) {
+static inline void split_footprint_value(Footprint* footprint, const uint32_t* footprint_values, uint8_t footprint_offset) {
     MY_ASSERT(footprint_offset == 0);
-    footprint->value = footprint_value;
+    footprint->value = footprint_values[0];
 }
+
 void unshuffle_footprint_values(const Footprint* footprint) {
-    unshuffled_footprint.num_completed_jobs = footprint->value;
+    unshuffled_footprint.values[0] = footprint->value;
 }
 #endif
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
-    unshuffled_footprint.num_completed_jobs += n_jobs;
+    unshuffled_footprint.values[FootprintOffset::NUM_COMPLETED_JOBS] += n_jobs;
 
     Footprint* footprint = vm_addr<Footprint>(layer_idx);
-    split_footprint_value(footprint, unshuffled_footprint.num_completed_jobs, offsetof(UnshuffledFootprint, num_completed_jobs));
+    split_footprint_value(footprint, unshuffled_footprint.values, FootprintOffset::NUM_COMPLETED_JOBS);
     commit_versioned_data<Footprint>(layer_idx);
+
+    my_memcpy(&unshuffled_footprint_mirror[get_newer_copy_id<Footprint>(layer_idx)], &unshuffled_footprint, sizeof(UnshuffledFootprint));
+
+    my_printf_debug("After committing one footprint" NEWLINE);
+    dump_footprints_debug(layer_idx);
 #endif
 }
 
 #if USE_EXTENDED_FOOTPRINTS
 void write_hawaii_layer_two_footprints(uint16_t layer_idx,
-                                       uint32_t UnshuffledFootprint::*footprint_ptr1, int16_t increment1,
-                                       uint32_t UnshuffledFootprint::*footprint_ptr2, int16_t increment2) {
+                                       FootprintOffset footprint_offset1, int16_t increment1,
+                                       FootprintOffset footprint_offset2, int16_t increment2) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
-    unshuffled_footprint.*footprint_ptr1 += increment1;
-    unshuffled_footprint.*footprint_ptr2 += increment2;
 
-    Footprint* footprint = vm_addr<Footprint>(layer_idx);
 #define offsetof_memptr(var, ptr) (&(var.*ptr) - reinterpret_cast<uint32_t*>(&var)) * sizeof(uint32_t) // omit parantheses for macro arguments for readability
-    split_footprint_value(footprint, unshuffled_footprint.*footprint_ptr1, offsetof_memptr(unshuffled_footprint, footprint_ptr1));
-    split_footprint_value(footprint, unshuffled_footprint.*footprint_ptr2, offsetof_memptr(unshuffled_footprint, footprint_ptr2));
 #undef offset_memptr
 
-    commit_versioned_data<Footprint>(layer_idx);
+    my_printf_debug("Increment footprint at offset %d by %d" NEWLINE, footprint_offset1, increment1);
+    my_printf_debug("Increment footprint at offset %d by %d" NEWLINE, footprint_offset2, increment2);
+
+    MY_ASSERT(std::abs(footprint_offset1 - footprint_offset2) == 1);
+
+    my_printf_debug("Before committing two footprints" NEWLINE);
+    dump_footprints_debug(layer_idx);
+
+    Footprint* footprint = vm_addr<Footprint>(layer_idx);
+
+    uint8_t newer_copy_id = get_newer_copy_id<Footprint>(layer_idx);
+    uint8_t older_copy_id = newer_copy_id ^ 1;
+
+    const UnshuffledFootprint& mirror = unshuffled_footprint_mirror[older_copy_id];
+
+    unshuffled_footprint.values[footprint_offset1] += increment1;
+    unshuffled_footprint.values[footprint_offset2] += increment2;
+
+    // Comparing old and new values. If only the least significant bytes are changed, update them only.
+    // Otherwise, update the whole value.
+    constexpr uint32_t mask = std::numeric_limits<uint32_t>::max() - 0xff;
+
+    uint8_t ok_values = 0;
+    for (uint8_t footprint_offset = 0; footprint_offset < sizeof(UnshuffledFootprint) / sizeof(uint32_t); footprint_offset++) {
+        // The condition for partial preservation: for updated footprints, only LSBs are changed, and for other footprints, the value remains exactly the same
+        if (footprint_offset == footprint_offset1 || footprint_offset == footprint_offset2) {
+            if ((mirror.values[footprint_offset] & mask) == (unshuffled_footprint.values[footprint_offset] & mask)) {
+                ok_values++;
+            }
+        } else {
+            if (mirror.values[footprint_offset] == unshuffled_footprint.values[footprint_offset]) {
+                ok_values++;
+            }
+        }
+    }
+
+    if (ok_values == FootprintOffset::NUM_FOOTPRINTS) {
+        my_printf_debug("Only LSB in either footprint is changed, preseving two bytes..." NEWLINE);
+
+        footprint->values[footprint_offset1] = unshuffled_footprint.values[footprint_offset1] & 0xff;
+        footprint->values[footprint_offset2] = unshuffled_footprint.values[footprint_offset2] & 0xff;
+
+        commit_versioned_data<Footprint>(layer_idx, /*commit_offset=*/MIN_VAL(footprint_offset1, footprint_offset2), /*num_bytes=*/2);
+    } else {
+        my_printf_debug("More than LSB is changed in some footprint, preseving all bytes..." NEWLINE);
+
+        split_footprint_value(footprint, unshuffled_footprint.values, footprint_offset1);
+        split_footprint_value(footprint, unshuffled_footprint.values, footprint_offset2);
+
+        commit_versioned_data<Footprint>(layer_idx);
+    }
+
+    // The newer copy id is flipped in commit_versioned_data above
+    newer_copy_id ^= 1;
+    my_memcpy(&unshuffled_footprint_mirror[newer_copy_id], &unshuffled_footprint, sizeof(UnshuffledFootprint));
+
+    my_printf_debug("After committing two footprints" NEWLINE);
+    dump_footprints_debug(layer_idx);
 #endif
 }
 #endif

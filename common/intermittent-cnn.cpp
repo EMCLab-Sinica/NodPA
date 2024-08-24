@@ -136,7 +136,7 @@ int8_t param_state_bit(Model *model, const ParameterInfo *param, uint16_t offset
 uint32_t run_recovery(Model* model, ParameterInfo*) {
     const Footprint* footprint = get_versioned_data<Footprint>(model->layer_idx);
     unshuffle_footprint_values(footprint);
-    return unshuffled_footprint.num_completed_jobs / BATCH_SIZE;
+    return unshuffled_footprint.values[FootprintOffset::NUM_COMPLETED_JOBS] / BATCH_SIZE;
 }
 #endif
 

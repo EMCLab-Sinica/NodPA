@@ -79,12 +79,14 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
 void dump_turning_points(Model *model, const ParameterInfo *output);
 void compare_vm_nvm_impl(int16_t* vm_data, Model* model, const ParameterInfo* output, uint32_t output_offset, uint16_t blockSize);
 void check_nvm_write_address_impl(uint32_t nvm_offset, size_t n);
+void dump_footprints(uint16_t layer_idx);
 
 #if MY_DEBUG >= MY_DEBUG_VERBOSE
 
 #define dump_matrix_debug dump_matrix
 #define my_printf_debug my_printf
 #define dump_turning_points_debug dump_turning_points
+#define dump_footprints_debug dump_footprints
 
 #else
 
@@ -93,6 +95,7 @@ void check_nvm_write_address_impl(uint32_t nvm_offset, size_t n);
 #define dump_model_debug(...)
 #define my_printf_debug(...)
 #define dump_turning_points_debug(...)
+#define dump_footprints_debug(...)
 
 #endif
 

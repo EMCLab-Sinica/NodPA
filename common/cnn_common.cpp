@@ -200,6 +200,11 @@ static void handle_node(Model *model, uint16_t node_idx) {
         }
 #endif
     }
+
+#if HAWAII
+    // Different layers use different footprint copies, so reset the cache at the end of a layer
+    *copy_id_cache_addr<Footprint>() = 0;
+#endif
 }
 
 #if MY_DEBUG >= MY_DEBUG_NORMAL
