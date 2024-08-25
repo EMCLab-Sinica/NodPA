@@ -367,7 +367,7 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
 
 #if HAWAII
 
-#if USE_EXTENDED_FOOTPRINTS
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
     uint8_t num_completed_units = 0;
     if (conv_params->conv_channel_pruning_mask) {
         my_printf_debug("input_w=%d STRIDE_W=%d input_w_last=%d cur_input_h=%d STRIDE_H=%d input_h_last=%d" NEWLINE,
@@ -798,7 +798,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
 #endif
 
-#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
     uint32_t dynamic_dnn_skipped_jobs = unshuffled_footprint.values[FootprintOffset::NUM_SKIPPED_JOBS];
 
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
@@ -815,7 +815,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
     uint32_t first_unfinished_value_offset_with_skipped_jobs = first_unfinished_value_offset;
-#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
     if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
         // For dynamic channel pruning, the number of skipped jobs equals to the offset for those jobs
         first_unfinished_value_offset_with_skipped_jobs += dynamic_dnn_skipped_jobs;
@@ -935,7 +935,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     int16_t input_channels = conv_filter->dims[1];
     for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {
-#if USE_EXTENDED_FOOTPRINTS && !FORCE_STATIC_NETWORKS
+#if (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS) && !FORCE_STATIC_NETWORKS
         if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
             int16_t channel_mask;
             while (conv_params->input_tile_c_offset < input_channels) {
@@ -963,7 +963,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 add_counter(offsetof(Counters, num_skipped_units), 1);
                 add_counter(offsetof(Counters, num_skipped_jobs), slice_size_input_channel_tiling);
 
-#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
                                                   FootprintOffset::NUM_SKIPPED_JOBS, slice_size_input_channel_tiling,
                                                   FootprintOffset::COMPUTATION_UNIT_INDEX, 1);
@@ -1006,7 +1006,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
         while (true) {
             bool skip_current_output_channel = false;
-#if USE_EXTENDED_FOOTPRINTS && !FORCE_STATIC_NETWORKS
+#if (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS) && !FORCE_STATIC_NETWORKS
             if (conv_params->conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
                 int16_t channel_masks[2];
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
@@ -1046,7 +1046,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 add_counter(offsetof(Counters, num_skipped_units), 2);
                 add_counter(offsetof(Counters, num_skipped_jobs), num_jobs_in_unit);
 
-#if HAWAII && USE_EXTENDED_FOOTPRINTS && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR_NAIVE || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR)
+#if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
                                                   FootprintOffset::NUM_SKIPPED_JOBS, num_jobs_in_unit,
                                                   FootprintOffset::COMPUTATION_UNIT_INDEX, 2);

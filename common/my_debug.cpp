@@ -338,7 +338,7 @@ void check_nvm_write_address_impl(uint32_t nvm_offset, size_t n) {
 }
 
 void dump_footprints(uint16_t layer_idx) {
-#if USE_EXTENDED_FOOTPRINTS && MY_DEBUG >= MY_DEBUG_VERBOSE
+#if (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS) && MY_DEBUG >= MY_DEBUG_VERBOSE
     for (uint8_t copy_id = 0; copy_id < 2; copy_id++) {
         Footprint tmp_footprint;
 
@@ -354,7 +354,7 @@ void dump_footprints(uint16_t layer_idx) {
         for (const uint8_t& value : tmp_footprint.values) {
             my_printf_debug("%d ", value);
         }
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
         const UnshuffledFootprint& mirror = unshuffled_footprint_mirror[copy_id];
         my_printf_debug(" mirror values=%d %d %d",
                         mirror.values[FootprintOffset::NUM_COMPLETED_JOBS],

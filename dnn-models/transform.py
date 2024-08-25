@@ -1,5 +1,6 @@
 import argparse
 import dataclasses
+import enum
 import io
 import itertools
 import logging
@@ -74,6 +75,21 @@ Indexing policy:
     len(onnx_model.graph.input)~ : other (hidden) nodes
 """
 
+class DYNAMIC_DNN(enum.IntEnum):
+    COARSE_GRAINED = 1
+    FINE_GRAINED = 2
+    ONE_INDICATOR = 3
+    MULTIPLE_INDICATORS_BASIC = 4
+    MULTIPLE_INDICATORS = 5
+
+def enum_to_approach(enum_item):
+    return enum_item.name.lower().replace('_', '-')
+
+def approach_to_enum(approach):
+    return getattr(DYNAMIC_DNN, approach.upper().replace('-', '_'))
+
+DYNAMIC_DNN_APPROACH_NAMES = [enum_to_approach(enum_item) for enum_item in DYNAMIC_DNN]
+
 class Constants:
     SLOT_PARAMETERS = 0xfe
     SLOT_TEST_SET = 0xff
@@ -109,7 +125,7 @@ class Constants:
 
     FP32_ACCURACY: float = 0.0  # will be filled
 
-    USE_EXTENDED_FOOTPRINTS = 0
+    DYNAMIC_DNN_APPROACH = DYNAMIC_DNN.FINE_GRAINED
     PRUNING_INPUT_CHANNELS = PRUNING_INPUT_CHANNELS
     PRUNING_OUTPUT_CHANNELS = PRUNING_OUTPUT_CHANNELS
 
@@ -188,6 +204,8 @@ parser.add_argument('--target', choices=('msp430', 'msp432'), required=True)
 parser.add_argument('--debug', action='store_true')
 parser.add_argument('--data-output-dir', metavar='DIR', default='build')
 parser.add_argument('--model-variant', type=str, default='')
+# Use type=str instead of converting it to an enum, as the latter is discouraged https://docs.python.org/3/library/argparse.html
+parser.add_argument('--dynamic-dnn-approach', type=str, choices=DYNAMIC_DNN_APPROACH_NAMES, default='fine-grained')
 intermittent_methodology = parser.add_mutually_exclusive_group(required=True)
 intermittent_methodology.add_argument('--ideal', action='store_true')
 intermittent_methodology.add_argument('--hawaii', action='store_true')
@@ -240,6 +258,7 @@ Constants.LEA_BUFFER_SIZE = vm_size[args.target]
 if args.model_variant == 'static' or not args.hawaii:
     # XXX: Currently, dynamic networks are supported only with HAWAII
     Constants.FORCE_STATIC_NETWORKS = 1
+Constants.DYNAMIC_DNN_APPROACH = approach_to_enum(args.dynamic_dnn_approach)
 
 names = {}
 
@@ -551,8 +570,7 @@ for node in nodes:
     for parameter_idx in node.parameters_by_importance:
         output_nodes.write(to_bytes(parameter_idx))
 
-if Constants.HAWAII and config.get('pruning_threshold'):
-    Constants.USE_EXTENDED_FOOTPRINTS = 1
+if Constants.DYNAMIC_DNN_APPROACH in (DYNAMIC_DNN.MULTIPLE_INDICATORS_BASIC, DYNAMIC_DNN.MULTIPLE_INDICATORS):
     footprint_struct = 'struct _ExtendedFootprint[]'
 else:
     footprint_struct = 'struct _Footprint[]'
@@ -754,6 +772,15 @@ for node_idx, node in enumerate(nodes):
 
 pathlib.Path(args.data_output_dir).mkdir(exist_ok=True)
 
+def enum_item_to_c_macro(enum_item):
+    return enum_item.__class__.__name__ + '_' + enum_item.name
+
+def enum_to_c_defines(enum_cls):
+    ret = ''
+    for enum_item in enum_cls:
+        ret += f'#define {enum_item_to_c_macro(enum_item)} {enum_item.value}\n'
+    return ret
+
 with open(f'{args.data_output_dir}/data.cpp', 'w') as output_c, open(f'{args.data_output_dir}/data.h', 'w') as output_h:
     output_h.write('''
 #pragma once
@@ -778,6 +805,10 @@ struct NodeFlags;
             # Somehow for integers, numpy.array uses int64 on Linux and int32 on Windows
             if not isinstance(val, (int, float, np.int64, np.int32)):
                 continue
+
+        if isinstance(val, enum.Enum):
+            output_h.write(enum_to_c_defines(val.__class__))
+
         # Making it long to avoid overflow for expressions like
         # INTERMEDIATE_VALUES_SIZE * NUM_SLOTS on 16-bit systems
         suffix = 'l' if item == 'INTERMEDIATE_VALUES_SIZE' else ''
@@ -786,6 +817,8 @@ struct NodeFlags;
             output_h.write(f'"{val}"')
         elif isinstance(val, list):
             output_h.write('{' + ', '.join(map(str, val)) + '}')
+        elif isinstance(val, enum.Enum):
+            output_h.write(enum_item_to_c_macro(val))
         else:
             output_h.write(f'{val}')
         output_h.write(f'{suffix}\n')

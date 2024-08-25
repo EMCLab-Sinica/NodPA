@@ -78,7 +78,7 @@ bool read_gpio_flag(GPIOFlag flag);
 void save_model_output_data();
 #if HAWAII
 
-#if USE_EXTENDED_FOOTPRINTS
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
 typedef _ExtendedFootprint Footprint;
 struct UnshuffledFootprint {
     uint32_t values[3];
@@ -104,7 +104,7 @@ enum FootprintOffset {
 #endif
 
 extern UnshuffledFootprint unshuffled_footprint;
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
 extern UnshuffledFootprint unshuffled_footprint_mirror[2];
 #endif
 void unshuffle_footprint_values(const Footprint* footprint);

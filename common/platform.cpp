@@ -228,7 +228,7 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 #if HAWAII
 NOINIT static Footprint footprints_vm[MODEL_NODES_LEN];
 NOINIT UnshuffledFootprint unshuffled_footprint;
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
 NOINIT UnshuffledFootprint unshuffled_footprint_mirror[2];
 #endif
 static uint8_t footprint_copy_id = 0;
@@ -253,7 +253,7 @@ uint8_t* copy_id_cache_addr<Footprint>(void) {
     return &footprint_copy_id;
 }
 
-#if USE_EXTENDED_FOOTPRINTS
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
 static uint32_t combine_footprint_value(const Footprint* footprint, uint8_t footprint_offset) {
     uint32_t footprint_value = (footprint->values[footprint_offset+0] <<  0) +
                                (footprint->values[footprint_offset+3] <<  8) +
@@ -297,7 +297,7 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
 
     Footprint* footprint = vm_addr<Footprint>(layer_idx);
 
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
     constexpr uint32_t mask = std::numeric_limits<uint32_t>::max() - 0xff;
 
     if ((old_value & mask) == (new_value & mask)) {
@@ -317,7 +317,7 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
         split_footprint_value(footprint, unshuffled_footprint.values, FootprintOffset::NUM_COMPLETED_JOBS);
         commit_versioned_data<Footprint>(layer_idx);
 
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
         my_memcpy(&unshuffled_footprint_mirror[get_newer_copy_id<Footprint>(layer_idx)], &unshuffled_footprint, sizeof(UnshuffledFootprint));
 #endif
     }
@@ -327,11 +327,10 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
 #endif
 }
 
-#if USE_EXTENDED_FOOTPRINTS
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
 void write_hawaii_layer_two_footprints(uint16_t layer_idx,
                                        FootprintOffset footprint_offset1, int16_t increment1,
                                        FootprintOffset footprint_offset2, int16_t increment2) {
-#if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
     my_printf_debug("Increment footprint at offset %d by %d" NEWLINE, footprint_offset1, increment1);
     my_printf_debug("Increment footprint at offset %d by %d" NEWLINE, footprint_offset2, increment2);
 
@@ -345,7 +344,7 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
     unshuffled_footprint.values[footprint_offset1] += increment1;
     unshuffled_footprint.values[footprint_offset2] += increment2;
 
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
     uint8_t newer_copy_id = get_newer_copy_id<Footprint>(layer_idx);
     uint8_t older_copy_id = newer_copy_id ^ 1;
 
@@ -387,7 +386,7 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
         commit_versioned_data<Footprint>(layer_idx);
     }
 
-#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
     // The newer copy id is flipped in commit_versioned_data above
     newer_copy_id ^= 1;
     my_memcpy(&unshuffled_footprint_mirror[newer_copy_id], &unshuffled_footprint, sizeof(UnshuffledFootprint));
@@ -395,7 +394,6 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
 
     my_printf_debug("After committing two footprints" NEWLINE);
     dump_footprints_debug(layer_idx);
-#endif
 }
 #endif
 
