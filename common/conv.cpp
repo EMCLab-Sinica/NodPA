@@ -935,12 +935,16 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     int16_t input_channels = conv_filter->dims[1];
     for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {
-#if (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS) && !FORCE_STATIC_NETWORKS
+#if !FORCE_STATIC_NETWORKS
         if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
             int16_t channel_mask;
             while (conv_params->input_tile_c_offset < input_channels) {
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
+# if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
                 uint16_t computation_unit_index = unshuffled_footprint.values[COMPUTATION_UNIT_INDEX];
+#else
+                uint16_t computation_unit_index = conv_params->input_tile_c_offset;
+#endif
                 channel_mask = get_q15_param(model, conv_channel_pruning_mask, computation_unit_index);
 
                 my_printf_debug("input_tile_c_offset=%d computation_unit_index=%d channel_mask=%d... ",
@@ -1006,12 +1010,16 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
         while (true) {
             bool skip_current_output_channel = false;
-#if (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS) && !FORCE_STATIC_NETWORKS
+#if !FORCE_STATIC_NETWORKS
             if (conv_params->conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
                 int16_t channel_masks[2];
                 int16_t pruning_threshold = conv_params->flags->conv.pruning_threshold;
 
+# if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
                 uint16_t computation_unit_index = unshuffled_footprint.values[COMPUTATION_UNIT_INDEX];
+#else
+                uint16_t computation_unit_index = conv_params->filter_idx;
+#endif
                 my_memcpy_from_param(model, channel_masks, conv_params->conv_channel_pruning_mask, computation_unit_index, 2*sizeof(int16_t));
 
                 my_printf_debug("filter_idx=%d computation_unit_index=%d channel_masks=[%d, %d]... ",
