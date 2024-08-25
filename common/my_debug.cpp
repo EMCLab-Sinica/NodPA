@@ -354,11 +354,13 @@ void dump_footprints(uint16_t layer_idx) {
         for (const uint8_t& value : tmp_footprint.values) {
             my_printf_debug("%d ", value);
         }
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
         const UnshuffledFootprint& mirror = unshuffled_footprint_mirror[copy_id];
         my_printf_debug(" mirror values=%d %d %d",
                         mirror.values[FootprintOffset::NUM_COMPLETED_JOBS],
                         mirror.values[FootprintOffset::COMPUTATION_UNIT_INDEX],
                         mirror.values[FootprintOffset::NUM_SKIPPED_JOBS]);
+#endif
         my_printf_debug(NEWLINE);
     }
     my_printf_debug("Footprint VM values=");

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdlib>
+#include "config.h"
 #include "data.h"
 #include "data_structures.h"
 
@@ -102,7 +103,10 @@ enum FootprintOffset {
 };
 #endif
 
-extern UnshuffledFootprint unshuffled_footprint, unshuffled_footprint_mirror[2];
+extern UnshuffledFootprint unshuffled_footprint;
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+extern UnshuffledFootprint unshuffled_footprint_mirror[2];
+#endif
 void unshuffle_footprint_values(const Footprint* footprint);
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs);
 void reset_hawaii_layer_footprint(uint16_t layer_idx);

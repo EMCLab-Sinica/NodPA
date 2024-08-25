@@ -227,7 +227,10 @@ void record_overflow_handling_overhead(uint32_t cycles) {
 
 #if HAWAII
 NOINIT static Footprint footprints_vm[MODEL_NODES_LEN];
-NOINIT UnshuffledFootprint unshuffled_footprint, unshuffled_footprint_mirror[2];
+NOINIT UnshuffledFootprint unshuffled_footprint;
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+NOINIT UnshuffledFootprint unshuffled_footprint_mirror[2];
+#endif
 static uint8_t footprint_copy_id = 0;
 
 template<>
@@ -287,13 +290,37 @@ void unshuffle_footprint_values(const Footprint* footprint) {
 
 void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_COARSE_GRAINED
-    unshuffled_footprint.values[FootprintOffset::NUM_COMPLETED_JOBS] += n_jobs;
+    uint32_t old_value = unshuffled_footprint.values[FootprintOffset::NUM_COMPLETED_JOBS];
+    uint32_t new_value = old_value + n_jobs;
+
+    unshuffled_footprint.values[FootprintOffset::NUM_COMPLETED_JOBS] = new_value;
 
     Footprint* footprint = vm_addr<Footprint>(layer_idx);
-    split_footprint_value(footprint, unshuffled_footprint.values, FootprintOffset::NUM_COMPLETED_JOBS);
-    commit_versioned_data<Footprint>(layer_idx);
 
-    my_memcpy(&unshuffled_footprint_mirror[get_newer_copy_id<Footprint>(layer_idx)], &unshuffled_footprint, sizeof(UnshuffledFootprint));
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+    constexpr uint32_t mask = std::numeric_limits<uint32_t>::max() - 0xff;
+
+    if ((old_value & mask) == (new_value & mask)) {
+        my_printf_debug("Only LSB is changed, preseving one byte..." NEWLINE);
+
+        uint8_t newer_copy_id = get_newer_copy_id<Footprint>(layer_idx);
+
+        footprint->values[0] = new_value & 0xff;
+        write_to_nvm(footprint->values, nvm_addr<Footprint>(newer_copy_id, layer_idx), sizeof(uint8_t));
+
+        unshuffled_footprint_mirror[newer_copy_id].values[0] = new_value;
+    } else
+#endif
+    {
+        my_printf_debug("More than LSB is changed, preseving all bytes..." NEWLINE);
+
+        split_footprint_value(footprint, unshuffled_footprint.values, FootprintOffset::NUM_COMPLETED_JOBS);
+        commit_versioned_data<Footprint>(layer_idx);
+
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
+        my_memcpy(&unshuffled_footprint_mirror[get_newer_copy_id<Footprint>(layer_idx)], &unshuffled_footprint, sizeof(UnshuffledFootprint));
+#endif
+    }
 
     my_printf_debug("After committing one footprint" NEWLINE);
     dump_footprints_debug(layer_idx);
@@ -315,13 +342,14 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
 
     Footprint* footprint = vm_addr<Footprint>(layer_idx);
 
+    unshuffled_footprint.values[footprint_offset1] += increment1;
+    unshuffled_footprint.values[footprint_offset2] += increment2;
+
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
     uint8_t newer_copy_id = get_newer_copy_id<Footprint>(layer_idx);
     uint8_t older_copy_id = newer_copy_id ^ 1;
 
     const UnshuffledFootprint& mirror = unshuffled_footprint_mirror[older_copy_id];
-
-    unshuffled_footprint.values[footprint_offset1] += increment1;
-    unshuffled_footprint.values[footprint_offset2] += increment2;
 
     // Comparing old and new values. If only the least significant bytes are changed, update them only.
     // Otherwise, update the whole value.
@@ -348,7 +376,9 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
         footprint->values[footprint_offset2] = unshuffled_footprint.values[footprint_offset2] & 0xff;
 
         commit_versioned_data<Footprint>(layer_idx, /*commit_offset=*/MIN_VAL(footprint_offset1, footprint_offset2), /*num_bytes=*/2);
-    } else {
+    } else
+#endif
+    {
         my_printf_debug("More than LSB is changed in some footprint, preseving all bytes..." NEWLINE);
 
         split_footprint_value(footprint, unshuffled_footprint.values, footprint_offset1);
@@ -357,9 +387,11 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
         commit_versioned_data<Footprint>(layer_idx);
     }
 
+#if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_TWO_INDICATOR
     // The newer copy id is flipped in commit_versioned_data above
     newer_copy_id ^= 1;
     my_memcpy(&unshuffled_footprint_mirror[newer_copy_id], &unshuffled_footprint, sizeof(UnshuffledFootprint));
+#endif
 
     my_printf_debug("After committing two footprints" NEWLINE);
     dump_footprints_debug(layer_idx);
