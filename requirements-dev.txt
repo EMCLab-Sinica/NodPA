@@ -1,8 +1,8 @@
 matplotlib==3.8.3
 jupyterlab==4.0.8
 odfpy==1.4.1
-pyqt5==5.15.9
 tf2onnx==1.15.1
 xlsxwriter==3.1.2
 opencv-python==4.8.1.78
 onnxsim==0.4.36
+openpyxl==3.1.5
