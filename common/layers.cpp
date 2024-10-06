@@ -21,7 +21,7 @@ const Node* get_node(const ParameterInfo* param) {
     return get_node(param->parameter_info_idx - N_INPUT);
 }
 
-#if MY_DEBUG >= MY_DEBUG_LAYERS || RuntimeConfiguration != Fixed
+#if MY_DEBUG >= MY_DEBUG_LAYERS
 NodeFlags node_flags_vm[MODEL_NODES_LEN];
 
 template<>
