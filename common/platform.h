@@ -45,9 +45,6 @@ extern Model model_vm;
 
 // put GPIOFlag here to make MSP-CGT LTO happy
 enum class GPIOFlag {
-    DisableDynBalReconfiguration,
-    DisableDynBalSearch,
-    DisableDynBalTracking,
 };
 
 [[ noreturn ]] void ERROR_OCCURRED(void);

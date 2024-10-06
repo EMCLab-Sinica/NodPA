@@ -60,10 +60,6 @@ from layer_utils import (
     determine_conv_tile_c,
     determine_gemm_tile_sizes,
 )
-from dynbal import (
-    parameter_importance,
-    walk_search_space,
-)
 
 logging.basicConfig()
 logger = logging.getLogger('intermittent-cnn.transform')
@@ -506,7 +502,6 @@ outputs: dict[str, io.BytesIO] = {
     'model_parameters_info': io.BytesIO(),
     'intermediate_parameters_info': io.BytesIO(),
     'labels': io.BytesIO(),
-    'exhaustive_lookup_table': io.BytesIO(),
     'counters': io.BytesIO(),
 }
 
@@ -548,8 +543,6 @@ for node in nodes:
 logger.info('Maximum number of inputs = %d', Constants.NUM_INPUTS)
 
 ops = get_model_ops(onnx_model)
-
-parameter_importance(onnx_model, nodes)
 
 for node in nodes:
     Constants.NODE_NAME_LEN = max(Constants.NODE_NAME_LEN, len(node.name), len(node.output[0]))
@@ -759,8 +752,6 @@ if Constants.STATEFUL:
     min_range = find_min_range(onnx_model, nodes, config, Constants.N_INPUT)
     if min_range < max_output_tile_size:
         Constants.USE_STATES_ARRAY = 1
-
-walk_search_space(nodes, outputs['exhaustive_lookup_table'])
 
 # Fill in actual flags
 for node_idx, node in enumerate(nodes):

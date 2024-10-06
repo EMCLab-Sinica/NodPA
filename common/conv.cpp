@@ -14,8 +14,6 @@
 #include "intermittent-cnn.h"
 #include "my_dsplib.h"
 #include "platform.h"
-#include "dynbal.h"
-#include "dynbal-conv.h"
 #include "config.h"
 #include "layers.h"
 #include "layer-defs.h"
@@ -82,11 +80,6 @@ typedef struct ConvTaskParams {
     int16_t *filter_buffer_addr;
     int16_t cached_filter_idx;
     uint16_t cached_input_tile_c_offset;
-
-#if DYNBAL_REPORT_PARAMETERS
-    uint32_t first_unfinished_job_idx;
-    uint8_t reported;
-#endif
 } ConvTaskParams;
 
 static ConvTaskParams conv_params_obj;
@@ -589,12 +582,6 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
     uint16_t inputs_buffer_end = LEA_BUFFER_SIZE - OUTPUT_LEN - conv_params->pState_len - (max_n_filters + 1) * conv_params->filter_offset;
     // Align tile_h with the stride size to make sure the next tile starts from the correct place
     uint16_t tile_h = MIN_VAL(inputs_buffer_end / (conv_params->group * conv_params->dest_offset) - 2 * field_size, layer_dims->H) / conv_params->layer_dims.STRIDE_H * conv_params->layer_dims.STRIDE_H;
-#if DYNBAL_REPORT_PARAMETERS
-    if (conv_params->first_unfinished_job_idx == 0 && !conv_params->reported) {
-        my_printf("%d" NEWLINE, tile_h);
-        conv_params->reported = 1;
-    }
-#endif
     uint16_t inputs_len = (tile_h + 2 * field_size) * (conv_params->group * conv_params->dest_offset);
     MY_ASSERT(inputs_len < LEA_BUFFER_SIZE - OUTPUT_LEN - conv_params->pState_len); // make sure no overflow occurs in the previous line
 
@@ -716,35 +703,6 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
 #endif
 }
 
-#if RuntimeConfiguration == Exhaustive
-static void adapt_conv(ConvTaskParams* conv_params) {
-    const uint16_t N_AVERAGE = 1;    // Using average of N_AVERAGE end-to-end inference latencies for each tile size
-    uint16_t iteration_idx = conv_params->model->run_counter / N_AVERAGE;
-    uint16_t N_ITERATIONS = EXHAUSTIVE_LOOKUP_TABLE_DATA_LEN / sizeof(ExhaustiveLookupTable);
-    iteration_idx %= N_ITERATIONS;
-    const ExhaustiveLookupTable* current_config = reinterpret_cast<const ExhaustiveLookupTable*>(exhaustive_lookup_table_data) + iteration_idx;
-    uint16_t node_idx = conv_params->output->parameter_info_idx - N_INPUT;
-    if (current_config->node_idx == node_idx) {
-        conv_params->flags->conv.output_tile_c = current_config->conv_output_tile_c;
-    } else {
-        conv_params->flags->conv.output_tile_c = conv_params->orig_flags->conv.output_tile_c;
-    }
-    my_printf_debug("Selected output_tile_c: %d" NEWLINE, conv_params->flags->conv.output_tile_c);
-
-    if (conv_params->model->run_counter % N_AVERAGE == 0) {
-        // my_printf("%d %d" NEWLINE, node_idx, conv_params->flags->conv.output_tile_c);
-        // Start of an end-to-end inference
-        if (node_idx == 0) {
-            // notify_exhaustive_new_value();
-        }
-        // Start adjusting a new layer
-        if (conv_params->flags->conv.output_tile_c == 4) {
-            // notify_exhaustive_new_layer();
-        }
-    }
-}
-#endif
-
 void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *conv_input = input[0], *conv_filter = input[1], *conv_bias = (node->inputs_len >= 3) ? input[2] : nullptr;
 
@@ -807,10 +765,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
     uint32_t first_unfinished_value_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
-#if DYNBAL_REPORT_PARAMETERS
-    conv_params->first_unfinished_job_idx = first_unfinished_job_idx;
-    conv_params->reported = 0;
-#endif
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
 
@@ -891,47 +845,9 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     stop_cpu_counter();
 #endif
 
-#if RuntimeConfiguration == Exhaustive
-    if (first_unfinished_job_idx == 0) {
-        // Starting a new layer
-        adapt_conv(conv_params);
-        commit_node_flags(conv_params->flags);
-    }
-#endif
-
-#if INTERMITTENT && (RuntimeConfiguration == DynBal || ENABLE_DEMO_COUNTERS)
-    update_progress_indicator_conv(node, conv_params->flags, conv_params->orig_flags, conv_params->layer_dims, first_unfinished_job_idx);
-#endif
-
-#if DYNBAL_REPORT_PARAMETERS
-    if (first_unfinished_job_idx == 0) {
-        uint16_t node_idx = conv_params->output->parameter_info_idx - N_INPUT;
-        my_printf("%d,%d,%d,", node_idx, conv_params->input_tile_c, conv_params->flags->conv.output_tile_c);
-    }
-#endif
-
     // recalculate n_tiles_c, as tile sizes may be changed during dynamic reconfiguration
     conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->input_tile_c);
     output->params_len = conv_params->n_tiles_c * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
-
-#if ENABLE_DEMO_COUNTERS
-    if (first_unfinished_job_idx == 0) {
-        uint16_t last_reported_layer_idx = static_cast<uint16_t>(-1);
-        read_from_nvm(&last_reported_layer_idx, LAST_REPORTED_LAYER_IDX_OFFSET, sizeof(uint16_t));
-        // really report costs only once per layer to avoid non-termination
-        if (last_reported_layer_idx != conv_params->model->layer_idx) {
-            InferenceStats* stats = load_inference_stats_from_nvm(InferenceStatsOpType::Conv);
-            const UsageSpanConv usage_span(*layer_dims, conv_params->input_tile_c, conv_params->flags->conv.output_tile_c, stats->power_cycle_energy);
-
-            uint32_t data_reuse_cost = usage_span.data_reuse_cost(UsageSpanConv::ParameterDimension::InputTileChannel, conv_params->input_tile_c);
-            uint32_t data_refetch_cost = usage_span.data_refetch_cost(UsageSpanConv::ParameterDimension::InputTileChannel, conv_params->input_tile_c);
-            my_printf("U,%" PRIu32 ",%" PRIu32 NEWLINE, data_reuse_cost/1024, data_refetch_cost/1024);
-
-            last_reported_layer_idx = conv_params->model->layer_idx;
-            write_to_nvm(&last_reported_layer_idx, LAST_REPORTED_LAYER_IDX_OFFSET, sizeof(uint16_t));
-        }
-    }
-#endif
 
     int16_t input_channels = conv_filter->dims[1];
     for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {

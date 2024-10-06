@@ -144,9 +144,6 @@ set (intermittent_cnn_SOURCES
     ${COMMON_SRC_PATH}/plat-pc.cpp
     ${COMMON_SRC_PATH}/platform.cpp
     ${COMMON_SRC_PATH}/my_dsplib.cpp
-    ${COMMON_SRC_PATH}/dynbal.cpp
-    ${COMMON_SRC_PATH}/dynbal-conv.cpp
-    ${COMMON_SRC_PATH}/dynbal-fc.cpp
     ${COMMON_SRC_PATH}/layers.cpp
     ${COMMON_SRC_PATH}/softmax.cpp
     ${COMMON_SRC_PATH}/slice.cpp

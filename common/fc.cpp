@@ -3,9 +3,7 @@
 #include "cnn_common.h"
 #include "counters.h"
 #include "data.h"
-#include "dynbal.h"
 #include "config.h"
-#include "dynbal-fc.h"
 #include "fc.h"
 #include "layer-defs.h"
 #include "platform.h"
@@ -110,22 +108,6 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
 #endif
 
     stop_cpu_counter();
-
-#if RuntimeConfiguration == DynBal
-    FcLayerDimensions layer_dims;
-    const ParameterInfo *A = input[0];
-    layer_dims.A_rows = A->dims[0];
-    layer_dims.A_cols = A->dims[1];
-    layer_dims.B_cols = B->dims[1];
-    update_progress_indicator_fc(node, node_flags, orig_node_flags, layer_dims, first_unfinished_value_offset);
-#endif
-
-#if DYNBAL_REPORT_PARAMETERS
-    if (first_unfinished_value_offset == 0) {
-        uint16_t node_idx = output->parameter_info_idx - N_INPUT;
-        my_printf("%d,%d,%d" NEWLINE, node_idx, node_flags->gemm.tile_channel, node_flags->gemm.tile_b_cols);
-    }
-#endif
 
     my_printf_debug("tile_a_rows=%d, tile_channel=%d, tile_b_cols=%d" NEWLINE, node_flags->gemm.tile_a_rows, node_flags->gemm.tile_channel, node_flags->gemm.tile_b_cols);
 
