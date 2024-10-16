@@ -35,9 +35,9 @@ static uint8_t get_newer_copy_id(uint16_t data_idx) {
     }
 
     uint8_t copy_id;
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+
     add_counter(offsetof(Counters, nvm_read_shadow_data), 2);
-#endif
+
     read_from_nvm(&copy_id, nvm_addr<T>(0, data_idx) + offsetof(T, version), sizeof(uint8_t));
     my_printf_debug("Pointer of shadow %s copies for data item %d: %d" NEWLINE, datatype_name<T>(), data_idx, copy_id);
 
@@ -53,7 +53,7 @@ T* get_versioned_data(uint16_t data_idx) {
     T *dst = vm_addr<T>(data_idx);
 
     uint8_t newer_copy_id = get_newer_copy_id<T>(data_idx);
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     add_counter(offsetof(Counters, nvm_read_shadow_data), sizeof(T));
     my_printf_debug("Recorded %lu bytes of shadow data read from NVM" NEWLINE, sizeof(T));
 #endif
@@ -73,7 +73,7 @@ void commit_versioned_data(uint16_t data_idx, uint8_t commit_offset = 0, uint16_
         num_bytes = sizeof(T) - sizeof(uint8_t);
     }
 
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     add_counter(offsetof(Counters, nvm_write_shadow_data), num_bytes);
     my_printf_debug("Recorded %lu bytes of shadow data written to NVM" NEWLINE, num_bytes);
 #endif

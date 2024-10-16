@@ -96,9 +96,9 @@ static void flip_filter_state_bits(ConvTaskParams *conv_params, uint16_t n_filte
     } else {
         to_flip_state_bits = biases;
     }
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+
     add_counter(offsetof(Counters, embedded_values), n_filters);
-#endif
+
     // need negating filter value here as it will be multiplied with _Q15(-1.0), or -32768
     int8_t state_multiplier = (conv_params->group == 1) ? -1 : 1;
     for (uint16_t idx = BATCH_SIZE - 1; idx < n_filters; idx += BATCH_SIZE) {
@@ -215,9 +215,8 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
             if (has_state) {
                 my_printf_debug("Adding state bit for newly loaded filter idx=%d" NEWLINE, idx);
                 last_elem = state_offsets[idx];
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+
                 add_counter(offsetof(Counters, embedded_values), 1);
-#endif
             }
             stop_cpu_counter();
             if (!has_state)
@@ -701,9 +700,27 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     }
     stop_cpu_counter();
 #endif
+
+#if ENABLE_DEMO_COUNTERS
+    if (need_reset() && !model->run_counter) {
+        node_flags->cumulative_jobs = get_counter(offsetof(Counters, total_jobs));
+        commit_node_flags(node_flags);
+        my_printf("cumulative_jobs=%d" NEWLINE, node_flags->cumulative_jobs);
+    }
+#endif
 }
 
-void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
+static uint32_t conv_layer_jobs(const ConvTaskParams* conv_params, uint32_t slice_size_input_channel_tiling, uint32_t num_jobs_in_unit) {
+    // Not using input_tile_c_index, as that is for calculated output offsets and is incremented only for active units
+    return conv_params->input_tile_c_offset / conv_params->input_tile_c * slice_size_input_channel_tiling +
+           conv_params->filter_tile_index * num_jobs_in_unit;
+}
+
+static void report_conv_progress(const ConvTaskParams* conv_params, uint32_t slice_size_input_channel_tiling, uint32_t num_jobs_in_unit) {
+    report_progress(conv_params->flags->cumulative_jobs + conv_layer_jobs(conv_params, slice_size_input_channel_tiling, num_jobs_in_unit));
+}
+
+void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
     const ParameterInfo *conv_input = input[0], *conv_filter = input[1], *conv_bias = (node->inputs_len >= 3) ? input[2] : nullptr;
 
     const ParameterInfo *conv_channel_pruning_mask = (node->inputs_len >= 4) ? input[3] : nullptr;
@@ -850,7 +867,17 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     output->params_len = conv_params->n_tiles_c * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
 
     int16_t input_channels = conv_filter->dims[1];
+
+    uint32_t num_jobs_in_unit = conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W;
+
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS && ENABLE_COUNTERS
+    conv_params->cur_input_tile_c = MIN_VAL(conv_params->input_tile_c, input_channels - conv_params->input_tile_c_offset);
+    add_demo_counter(offsetof(Counters, re_execution_macs), conv_params->cur_input_tile_c);
+#endif
+
     for (; conv_params->input_tile_c_offset < input_channels; conv_params->input_tile_c_offset += conv_params->input_tile_c) {
+        conv_params->cur_input_tile_c = MIN_VAL(conv_params->input_tile_c, input_channels - conv_params->input_tile_c_offset);
+
 #if !FORCE_STATIC_NETWORKS
         if (conv_channel_pruning_mask && conv_params->flags->conv.pruning_target == PRUNING_INPUT_CHANNELS) {
             int16_t channel_mask;
@@ -873,15 +900,21 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 if (abs(channel_mask) >= pruning_threshold) {
                     my_printf_debug("running" NEWLINE);
                     add_counter(offsetof(Counters, num_processed_units), 1);
-                    add_counter(offsetof(Counters, num_processed_jobs), slice_size_input_channel_tiling);
                     break;
                 }
                 my_printf_debug("skipping" NEWLINE);
+
+                report_conv_progress(conv_params, slice_size_input_channel_tiling, num_jobs_in_unit);
 
                 conv_params->input_tile_c_offset += conv_params->input_tile_c;
 
                 add_counter(offsetof(Counters, num_skipped_units), 1);
                 add_counter(offsetof(Counters, num_skipped_jobs), slice_size_input_channel_tiling);
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_FINE_GRAINED
+                // for FD, skipped MACs will be re-executed
+                add_demo_counter(offsetof(Counters, re_execution_macs), slice_size_input_channel_tiling * conv_params->cur_input_tile_c);
+#endif
+                num_skipped_jobs_since_boot += slice_size_input_channel_tiling;
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
@@ -900,7 +933,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         MY_ASSERT(conv_params->input_tile_c_index < conv_params->n_tiles_c);
 #endif
 
-        conv_params->cur_input_tile_c = MIN_VAL(conv_params->input_tile_c, input_channels - conv_params->input_tile_c_offset);
         conv_params->cur_filter_tile_c = conv_params->cur_input_tile_c;
 #if JAPARI
         start_cpu_counter(offsetof(Counters, embedding));
@@ -954,21 +986,29 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
             }
 #endif
 
-            uint32_t num_jobs_in_unit = conv_params->flags->conv.output_tile_c * conv_params->layer_dims.OUTPUT_H * conv_params->layer_dims.OUTPUT_W;
             if (!skip_current_output_channel) {
                 for (; conv_params->input_w <= conv_params->input_w_last; conv_params->input_w += conv_params->layer_dims.STRIDE_W) {
                     for (; conv_params->input_h <= conv_params->input_h_last;) {
                         conv_params->input_h += handle_conv_inner_loop(model, layer_dims, conv_params);
                     }
                     conv_params->input_h = conv_params->input_h_first;
-                    report_progress();
                 }
 
-                add_counter(offsetof(Counters, num_processed_units), 2);
+                report_conv_progress(conv_params, slice_size_input_channel_tiling, num_jobs_in_unit);
+
+                if (conv_params->flags->conv.pruning_target == PRUNING_OUTPUT_CHANNELS) {
+                    add_counter(offsetof(Counters, num_processed_units), 2);
+                }
                 add_counter(offsetof(Counters, num_processed_jobs), num_jobs_in_unit);
             } else {
+                report_conv_progress(conv_params, slice_size_input_channel_tiling, num_jobs_in_unit);
+
                 add_counter(offsetof(Counters, num_skipped_units), 2);
                 add_counter(offsetof(Counters, num_skipped_jobs), num_jobs_in_unit);
+#if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_FINE_GRAINED
+                add_demo_counter(offsetof(Counters, re_execution_macs), num_jobs_in_unit * conv_params->cur_input_tile_c);
+#endif
+                num_skipped_jobs_since_boot += num_jobs_in_unit;
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
@@ -1015,6 +1055,12 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     start_cpu_counter(offsetof(Counters, table_updates));
     flip_state_bit(model, output);
     stop_cpu_counter();
+#endif
+
+#if ENABLE_DEMO_COUNTERS
+    if (need_reset() && !model->run_counter) {
+        add_demo_counter(offsetof(Counters, total_jobs), conv_layer_jobs(conv_params, slice_size_input_channel_tiling, num_jobs_in_unit));
+    }
 #endif
 
 #if MY_DEBUG >= MY_DEBUG_LAYERS
@@ -1153,7 +1199,7 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
                     int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
                     uint32_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
                     my_memcpy_from_param(model, to_add, data, cur_input_offset, real_chunk_len * sizeof(int16_t));
-#if JAPARI && ENABLE_COUNTERS
+#if JAPARI
                     add_counter(offsetof(Counters, data_loading), (real_chunk_len/2)*(4*8));
 #endif
 #if STATEFUL
@@ -1203,8 +1249,6 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
         output_w = 0;
         output_h++;
         input_offset = output_h * OUTPUT_CHANNEL; // NWHC, where only output_h is nonzero at this point
-
-        report_progress();
     }
 
     my_printf_debug("After merging tiling results" NEWLINE);

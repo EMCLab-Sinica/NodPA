@@ -79,6 +79,7 @@ struct NodeFlags {
         struct GatherNodeFlags gather;
         uint8_t as_bytes[NODE_FLAGS_SIZE];
     };
+    uint32_t cumulative_jobs;
     uint8_t general_flags;
     uint8_t dummy;
     // `canary` contains some non-zero value for detecting whether data are already in VM or not
@@ -86,7 +87,7 @@ struct NodeFlags {
     uint8_t version;
 };
 
-static_assert(sizeof(struct NodeFlags) == NODE_FLAGS_SIZE + 4, "Unexpected size for NodeFlags");
+static_assert(sizeof(struct NodeFlags) == NODE_FLAGS_SIZE + 8, "Unexpected size for NodeFlags");
 
 struct _Footprint {
     uint32_t value;
@@ -146,6 +147,9 @@ struct Counters {
     uint32_t num_processed_jobs;
     uint32_t num_skipped_units;
     uint32_t num_skipped_jobs;
+
+    uint32_t progress_preservation_bytes;
+    uint32_t re_execution_macs;
 
     // persistent counters
     uint32_t total_jobs;

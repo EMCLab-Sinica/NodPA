@@ -79,7 +79,7 @@ void my_memcpy(void* dest, const void* src, size_t n) {
 
 void my_memcpy_from_parameters(void *dest, const ParameterInfo *param, uint32_t offset_in_bytes, size_t n) {
     MY_ASSERT(offset_in_bytes + n <= PARAMETERS_DATA_LEN);
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_parameters), n);
         my_printf_debug("Recorded %lu bytes fetched from parameters, accumulated=%" PRIu32 NEWLINE, n, get_counter(offsetof(Counters, nvm_read_parameters)));
@@ -163,6 +163,10 @@ void copy_data_to_nvm(void) {
 
 #define STABLE_POWER_ITERATIONS 10
 
+bool need_reset() {
+    return !GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN);
+}
+
 void IntermittentCNNTest() {
     GPIO_setAsOutputPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
     GPIO_setOutputLowOnPin(GPIO_COUNTER_PORT, GPIO_COUNTER_PIN);
@@ -198,7 +202,7 @@ void IntermittentCNNTest() {
     load_counters();
 #endif
 
-    if (!GPIO_getInputPinValue(GPIO_RESET_PORT, GPIO_RESET_PIN)) {
+    if (need_reset()) {
         uartinit();
 
         // To get counters in NVM after intermittent tests
@@ -252,7 +256,9 @@ void notify_model_finished(void) {
 }
 
 void notify_indicator(uint8_t idx) {
+#if !ENABLE_DEMO_COUNTERS
     my_printf("I%d" NEWLINE, idx);
+#endif
     gpio_pulse(indicators[idx].port, indicators[idx].pin);
 }
 

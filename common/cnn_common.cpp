@@ -192,11 +192,10 @@ static void handle_node(Model *model, uint16_t node_idx) {
     if (node_idx == MODEL_NODES_LEN - 1) {
         model->running = 0;
         model->run_counter++;
-#if ENABLE_COUNTERS && ENABLE_DEMO_COUNTERS
-        uint32_t total_jobs = get_counter(offsetof(Counters, total_jobs));
-        if (!total_jobs) {
-            total_jobs = (get_counter(offsetof(Counters, nvm_write_linear_jobs)) + get_counter(offsetof(Counters, nvm_write_non_linear_jobs))) / 2;
-            add_counter(offsetof(Counters, total_jobs), total_jobs);
+#if ENABLE_COUNTERS
+        if (need_reset() && !model->run_counter) {
+            uint32_t total_jobs = get_counter(offsetof(Counters, total_jobs));
+            my_printf("total_jobs=%d" NEWLINE, total_jobs);
         }
 #endif
     }

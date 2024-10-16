@@ -1,4 +1,5 @@
 #include <cinttypes>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include "data.h"
@@ -13,6 +14,7 @@ uint8_t counters_enabled = 1;
 #if ENABLE_COUNTERS
 uint8_t current_counter = INVALID_POINTER;
 uint8_t prev_counter = INVALID_POINTER;
+uint32_t num_skipped_jobs_since_boot = 0;
 
 Counters counters_data_vm[COUNTERS_LEN];
 
@@ -48,10 +50,7 @@ static uint32_t print_counters() {
 }
 
 void print_all_counters() {
-#if ENABLE_DEMO_COUNTERS
-    return;
-#endif
-
+#if !ENABLE_DEMO_COUNTERS
     my_printf("op types:                ");
 #if ENABLE_PER_LAYER_COUNTERS
     for (uint16_t i = 0; i < MODEL_NODES_LEN; i++) {
@@ -60,7 +59,6 @@ void print_all_counters() {
 #endif
     uint32_t total_dma_bytes = 0, total_macs = 0, total_overhead = 0;
     uint32_t total_num_skipped_jobs = 0, total_num_processed_jobs = 0, total_num_skipped_units = 0, total_num_processed_units = 0;
-#if !ENABLE_DEMO_COUNTERS
     my_printf(NEWLINE "Power counters:          "); print_counters<&Counters::power_counters>();
     my_printf(NEWLINE "MACs:                    "); total_macs = print_counters<&Counters::macs>();
     // state-embedding overheads
@@ -91,7 +89,6 @@ void print_all_counters() {
     my_printf(NEWLINE "NVM read (model data):   "); print_counters<&Counters::nvm_read_model>();
     my_printf(NEWLINE "NVM write (shadow data): "); print_counters<&Counters::nvm_write_shadow_data>();
     my_printf(NEWLINE "NVM write (model data):  "); print_counters<&Counters::nvm_write_model>();
-#endif
 
     my_printf(NEWLINE "NVM write (L jobs):      "); total_overhead += print_counters<&Counters::nvm_write_linear_jobs>();
     my_printf(NEWLINE "NVM write (NL jobs):     "); total_overhead += print_counters<&Counters::nvm_write_non_linear_jobs>();
@@ -110,6 +107,7 @@ void print_all_counters() {
     my_printf(NEWLINE "Communication-to-computation ratio: %f", 1.0f*total_dma_bytes/total_macs);
     my_printf(NEWLINE "Total overhead: %" PRIu32, total_overhead);
     my_printf(NEWLINE "run_counter: %d" NEWLINE, get_model()->run_counter);
+#endif
 }
 
 static uint32_t* get_counter_ptr(uint8_t counter) {
@@ -123,7 +121,7 @@ void load_counters(void) {
     counters_enabled = 1;
 }
 
-void add_counter(uint8_t counter, uint32_t value) {
+void _add_counter(uint8_t counter, uint32_t value) {
     // Disable counters for a similar reason
     counters_enabled = 0;
     *get_counter_ptr(counter) += value;
@@ -136,13 +134,20 @@ uint32_t get_counter(uint8_t counter) {
     return *get_counter_ptr(counter);
 }
 
-void reset_counters() {
+void reset_counters(bool full) {
 #if ENABLE_COUNTERS
     // Disable counters for a similar reason
     counters_enabled = 0;
-    uint32_t reset_size = sizeof(Counters) * COUNTERS_LEN - sizeof(uint32_t) * N_PERSISTENT_COUNTERS;
+
+    num_skipped_jobs_since_boot = 0;
+
+    uint32_t reset_size = sizeof(Counters) * COUNTERS_LEN;
+    if (!full) {
+        reset_size -= sizeof(uint32_t) * N_PERSISTENT_COUNTERS;
+    }
     memset(counters_data_vm, 0, reset_size);
     write_to_nvm_segmented(reinterpret_cast<uint8_t*>(counters_data_vm), COUNTERS_OFFSET, reset_size, sizeof(Counters));
+
     counters_enabled = 1;
 #endif
 }
@@ -181,21 +186,32 @@ void stop_cpu_counter(void) {
 }
 #endif
 
-void report_progress() {
+void report_progress(uint32_t num_jobs) {
 #if ENABLE_DEMO_COUNTERS
     static uint8_t last_progress = 0;
 
-    uint32_t total_jobs = get_counter(offsetof(Counters, total_jobs));
-    if (!total_jobs) {
+    if (!model_vm.run_counter) {
         return;
     }
-    uint32_t cur_jobs = (get_counter(offsetof(Counters, nvm_write_linear_jobs)) + get_counter(offsetof(Counters, nvm_write_non_linear_jobs))) / 2;
-    uint8_t cur_progress = 100 * cur_jobs / total_jobs;
+
+    uint32_t total_jobs = get_counter(offsetof(Counters, total_jobs));
+
+    my_printf_debug("num_jobs=%d" NEWLINE, num_jobs);
+
+    uint8_t cur_progress = 100 * num_jobs / total_jobs;
+    uint32_t progress_preservation_bytes = get_counter(offsetof(Counters, progress_preservation_bytes));
     // report only when the percentage is changed to avoid high UART overheads
     if (cur_progress != last_progress) {
         my_printf("P,%d,%d,", cur_progress,
-                  cur_jobs/1024);
-        my_printf("%d" NEWLINE, get_counter(offsetof(Counters, nvm_write_footprints))/1024);
+                  progress_preservation_bytes / 1024);
+
+        uint32_t re_execution_macs = get_counter(offsetof(Counters, re_execution_macs));
+        if (re_execution_macs >= 1024) {
+            my_printf("%dK" NEWLINE, re_execution_macs / 1024);
+        } else {
+            my_printf("%d" NEWLINE, re_execution_macs);
+        }
+
         last_progress = cur_progress;
     }
 #endif

@@ -228,9 +228,7 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
     }
 #endif // !USE_ARM_CMSIS
 
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     add_counter(offsetof(Counters, macs), A_rows * B_cols * A_cols);
-#endif
 }
 
 void my_vector_mult_q15(const int16_t *pSrcA, const int16_t *pSrcB, int16_t *pDst, uint32_t blockSize) {

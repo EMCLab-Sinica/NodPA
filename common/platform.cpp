@@ -18,6 +18,8 @@
 // put offset checks here as extra headers are used
 static_assert(COUNTERS_OFFSET >= PARAMETERS_OFFSET + PARAMETERS_DATA_LEN, "Incorrect NVM layout");
 
+static const uint8_t FOOTPRINT_SIZE = 2;
+
 Model model_vm;
 const uint8_t NUM_PARAMETER_INFO_SLOTS = 1 + NUM_INPUTS; // ParameterInfo for one output and several inputs
 static ParameterInfo intermediate_parameters_info_vm[NUM_PARAMETER_INFO_SLOTS];
@@ -68,7 +70,7 @@ void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const voi
     }
 #endif
 
-#if ENABLE_COUNTERS
+#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     uint32_t n_jobs;
 #if JAPARI
     uint16_t n_footprints = n / (BATCH_SIZE + 1);
@@ -93,7 +95,7 @@ void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const voi
 }
 
 void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, uint32_t offset_in_word, size_t n) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_job_outputs), n);
         my_printf_debug("Recorded %lu bytes of job outputs fetched from NVM, accumulated=%" PRIu32 NEWLINE, n, get_counter(offsetof(Counters, nvm_read_job_outputs)));
@@ -104,7 +106,7 @@ void my_memcpy_from_intermediate_values(void *dest, const ParameterInfo *param, 
 }
 
 void read_from_samples(void *dest, uint32_t offset_in_word, size_t n) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_job_outputs), n);
         my_printf_debug("Recorded %lu bytes of samples fetched from NVM, accumulated=%" PRIu32 NEWLINE, n, get_counter(offsetof(Counters, nvm_read_job_outputs)));
@@ -127,7 +129,7 @@ static uint8_t get_available_parameter_info_slot() {
 }
 
 ParameterInfo* get_intermediate_parameter_info(uint16_t i) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_model), sizeof(ParameterInfo));
         my_printf_debug("Recorded %lu bytes of ParameterInfo fetched from NVM" NEWLINE, sizeof(ParameterInfo));
@@ -142,7 +144,7 @@ ParameterInfo* get_intermediate_parameter_info(uint16_t i) {
 }
 
 void commit_intermediate_parameter_info(const ParameterInfo* param) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_write_model), sizeof(ParameterInfo));
         my_printf_debug("Recorded %lu bytes of ParameterInfo written NVM" NEWLINE, sizeof(ParameterInfo));
@@ -173,14 +175,13 @@ Model* get_model(void) {
 void commit_model(void) {
     if (!model_vm.running) {
         print_all_counters();
-        reset_counters();
+        reset_counters(/*full=*/false);
     }
     start_cpu_counter(offsetof(Counters, table_preservation));
     commit_versioned_data<Model>(0);
     // send finish signals only after the whole network has really finished
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     add_counter(offsetof(Counters, power_counters), 1);
-#endif
+
     if (!model_vm.running) {
         notify_model_finished();
     }
@@ -192,7 +193,7 @@ void first_run(void) {
     disable_counters();
     my_erase();
     copy_data_to_nvm();
-    reset_counters();
+    reset_counters(/*full=*/true);
 
     write_to_nvm_segmented(intermediate_parameters_info_data, intermediate_parameters_info_addr(0),
                            INTERMEDIATE_PARAMETERS_INFO_DATA_LEN, sizeof(ParameterInfo));
@@ -220,9 +221,7 @@ void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint3
 }
 
 void record_overflow_handling_overhead(uint32_t cycles) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     add_counter(offsetof(Counters, overflow_handling), cycles);
-#endif
 }
 
 #if HAWAII
@@ -308,6 +307,8 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
         footprint->values[0] = new_value & 0xff;
         write_to_nvm(footprint->values, nvm_addr<Footprint>(newer_copy_id, layer_idx), sizeof(uint8_t));
 
+        add_demo_counter(offsetof(Counters, progress_preservation_bytes), sizeof(uint8_t));
+
         unshuffled_footprint_mirror[newer_copy_id].values[0] = new_value;
     } else
 #endif
@@ -316,6 +317,9 @@ void write_hawaii_layer_footprint(uint16_t layer_idx, int16_t n_jobs) {
 
         split_footprint_value(footprint, unshuffled_footprint.values, FootprintOffset::NUM_COMPLETED_JOBS);
         commit_versioned_data<Footprint>(layer_idx);
+
+        // see commit_versioned_data: sizeof(Footprint) - sizeof(uint8_t) for data + sizeof(uint8_t) for the pointer
+        add_demo_counter(offsetof(Counters, progress_preservation_bytes), FOOTPRINT_SIZE);
 
 #if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS
         my_memcpy(&unshuffled_footprint_mirror[get_newer_copy_id<Footprint>(layer_idx)], &unshuffled_footprint, sizeof(UnshuffledFootprint));
@@ -375,6 +379,8 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
         footprint->values[footprint_offset2] = unshuffled_footprint.values[footprint_offset2] & 0xff;
 
         commit_versioned_data<Footprint>(layer_idx, /*commit_offset=*/MIN_VAL(footprint_offset1, footprint_offset2), /*num_bytes=*/2);
+
+        add_demo_counter(offsetof(Counters, progress_preservation_bytes), 2);
     } else
 #endif
     {
@@ -384,6 +390,8 @@ void write_hawaii_layer_two_footprints(uint16_t layer_idx,
         split_footprint_value(footprint, unshuffled_footprint.values, footprint_offset2);
 
         commit_versioned_data<Footprint>(layer_idx);
+
+        add_demo_counter(offsetof(Counters, progress_preservation_bytes), FOOTPRINT_SIZE);
     }
 
 #if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS

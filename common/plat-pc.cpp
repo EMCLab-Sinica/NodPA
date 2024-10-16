@@ -69,6 +69,10 @@ static void* map_file(const char* path, size_t len, bool read_only) {
 }
 #endif
 
+bool need_reset() {
+    return true; // TODO
+}
+
 int main(int argc, char* argv[]) {
     int ret = 0, opt_ch, read_only = 0, n_samples = 0;
     Model *model;
@@ -100,6 +104,9 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
     }
+
+    my_printf("POWER_ON" NEWLINE);
+
     if (argv[optind]) {
         n_samples = atoi(argv[optind]);
     }
@@ -139,6 +146,9 @@ int main(int argc, char* argv[]) {
 #ifndef __linux__
     delete [] nvm;
 #endif
+
+    my_printf("POWER_OFF" NEWLINE);
+
     return ret;
 }
 
@@ -164,7 +174,7 @@ extern "C" int __lsan_is_turned_off() {
 }
 
 void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, dma_invocations), 1);
         add_counter(offsetof(Counters, dma_bytes), n);
@@ -180,6 +190,7 @@ void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
         if (write_to_nvm && counters_enabled && shutdown_counter_enabled) {
             shutdown_counter--;
             if (!shutdown_counter) {
+                my_printf("POWER_OFF" NEWLINE);
                 exit_with_status(2);
             }
             if (shutdown_counter > 1UL<<31) {
@@ -192,7 +203,7 @@ void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
 }
 
 void my_memcpy(void* dest, const void* src, size_t n) {
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, dma_vm_to_vm), n);
         my_printf_debug("Recorded %lu bytes copied from VM to VM" NEWLINE, n);
@@ -203,7 +214,7 @@ void my_memcpy(void* dest, const void* src, size_t n) {
 
 void my_memcpy_from_parameters(void *dest, const ParameterInfo *param, uint32_t offset_in_bytes, size_t n) {
     MY_ASSERT(offset_in_bytes + n <= PARAMETERS_DATA_LEN);
-#if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
+#if ENABLE_COUNTERS
     if (counters_enabled) {
         add_counter(offsetof(Counters, nvm_read_parameters), n);
         my_printf_debug("Recorded %lu bytes fetched from parameters, accumulated=%" PRIu32 NEWLINE, n, get_counter(offsetof(Counters, nvm_read_parameters)));
@@ -247,7 +258,9 @@ void copy_data_to_nvm(void) {
 }
 
 void notify_layer_finished(void) {}
-void notify_model_finished(void) {}
+void notify_model_finished(void) {
+    my_printf("." NEWLINE);
+}
 void notify_indicator(uint8_t idx) {}
 bool read_gpio_flag(GPIOFlag flag) { return false; }
 
