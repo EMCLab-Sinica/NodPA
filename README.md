@@ -7,7 +7,7 @@ This project develops a middleware module (referred to as NodPA) that reconfigur
 
 We implemented our NodPA design on the Texas Instruments device MSP-EXP432P401R. It is an ARM-based 32-bit MCU with 64KB SRAM and single instruction multiple data (SIMD) instructions for accelerated computation. An external NVM module (Cypress CY15B116QN serial FRAM) was integrated to the platform. 
 
-NodPA was integrated with the [HAWAII](https://github.com/EMCLab-Sinica/HAWAII_Project) intermittent inference engine for evalution purposes, although it can be easily integrated into most existing intermittent inference engines. 
+NodPA was integrated with the [HAWAII](https://ieeexplore.ieee.org/document/9211553) intermittent inference engine for evalution purposes, although it can be easily integrated into most existing intermittent inference engines. 
 
 NodPA contains two key design components which interacts with the inference engine at runtime:
 
