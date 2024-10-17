@@ -3,17 +3,16 @@
 <!-- ABOUT THE PROJECT -->
 ## Overview
 
-This project develops a middleware module (referred to as NodPA) that reconfigures the inference engine at runtime. During intermittent DNN inference, NodPA dynamically optimizes the inference configuration for each layer in order to balance the data reuse and data refetch costs, taking into account the varying level of intermittency at runtime. 
+This project develops a middleware module (referred to as NodPA) that accumulates non-deterministic inference progress to enable correct and efficient dynamic neural network inference on intermittent systems. NodPA uses additional progress information to capture the non-deterministic status of dynamic computations while preserving only the changed portions of the progress information to maintain low runtime overhead. 
 
 We implemented our NodPA design on the Texas Instruments device MSP-EXP432P401R. It is an ARM-based 32-bit MCU with 64KB SRAM and single instruction multiple data (SIMD) instructions for accelerated computation. An external NVM module (Cypress CY15B116QN serial FRAM) was integrated to the platform. 
 
-NodPA was integrated with the [HAWAII](https://ieeexplore.ieee.org/document/9211553) intermittent inference engine for evalution purposes, although it can be easily integrated into most existing intermittent inference engines. 
+NodPA was integrated with the [HAWAII](https://ieeexplore.ieee.org/document/9211553) intermittent inference engine for evalution purposes, although it is compatible with other engines. 
 
-NodPA contains two key design components which interacts with the inference engine at runtime:
+NodPA contains two main components which interacts with the inference engine at runtime:
 
-<!-- * Performance estimation: implements an indirect metric, referred to as the _Usage Span_, which is used to evaluate an inference configuration under a specific level of intermittency
-* Runtime reconfiguration: dynamically updates the inference configuration parameters using feedback from the performance estimation component and heuristics derived at design time. -->
-
+* Non-determinism accumulator: determines which progress indicators of dynamic computation to track, ensuring they can correctly identify the interrupted computation across different dynamic networks
+* Preservation minimizer: reduces the amount of data written to NVM for progress preservation, by preserving only the changed portions of the progress indicators that have been updated.
 
 <!-- For more technical details, please refer to our paper **TODO**. -->
 
