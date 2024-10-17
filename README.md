@@ -5,7 +5,7 @@
 
 This project develops a middleware module (referred to as NodPA) that accumulates non-deterministic inference progress to enable correct and efficient dynamic neural network inference on intermittent systems. NodPA uses additional progress information to capture the non-deterministic status of dynamic computations while preserving only the changed portions of the progress information to maintain low runtime overhead. 
 
-We implemented our NodPA design on the Texas Instruments device MSP-EXP432P401R. It is an ARM-based 32-bit MCU with 64KB SRAM and single instruction multiple data (SIMD) instructions for accelerated computation. An external NVM module (Cypress CY15B116QN serial FRAM) was integrated to the platform. 
+We implemented NodPA on the Texas Instruments device MSP-EXP432P401R. It is an ARM-based 32-bit MCU with 64KB SRAM and single instruction multiple data (SIMD) instructions for accelerated computation. An external NVM module (Cypress CY15B116QN serial FRAM) was integrated to the platform. 
 
 NodPA was integrated with the [HAWAII](https://ieeexplore.ieee.org/document/9211553) intermittent inference engine for evalution purposes, although it is compatible with other engines. 
 
