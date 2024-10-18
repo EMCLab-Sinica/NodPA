@@ -116,7 +116,6 @@ class Constants:
     FIRST_SAMPLE_OUTPUTS: list[float] = []
     USE_STATES_ARRAY = 0
     ENABLE_PER_LAYER_COUNTERS = 0
-    ENABLE_DEMO_COUNTERS = 0
     COUNTERS_LEN = 0
 
     FP32_ACCURACY: float = 0.0  # will be filled
@@ -124,9 +123,6 @@ class Constants:
     DYNAMIC_DNN_APPROACH = DYNAMIC_DNN.FINE_GRAINED
     PRUNING_INPUT_CHANNELS = PRUNING_INPUT_CHANNELS
     PRUNING_OUTPUT_CHANNELS = PRUNING_OUTPUT_CHANNELS
-
-# Some demo codes assume counters are accumulated across layers
-assert not Constants.ENABLE_PER_LAYER_COUNTERS or not Constants.ENABLE_DEMO_COUNTERS, 'ENABLE_PER_LAYER_COUNTERS and ENABLE_DEMO_COUNTERS are mutually exclusive'
 
 other_flags = [
     # parameter flags

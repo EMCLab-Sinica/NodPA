@@ -1,5 +1,7 @@
 #pragma once
 
+#define ENABLE_DEMO_COUNTERS 0
+
 // Debugging
 #define MY_DEBUG_NO_ASSERT 0
 #define MY_DEBUG_NORMAL 1

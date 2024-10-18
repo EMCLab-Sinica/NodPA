@@ -13,6 +13,9 @@
 // as the latter involves pointer arithmetic and is slower for platforms with special pointer bitwidths (ex: MSP430)
 #if ENABLE_COUNTERS
 
+// Some demo codes assume counters are accumulated across layers
+static_assert(!ENABLE_PER_LAYER_COUNTERS || !ENABLE_DEMO_COUNTERS, "ENABLE_PER_LAYER_COUNTERS and ENABLE_DEMO_COUNTERS are mutually exclusive");
+
 extern uint8_t current_counter;
 extern uint8_t prev_counter;
 extern uint32_t num_skipped_jobs_since_boot;
