@@ -16,7 +16,7 @@ NodPA contains two main components which interacts with the inference engine at 
 
 <!-- For more technical details, please refer to our paper **TODO**. -->
 
-Demo video: **TODO**
+<!-- Demo video: **TODO** -->
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
