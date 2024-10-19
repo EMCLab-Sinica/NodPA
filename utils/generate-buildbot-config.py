@@ -14,7 +14,7 @@ class ModelConfig:
 
 def config_builder(model: str, batch_size: int, approach: str, target: str, dynamic_dnn_approach: str | None = None) -> dict[str, Any]:
     config = f'--target {target} --{approach} --batch-size {batch_size} {model}'
-    if approach == 'ideal' or approach == 'stateful' and batch_size == 1:
+    if approach == 'ideal':
         config += ' --all-samples'
 
     if dynamic_dnn_approach:
@@ -31,7 +31,7 @@ def config_builder(model: str, batch_size: int, approach: str, target: str, dyna
         suffix += '_cmsis'
 
     return {
-        'builder_name': f'stateful-cnn-{suffix}',
+        'builder_name': f'intermittent-cnn-{suffix}',
         'command_env': {
             'CONFIG': config,
             'LOG_SUFFIX': suffix.replace('.', '_'),
@@ -40,7 +40,7 @@ def config_builder(model: str, batch_size: int, approach: str, target: str, dyna
 
 def main() -> None:
     all_targets = ['msp430', 'msp432']
-    all_approaches = ['hawaii', 'japari', 'stateful']
+    all_approaches = ['hawaii']
     ideal_config = {'targets': all_targets, 'approaches': ['ideal'], 'batch_sizes': [1]}
     complete_config = {'targets': all_targets, 'approaches': all_approaches, 'batch_sizes': [1]}
     dynamic_dnn_approaches = ['coarse-grained', 'fine-grained', 'multiple-indicators-basic', 'multiple-indicators']
@@ -52,7 +52,7 @@ def main() -> None:
         ModelConfig(model='har', **ideal_config),
         ModelConfig(model='har', **complete_config),
         ModelConfig(model='transformers', **ideal_config),
-        ModelConfig(model='transformers', targets=all_targets, approaches=['hawaii', 'stateful'], batch_sizes=[1]),
+        ModelConfig(model='transformers', targets=all_targets, approaches=['hawaii'], batch_sizes=[1]),
         ModelConfig(model='cifar10-dnp', **ideal_config),
         ModelConfig(model='cifar10-dnp', targets=all_targets, approaches=['hawaii'], batch_sizes=[1], dynamic_dnn_approaches=dynamic_dnn_approaches),
         ModelConfig(model='har-dnp', **ideal_config),

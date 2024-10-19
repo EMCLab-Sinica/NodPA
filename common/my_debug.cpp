@@ -92,11 +92,6 @@ static void dump_params_common(Model* model, const ParameterInfo* cur_param, con
     MY_ASSERT(cur_param->scale.toFloat() != 0);
 #endif
     my_printf("Params len: %" PRId32 NEWLINE, cur_param->params_len);
-#if INDIRECT_RECOVERY
-    if (cur_param->slot < NUM_SLOTS) {
-        my_printf("State: %d" NEWLINE, get_slot_info(model, cur_param->slot)->state_bit);
-    }
-#endif
     my_printf("Dims: ");
     for (uint8_t j = 0; j < 4; j++) {
         if (cur_param->dims[j]) {
@@ -261,20 +256,6 @@ void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer
 }
 
 void dump_turning_points(Model *model, const ParameterInfo *output) {
-#if INDIRECT_RECOVERY
-    SlotInfo *cur_slot_info = get_slot_info(model, output->slot);
-    if (!cur_slot_info) {
-        my_printf("%d is not a normal slot" NEWLINE, output->slot);
-        return;
-    }
-    my_printf("Initial state bit for slot %d: %d" NEWLINE, output->slot, cur_slot_info->state_bit);
-    my_printf("%d turning point(s) for slot %d: ", cur_slot_info->n_turning_points, output->slot);
-    for (uint8_t idx = 0; idx < cur_slot_info->n_turning_points; idx++) {
-        uint16_t cur_turning_point = cur_slot_info->turning_points[idx];
-        my_printf("%d ", cur_turning_point);
-    }
-    my_printf(NEWLINE);
-#endif
 }
 
 void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info, bool has_state) {

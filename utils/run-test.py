@@ -42,8 +42,6 @@ def build_and_test(config, suffix, intermittent):
     if 'cifar10' in config or 'cifar10-dnp' in config:
         rounds=50
         power_cycle = 0.04
-    if '--japari' in config:
-        power_cycle += 0.01
 
     run_cmd = ['./build/intermittent-cnn']
     if intermittent:

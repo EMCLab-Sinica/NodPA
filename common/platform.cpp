@@ -72,14 +72,7 @@ void my_memcpy_to_param(ParameterInfo *param, uint32_t offset_in_word, const voi
 
 #if ENABLE_COUNTERS && !ENABLE_DEMO_COUNTERS
     uint32_t n_jobs;
-#if JAPARI
-    uint16_t n_footprints = n / (BATCH_SIZE + 1);
-    n_jobs = n - n_footprints;
-    add_counter(offsetof(Counters, nvm_write_footprints), n_footprints);
-    my_printf_debug("Recorded %u bytes of footprints written to NVM" NEWLINE, n_footprints);
-#else
     n_jobs = n;
-#endif // JAPARI
     if (is_linear) {
         add_counter(offsetof(Counters, nvm_write_linear_jobs), n_jobs);
         my_printf_debug("Recorded %u bytes of linear jobs written to NVM" NEWLINE, n_jobs);

@@ -107,11 +107,8 @@ class Constants:
     FORCE_STATIC_NETWORKS = 0
 
     BATCH_SIZE = 1
-    STATEFUL = 0
     HAWAII = 0
-    JAPARI = 0
     INTERMITTENT = 0
-    INDIRECT_RECOVERY = 0
     METHOD = "Baseline"
     FIRST_SAMPLE_OUTPUTS: list[float] = []
     USE_STATES_ARRAY = 0
@@ -201,8 +198,6 @@ parser.add_argument('--dynamic-dnn-approach', type=str, choices=DYNAMIC_DNN_APPR
 intermittent_methodology = parser.add_mutually_exclusive_group(required=True)
 intermittent_methodology.add_argument('--ideal', action='store_true')
 intermittent_methodology.add_argument('--hawaii', action='store_true')
-intermittent_methodology.add_argument('--japari', action='store_true')
-intermittent_methodology.add_argument('--stateful', action='store_true')
 args = parser.parse_args()
 if args.debug:
     logging.getLogger('intermittent-cnn').setLevel(logging.DEBUG)
@@ -232,17 +227,10 @@ Constants.FP32_ACCURACY = run_model_batched(onnx_model_batched, model_data, verb
 add_multi_stage_nodes(onnx_model)
 
 Constants.BATCH_SIZE = args.batch_size
-if args.stateful:
-    Constants.STATEFUL = 1
-    Constants.METHOD = "STATEFUL"
 if args.hawaii:
     Constants.HAWAII = 1
     Constants.METHOD = "HAWAII"
-if args.japari:
-    Constants.JAPARI = 1
-    Constants.METHOD = "JAPARI"
-Constants.INTERMITTENT = Constants.STATEFUL | Constants.HAWAII | Constants.JAPARI
-Constants.INDIRECT_RECOVERY = Constants.STATEFUL | Constants.JAPARI
+Constants.INTERMITTENT = Constants.HAWAII
 if args.target == 'msp432':
     Constants.USE_ARM_CMSIS = 1
 Constants.LEA_BUFFER_SIZE = vm_size[args.target]
@@ -516,11 +504,6 @@ model.write(to_bytes(0))  # Model.running
 model.write(to_bytes(0))  # Model.run_counter
 model.write(to_bytes(0))  # Model.layer_idx
 for _ in range(config['num_slots']): # Model.slots_info
-    if Constants.INDIRECT_RECOVERY:
-        model.write(to_bytes(1, size=8)) # SlotInfo.state_bit
-        model.write(to_bytes(0, size=8)) # SlotInfo.n_turning_points
-        for __ in range(Constants.TURNING_POINTS_LEN):
-            model.write(to_bytes(-1))   # SlotInfo.turning_points
     model.write(to_bytes(-1))       # SlotInfo.user
 model.write(to_bytes(0, size=8))  # Model.dummy
 model.write(to_bytes(0, size=8))  # Model.version
@@ -738,16 +721,11 @@ nvm_layout()
 max_output_tile_size = 0
 for idx, n in enumerate(nodes):
     if n.op_type == 'Conv':
-        cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.JAPARI, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n, args.model_variant)
+        cur_output_tile_c = determine_conv_tile_c(onnx_model, config, Constants.INTERMEDIATE_VALUES_SIZE, args.target, n, args.model_variant)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
     if n.op_type in ('Gemm', 'MatMul'):
         cur_output_tile_c = determine_gemm_tile_sizes(onnx_model, config, Constants.BATCH_SIZE, args.target, n)
         max_output_tile_size = max(max_output_tile_size, cur_output_tile_c)
-
-if Constants.STATEFUL:
-    min_range = find_min_range(onnx_model, nodes, config, Constants.N_INPUT)
-    if min_range < max_output_tile_size:
-        Constants.USE_STATES_ARRAY = 1
 
 # Fill in actual flags
 for node_idx, node in enumerate(nodes):

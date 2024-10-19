@@ -32,77 +32,19 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
     output_offset += first_unfinished_value_offset;
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    uint16_t next_output_turning_point;
-    int16_t offset;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
-                           first_unfinished_value_offset, model, output);
-    offset = -offset;
-    stop_cpu_counter();
-#endif
     stop_cpu_counter();
 #endif
 
     int16_t vals[32];
     uint16_t i = output_offset;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    const uint8_t real_relu_tile_size = extend_for_footprints(RELU_TILE_SIZE);
-    stop_cpu_counter();
-#else
     const uint8_t real_relu_tile_size = RELU_TILE_SIZE;
-#endif
     for (; i < data_len; i += real_relu_tile_size) {
         uint8_t cur_tile_size = MIN_VAL(real_relu_tile_size, data_len - i);
         my_memcpy_from_param(model, vals, X, output_offset, cur_tile_size*sizeof(int16_t));
-#if JAPARI
-        add_counter(offsetof(Counters, data_loading), (cur_tile_size/2)*(4*8));
-#endif
-
-#if STATEFUL
-        start_cpu_counter(offsetof(Counters, stripping));
-        for (uint8_t j = 0; j < cur_tile_size; j++) {
-            if (offset_has_state(output_offset+j)) {
-                strip_state(&vals[j]);
-            }
-            vals[j] *= 2;
-        }
-        stop_cpu_counter();
-#endif
 
         for (uint8_t j = 0; j < cur_tile_size; j++) {
             vals[j] = MAX_VAL(vals[j], 0);
         }
-
-#if INDIRECT_RECOVERY
-        start_cpu_counter(offsetof(Counters, embedding));
-#if STATEFUL
-        const uint8_t embedding_shift = BATCH_SIZE;
-#else
-        const uint8_t embedding_shift = BATCH_SIZE + 1;
-#endif
-        for (uint8_t j = 0; j < cur_tile_size; j += embedding_shift) {
-            uint8_t tile_last = j + embedding_shift - 1;
-            start_cpu_counter(offsetof(Counters, state_query));
-            check_next_turning_point(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, output_offset + tile_last);
-            stop_cpu_counter();
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, embedding));
-            for (uint8_t k = j; k < tile_last; k++) {
-                vals[k] /= 2;
-            }
-            vals[tile_last] = vals[tile_last] / 2 + offset;
-            stop_cpu_counter();
-#else
-            vals[tile_last] = (offset > 0 ? 1 : -1);
-#endif
-        }
-        stop_cpu_counter();
-#endif
 
 #if MY_DEBUG >= MY_DEBUG_VERBOSE
         my_printf_debug("output_offset=[% 6d, % 6d), output_val=", output_offset, output_offset+cur_tile_size);
@@ -123,12 +65,6 @@ void handle_relu(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         }
 #endif
     }
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 
     my_printf_debug("handle_relu output" NEWLINE);
     dump_params_nhwc_debug(model, output, node->output_name, "Relu");
@@ -157,23 +93,8 @@ void handle_reshape(Model *model, const ParameterInfo *input[], ParameterInfo *o
     }
     uint16_t inferred_dim = output->params_len / sizeof(int16_t);
     int8_t auto_idx = -1;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    uint8_t last_dim_idx;
-    for (uint8_t i = 0; i < 4; i++) {
-        if (output->dims[i]) {
-            last_dim_idx = i;
-        }
-    }
-    stop_cpu_counter();
-#endif
     for (uint8_t i = 0; i < 4; i++) {
         if (output->dims[i] != RESHAPE_AUTO_DIM && output->dims[i] != 0) {
-#if JAPARI
-            if (i == last_dim_idx && data->slot != SLOT_TEST_SET) {
-                inferred_dim /= extend_for_footprints(output->dims[i]);
-            } else
-#endif
             {
                 inferred_dim /= output->dims[i];
             }
@@ -205,9 +126,7 @@ void handle_squeeze(Model *model, const ParameterInfo *input[], ParameterInfo *o
     } else {
         for (uint8_t i = 0; i < 4; i++) {
             if (axes & (1 << i)) {
-#if !JAPARI
                 MY_ASSERT(input[0]->dims[i] == 1);
-#endif
             } else {
                 output->dims[j] = input[0]->dims[i];
                 j++;
@@ -244,12 +163,6 @@ void alloc_concat(Model* model, const ParameterInfo *input[], ParameterInfo* out
     for (uint8_t input_idx = 0; input_idx < node->inputs_len; input_idx++) {
         const ParameterInfo* inp = input[input_idx];
         MY_ASSERT(inp->dims[axis] <= LEA_BUFFER_SIZE);
-#if JAPARI
-        // Only support simple cases for now
-        MY_ASSERT(inp->dims[axis] % (BATCH_SIZE + 1) == 0);
-#elif STATEFUL
-        MY_ASSERT(inp->dims[axis] % BATCH_SIZE == 0);
-#endif
         output->dims[axis] += inp->dims[axis];
         output->scale = (inp->scale > output->scale) ? inp->scale : output->scale;
     }
@@ -265,17 +178,6 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
     output_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
     hw = output_offset / output->dims[1];
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    uint16_t next_output_turning_point;
-    int16_t offset;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
-                           output_offset, model, output);
-    stop_cpu_counter();
-#endif
     stop_cpu_counter();
 
 #endif
@@ -290,30 +192,14 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
                 continue;
             }
             uint16_t to_copy = input_channels - already_copied;
-#if INDIRECT_RECOVERY
-            start_cpu_counter(offsetof(Counters, state_query));
-            fill_state_offsets(output_offset, to_copy, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-            stop_cpu_counter();
-#endif
             my_memcpy_from_param(model, lea_buffer, inp, hw * input_channels + already_copied, to_copy * sizeof(int16_t));
             already_copied = 0;
-#if STATEFUL
-            for (uint16_t idx = BATCH_SIZE - 1; idx < to_copy; idx += BATCH_SIZE) {
-                strip_state(lea_buffer + idx);
-            }
-#endif
             if (inp->scale != output->scale) {
                 int16_t scaleFract;
                 uint8_t shift;
                 float_to_scale_params(&scaleFract, &shift, inp->scale/output->scale);
                 my_scale_q15(lea_buffer, scaleFract, shift, lea_buffer, to_copy * sizeof(int16_t));
             }
-
-#if INDIRECT_RECOVERY
-            start_cpu_counter(offsetof(Counters, embedding));
-            update_states(lea_buffer, to_copy, true);
-            stop_cpu_counter();
-#endif
 
             my_memcpy_to_param(output, output_offset, lea_buffer, to_copy * sizeof(int16_t), 0, true); // XXX: is Concat linear layer?
             my_printf_debug("Copied %u values to [%d, %d)" NEWLINE, to_copy, output_offset, output_offset + to_copy);
@@ -325,12 +211,6 @@ static void handle_concat_channels(Model *model, const ParameterInfo *input[], P
     }
 
     dump_params_nhwc_debug(model, output, node->output_name, "Concat");
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 }
 
 static void handle_concat_batch(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags* node_flags, const NodeFlags*) {
@@ -400,18 +280,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
     data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
     stop_cpu_counter();
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    uint16_t next_output_turning_point;
-    int16_t offset;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
-                           data_offset, model, output);
-    stop_cpu_counter();
-#endif
-
 #endif
 
     uint16_t input_indices[4], output_indices[4];
@@ -439,12 +307,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
         for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
             for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
                 for (; output_indices[2] < output->dims[2]; output_indices[2]++) {
-#if INDIRECT_RECOVERY
-                    start_cpu_counter(offsetof(Counters, state_query));
-                    fill_state_offsets(data_offset, vector_size, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-                    stop_cpu_counter();
-#endif
-
                     for (; output_indices[3] < vector_size; output_indices[3]++) {
                         for (uint8_t dim_idx = 0; dim_idx < 4; dim_idx++) {
                             input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
@@ -459,17 +321,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
                                                  output_indices[3];
                         int16_t val = get_q15_param(model, X, input_offset);
                         my_printf_debug("input_offset=%" PRIu32 " val=%d" NEWLINE, input_offset, val);
-
-#if STATEFUL
-                        strip_state(&val);
-#endif
-
-#if INDIRECT_RECOVERY
-                        start_cpu_counter(offsetof(Counters, embedding));
-                        val += state_offsets[output_indices[3]];
-                        stop_cpu_counter();
-#endif
-
                         my_printf_debug("output_offset=%" PRIu32 " val=%d" NEWLINE, output_offset, val);
                         put_q15_param(output, output_offset, val, /*is_linear=*/false);
 #if HAWAII
@@ -487,12 +338,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
 
         for (; output_indices[0] < output->dims[0]; output_indices[0]++) {
             for (; output_indices[1] < output->dims[1]; output_indices[1]++) {
-#if INDIRECT_RECOVERY
-                start_cpu_counter(offsetof(Counters, state_query));
-                fill_state_offsets(data_offset, vector_size, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-                stop_cpu_counter();
-#endif
-
                 for (; output_indices[2] < vector_size; output_indices[2]++) {
                     for (uint8_t dim_idx = 0; dim_idx < 3; dim_idx++) {
                         input_indices[dim_idx] = output_indices[inverse_perm[dim_idx]];
@@ -505,17 +350,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
                                              output_indices[2];
                     int16_t val = get_q15_param(model, X, input_offset);
                     my_printf_debug("input_offset=%" PRIu32 " val=%d" NEWLINE, input_offset, val);
-
-#if STATEFUL
-                    strip_state(&val);
-#endif
-
-#if INDIRECT_RECOVERY
-                    start_cpu_counter(offsetof(Counters, embedding));
-                    val += state_offsets[output_indices[2]];
-                    stop_cpu_counter();
-#endif
-
                     my_printf_debug("output_offset=%" PRIu32 " val=%d" NEWLINE, output_offset, val);
                     put_q15_param(output, output_offset, val, /*is_linear=*/false);
 #if HAWAII
@@ -527,12 +361,6 @@ void handle_transpose(Model* model, const ParameterInfo *input[], ParameterInfo 
             output_indices[1] = 0;
         }
     }
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 
     dump_params_debug(model, output, node->output_name, "Transpose");
 }

@@ -27,38 +27,10 @@ void determine_tile_c(ParameterInfo *param, const ParameterInfo* input, const Pa
 void hawaii_record_footprints(Model* model, uint32_t vector_len);
 #endif
 
-#if JAPARI
-#define INPUT_BUFFER_WITH_FOOTPRINTS_LEN 512
-
-extern int16_t input_buffer_with_footprints[INPUT_BUFFER_WITH_FOOTPRINTS_LEN];
-int16_t extend_for_footprints(int16_t val, uint8_t force_aligned = 0);
-int16_t offset_without_footprints(int16_t offset);
-uint8_t has_footprints(const ParameterInfo* cur_param);
-#endif
-
-#if INDIRECT_RECOVERY
-const uint16_t INVALID_TURNING_POINT = static_cast<uint16_t>(-1);
-
-struct OutputChunkHandlerParams {
-    int16_t* buffer;
-    uint16_t buffer_offset;
-};
-void OutputChunkHandler(uint32_t offset, uint16_t real_chunk_len, int8_t state_bit, void* _params);
-void find_initial_state_bit(int16_t* p_offset, uint8_t* p_turning_point_idx, uint16_t* p_next_turning_point, SlotInfo** p_slot_info, uint32_t initial_value_idx, Model* model, const ParameterInfo* param);
-void check_next_turning_point(int16_t& offset, uint8_t& turning_point_idx, uint16_t& next_turning_point, SlotInfo* slot_info, uint16_t value_idx);
-#endif
-
 void fix_first_unfinished_value_offset(const Model* model, uint32_t* p_first_unfinished_value_offset);
 void make_buffer_aligned(int16_t** p_buffer);
 float q15_to_float(int16_t val, const ValueInfo& val_info, uint8_t* p_use_prefix = nullptr, bool has_state = true);
 void my_offset_q15_batched(const int16_t *pSrc, int16_t offset, int16_t *pDst, uint32_t blockSize, bool enforce_states = false);
-#if INDIRECT_RECOVERY
-void fill_state_offsets(const uint16_t cur_output_data_offset, const uint16_t n_filters, int16_t* old_output_offset, uint8_t* turning_point_idx, uint16_t* next_turning_point, const SlotInfo* cur_slot_info);
-void update_states(int16_t* buffer, uint16_t buffer_size, bool enforce_states, bool inverted_states = false);
-#endif
-#if JAPARI
-void move_weights(int16_t* filter_ptr, bool exact_tile, int16_t values_to_preserve, int16_t tile_width);
-#endif
 
 extern int16_t state_offsets[OUTPUT_LEN];
 extern int16_t op_buffer[OP_BUFFER_LEN];

@@ -169,10 +169,6 @@ static void handle_node(Model *model, uint16_t node_idx) {
     MY_ASSERT(minimum_params_len <= output->params_len && output->params_len <= INTERMEDIATE_VALUES_SIZE);
 #endif
 
-#if STATEFUL
-    my_printf_debug("Old output state bit=%d" NEWLINE, get_state_bit(model, output->slot));
-#endif
-
     handlers[cur_node->op_type](model, input, output, cur_node, cur_node_flags, cur_orig_node_flags);
 
 #if ENABLE_COUNTERS
@@ -181,9 +177,6 @@ static void handle_node(Model *model, uint16_t node_idx) {
 #ifndef __arm__
     // For some operations (e.g., ConvMerge), scale is determined in the handlers
     my_printf_debug("Output scale = %f" NEWLINE, output->scale.toFloat());
-#endif
-#if STATEFUL
-    my_printf_debug("New output state bit=%d" NEWLINE, get_state_bit(model, output->slot));
 #endif
 
     commit_intermediate_parameter_info(output);
@@ -251,63 +244,32 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
     int16_t max = INT16_MIN;
     uint16_t u_ans;
     uint16_t ans_len = sizeof(first_sample_outputs) / sizeof(float);
-#if JAPARI
-    ans_len = extend_for_footprints(ans_len);
-#endif
     ans_len = MIN_VAL(output_node->dims[1], ans_len);
 
     float output_max = 0;
     if (inference_results_vm.sample_idx == 0) {
         for (uint16_t buffer_idx = 0; buffer_idx < ans_len; buffer_idx++) {
-#if JAPARI
-            if (offset_has_state(buffer_idx)) {
-                continue;
-            }
-            output_max = MAX_VAL(std::fabs(first_sample_outputs[offset_without_footprints(buffer_idx)]), output_max);
-#else
             output_max = MAX_VAL(std::fabs(first_sample_outputs[buffer_idx]), output_max);
-#endif
         }
     }
 
     uint16_t buffer_len = LIMIT_DMA_SIZE(ans_len);
-
-    // Align buffers with footprints for easier address calculation
-#if JAPARI
-    buffer_len = buffer_len / (BATCH_SIZE + 1) * (BATCH_SIZE + 1);
-#elif STATEFUL
-    buffer_len = buffer_len / BATCH_SIZE * BATCH_SIZE;
-#endif
 
     for (uint16_t buffer_offset = 0; buffer_offset < ans_len; buffer_offset += buffer_len) {
         uint16_t cur_buffer_len = MIN_VAL(buffer_len, ans_len - buffer_offset);
 
         my_memcpy_from_param(model, lea_buffer, output_node, buffer_offset, cur_buffer_len * sizeof(int16_t));
 
-#if STATEFUL
-        for (uint16_t idx = BATCH_SIZE - 1; idx < cur_buffer_len; idx += BATCH_SIZE) {
-            strip_state(lea_buffer + idx);
-        }
-#endif
-
 #if DYNAMIC_DNN_APPROACH != DYNAMIC_DNN_FINE_GRAINED
         if (inference_results_vm.sample_idx == 0) {
             uint16_t ofm_idx = buffer_offset;
-#if JAPARI
-            ofm_idx = offset_without_footprints(ofm_idx);
-#endif
             for (uint16_t buffer_idx = 0; buffer_idx < cur_buffer_len; buffer_idx++) {
                 int16_t got_q15 = lea_buffer[buffer_idx];
-#if JAPARI
-                if (offset_has_state(buffer_idx)) {
-                    check_footprint(got_q15);
-                } else
-#endif
                 {
                     float got_real = q15_to_float(got_q15, ValueInfo(output_node), nullptr, false);
                     float expected = first_sample_outputs[ofm_idx];
                     float error = fabs((got_real - expected) / output_max);
-                    // Errors in CIFAR-10/Stateful are quite large...
+                    // Errors in CIFAR-10 are quite large...
                     MY_ASSERT(error <= 0.1,
                               "Value error too large at index %d: got=%f, expected=%f" NEWLINE, buffer_offset + buffer_idx, got_real, expected);
                     ofm_idx++;
@@ -325,9 +287,6 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
         }
     }
 
-#if JAPARI
-    u_ans = offset_without_footprints(u_ans);
-#endif
     *ansptr = u_ans;
 #endif
 }

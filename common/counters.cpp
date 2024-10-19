@@ -74,12 +74,6 @@ void print_all_counters() {
     my_printf(NEWLINE "Progress seeking:        "); total_overhead += print_counters<&Counters::progress_seeking>();
     // misc
     my_printf(NEWLINE "Memory layout:           "); total_overhead += print_counters<&Counters::memory_layout>();
-#if JAPARI
-    my_printf(NEWLINE "Data loading:            "); total_overhead += print_counters<&Counters::data_loading>();
-#endif
-#if STATEFUL
-    my_printf(NEWLINE "Embedded values:         "); total_overhead += print_counters<&Counters::embedded_values>();
-#endif
     my_printf(NEWLINE "DMA invocations:         "); print_counters<&Counters::dma_invocations>();
     my_printf(NEWLINE "DMA bytes:               "); total_dma_bytes = print_counters<&Counters::dma_bytes>();
     my_printf(NEWLINE "DMA (VM to VM):          "); print_counters<&Counters::dma_vm_to_vm>();

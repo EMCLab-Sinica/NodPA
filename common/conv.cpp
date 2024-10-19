@@ -55,20 +55,6 @@ typedef struct ConvTaskParams {
     uint16_t dest_offset;
     uint16_t filter_offset;
     uint8_t truncated;
-#if INDIRECT_RECOVERY
-    int16_t old_output_offset ;
-    uint8_t turning_point_idx;
-    uint16_t next_turning_point;
-    SlotInfo* cur_slot_info;
-#endif
-#if JAPARI
-    uint8_t conv_input_has_footprints;
-    uint16_t input_tile_c_offset_with_footprints;
-    uint8_t force_align_footprints;
-#endif
-#if STATEFUL
-    uint8_t output_padding;
-#endif
 
     uint16_t filter_idx;
     uint16_t filter_tile_index;
@@ -87,36 +73,6 @@ static ConvTaskParams conv_params_obj;
 // for group convolution
 int16_t* const biases = op_buffer;
 
-#if INDIRECT_RECOVERY
-static void flip_filter_state_bits(ConvTaskParams *conv_params, uint16_t n_filters) {
-#if STATEFUL
-    int16_t *to_flip_state_bits = nullptr;
-    if (conv_params->group == 1) {
-        to_flip_state_bits = conv_params->filter_buffer_addr + n_filters * (conv_params->filter_offset - 1);
-    } else {
-        to_flip_state_bits = biases;
-    }
-
-    add_counter(offsetof(Counters, embedded_values), n_filters);
-
-    // need negating filter value here as it will be multiplied with _Q15(-1.0), or -32768
-    int8_t state_multiplier = (conv_params->group == 1) ? -1 : 1;
-    for (uint16_t idx = BATCH_SIZE - 1; idx < n_filters; idx += BATCH_SIZE) {
-        if (get_value_state_bit(to_flip_state_bits[idx]) != state_multiplier * get_value_state_bit(state_offsets[idx])) {
-            my_printf_debug("Flipping state bit in filter %d" NEWLINE, idx);
-            to_flip_state_bits[idx] += 0x8000;
-        }
-    }
-#endif
-#if JAPARI
-    int16_t *to_flip_state_bits = conv_params->filter_buffer_addr + n_filters * (conv_params->filter_offset - 1);
-    for (uint16_t idx = BATCH_SIZE; idx < n_filters; idx += BATCH_SIZE + 1) {
-        to_flip_state_bits[idx] = (state_offsets[idx] == 0x4000) ? -1 : 1;
-    }
-#endif
-}
-#endif
-
 static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims, ConvTaskParams *conv_params) {
     int16_t output_tile_c = conv_params->flags->conv.output_tile_c;
     int16_t cur_output_tile_c;
@@ -131,21 +87,6 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
     int16_t n_filters = cur_output_tile_c;
     int16_t values_to_preserve = n_filters;
     int16_t channel_offset_c = conv_params->filter_idx;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    values_to_preserve = extend_for_footprints(n_filters, conv_params->force_align_footprints);
-    n_filters = padding_for_lea(values_to_preserve);
-    channel_offset_c = extend_for_footprints(channel_offset_c);
-    stop_cpu_counter();
-#endif
-#if STATEFUL
-    start_cpu_counter(offsetof(Counters, memory_layout));
-    if (conv_params->output_padding) {
-        values_to_preserve += conv_params->output_padding;
-        n_filters = padding_for_lea(values_to_preserve);
-    }
-    stop_cpu_counter();
-#endif
     uint16_t output_h = (cur_input_h - conv_params->input_h_first) / layer_dims->STRIDE_H,
              output_w = (conv_params->input_w - conv_params->input_w_first) / layer_dims->STRIDE_W;
     // use NWHC so that output is written continuously on the address space
@@ -155,13 +96,6 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
              output_h * layer_dims->OUTPUT_CHANNEL +                                                                           // h
              channel_offset_c;                                                                                                  // c
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, embedding));
-    fill_state_offsets(cur_output_data_offset, n_filters, &conv_params->old_output_offset, &conv_params->turning_point_idx, &conv_params->next_turning_point, conv_params->cur_slot_info);
-    my_printf_debug("State offsets" NEWLINE);
-    dump_matrix_debug(state_offsets, n_filters, ValueInfo(conv_params->conv_input, nullptr), false);
-    stop_cpu_counter();
-#endif
     int16_t * const matrix_mpy_results = lea_buffer + LEA_BUFFER_SIZE - OUTPUT_LEN - conv_params->pState_len;
 
     /* copy filter data */
@@ -206,21 +140,6 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
                 }
             }
             int16_t last_elem = 0;
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, embedding));
-            if (conv_params->conv_input->slot == SLOT_TEST_SET) {
-                my_scale_q15(filter_tmp, 0x4000, 0, filter_tmp, conv_params->filter_offset);
-            }
-            bool has_state = offset_has_state(cur_output_data_offset + idx);
-            if (has_state) {
-                my_printf_debug("Adding state bit for newly loaded filter idx=%d" NEWLINE, idx);
-                last_elem = state_offsets[idx];
-
-                add_counter(offsetof(Counters, embedded_values), 1);
-            }
-            stop_cpu_counter();
-            if (!has_state)
-#endif
                 if (conv_params->group == 1) {
                     // XXX: why is this needed? Should already be zero with my_fill_q15 above
                     last_elem = 0;
@@ -232,13 +151,6 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
                     // If the dividend is negative, the quotient is wrong
                     bias_val = static_cast<int32_t>(get_q15_param(conv_params->model, conv_params->conv_bias, conv_params->filter_idx + idx)) / conv_params->conv_input->scale.toFloat();
                 }
-#if STATEFUL
-                start_cpu_counter(offsetof(Counters, embedding));
-                if (conv_params->conv_input->slot == SLOT_TEST_SET) {
-                    bias_val /= 2;
-                }
-                stop_cpu_counter();
-#endif
             }
             last_elem += bias_val;
             if (conv_params->group == 1) {
@@ -248,39 +160,11 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
             }
 
             uint16_t channel = idx;
-#if JAPARI
-            start_cpu_counter(offsetof(Counters, memory_layout));
-            channel += channel / BATCH_SIZE;
-            stop_cpu_counter();
-#endif
             my_interleave_q15(filter_tmp, channel, n_filters, conv_params->filter_buffer_addr, conv_params->filter_offset);
         }
 
-#if JAPARI
-        start_cpu_counter(offsetof(Counters, embedding));
-        int16_t* footprint_channels_ptr = conv_params->filter_buffer_addr + n_filters * (conv_params->filter_offset - 1);
-        for (int16_t idx = BATCH_SIZE; idx < n_filters; idx += BATCH_SIZE + 1) {
-            *(footprint_channels_ptr + idx) = (state_offsets[idx] == 0x4000 ? -1 : 1);
-        }
-        stop_cpu_counter();
-#endif
-
-#if STATEFUL
-        start_cpu_counter(offsetof(Counters, memory_layout));
-        if (conv_params->output_padding) {
-            conv_params->filter_buffer_addr[n_filters * conv_params->filter_offset - 1] = -state_offsets[n_filters - 1];
-        }
-        stop_cpu_counter();
-#endif
-
         conv_params->cached_filter_idx = conv_params->filter_idx;
         conv_params->cached_input_tile_c_offset = conv_params->input_tile_c_offset;
-    } else {
-#if INDIRECT_RECOVERY
-        start_cpu_counter(offsetof(Counters, embedding));
-        flip_filter_state_bits(conv_params, n_filters);
-        stop_cpu_counter();
-#endif
     }
 
     int16_t *filter_buffer_addr = conv_params->filter_buffer_addr;
@@ -400,12 +284,6 @@ static inline uint16_t load_input_vector(uint32_t src_addr, int16_t* dest_addr, 
 
     MY_ASSERT(len != 0);
 
-#if JAPARI
-    if (conv_params->conv_input_has_footprints) {
-        MY_ASSERT(len <= INPUT_BUFFER_WITH_FOOTPRINTS_LEN);
-        memcpy_dest_addr = input_buffer_with_footprints;
-    } else
-#endif
     {
         memcpy_dest_addr = dest_addr;
         loaded_len = len;
@@ -414,24 +292,6 @@ static inline uint16_t load_input_vector(uint32_t src_addr, int16_t* dest_addr, 
         conv_params->model, memcpy_dest_addr,
         conv_params->conv_input, src_addr,
         len * sizeof(int16_t));
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, stripping));
-    if (conv_params->conv_input_has_footprints) {
-        // Use nested loops as skipping footprints by `% (BATCH_SIZE)` is quite slow on boards
-        int16_t *dest_ptr = dest_addr,
-                *src_ptr = input_buffer_with_footprints;
-        for (uint16_t src_idx = 0; src_idx < len; src_idx += (BATCH_SIZE + 1)) {
-            for (uint8_t batch_offset = 0; batch_offset < BATCH_SIZE; batch_offset++) {
-                *dest_ptr = *src_ptr;
-                dest_ptr++;
-                src_ptr++;
-            }
-            src_ptr++; // skipping footprints
-        }
-        loaded_len = dest_ptr - dest_addr;
-    }
-    stop_cpu_counter();
-#endif
 
 #if MY_DEBUG >= MY_DEBUG_VERBOSE
     for (uint16_t idx = 0; idx < loaded_len; idx++) {
@@ -470,14 +330,6 @@ static void load_ifm_tile_row(Model* model, const ConvLayerDimensions* layer_dim
     my_printf_debug("Copying row to lea_buffer + %d" NEWLINE,
                     static_cast<int>(dest - lea_buffer));
     uint16_t cur_input_channel = layer_dims->CHANNEL;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    if (conv_params->conv_input_has_footprints) {
-        cur_input_tile_c = extend_for_footprints(cur_input_tile_c);
-        cur_input_channel = extend_for_footprints(cur_input_channel);
-    }
-    stop_cpu_counter();
-#endif
     int16_t input_src_offset;
     uint8_t transposed = conv_params->conv_input->param_flags & TRANSPOSED;
     if (transposed) {
@@ -485,14 +337,7 @@ static void load_ifm_tile_row(Model* model, const ConvLayerDimensions* layer_dim
     } else {
         input_src_offset = (h_start * layer_dims->W + w_start) * cur_input_channel * conv_params->group;
     }
-#if JAPARI
-    input_src_offset += conv_params->input_tile_c_offset_with_footprints;
-#else
     input_src_offset += conv_params->input_tile_c_offset;
-#endif
-#if INDIRECT_RECOVERY
-    dump_turning_points_debug(model, conv_params->conv_input);
-#endif
     int16_t input_src_vertical_offset;
     if (transposed) {
         input_src_vertical_offset = cur_input_channel * conv_params->group;
@@ -507,23 +352,10 @@ static void load_ifm_tile_row(Model* model, const ConvLayerDimensions* layer_dim
         int16_t *dest_addr = dest + (w_start-conv_params->input_w) * im2col_channel_offset * conv_params->group;
         uint16_t input_tile_len = (h_end-h_start+1)*input_row_len;
         load_input_vector(input_src_offset, dest_addr, input_tile_len, conv_params);
-#if STATEFUL
-        start_cpu_counter(offsetof(Counters, stripping));
-        if (conv_params->conv_input->slot != SLOT_TEST_SET) {
-            MY_ASSERT(cur_input_tile_c % BATCH_SIZE == 0);
-            for (int16_t *dest_ptr = dest_addr + BATCH_SIZE - 1; dest_ptr < dest_addr + input_tile_len; dest_ptr += BATCH_SIZE) {
-                strip_state(dest_ptr);
-            }
-        }
-        stop_cpu_counter();
-#endif
     } else {
 
     for (int32_t h = h_start; h <= h_end; h++) {
         int16_t *dest_addr = dest + (w_start-conv_params->input_w) * im2col_channel_offset * conv_params->group;
-#if STATEFUL
-        int16_t *orig_dest_addr = dest_addr;
-#endif
         uint32_t src_addr = input_src_offset;
         if ((cur_input_tile_c == cur_input_channel) && !transposed) {
             load_input_vector(src_addr, dest_addr, input_row_len, conv_params);
@@ -539,29 +371,6 @@ static void load_ifm_tile_row(Model* model, const ConvLayerDimensions* layer_dim
             }
         }
 
-#if STATEFUL
-        start_cpu_counter(offsetof(Counters, stripping));
-        if (conv_params->conv_input->slot != SLOT_TEST_SET) {
-            // stripping states inside the h loop is faster as biases multipliers can be skipped
-            int16_t *input_row_end = orig_dest_addr + input_row_len;
-            // if input_tile_c is smaller than BATCH_SIZE, state bits are not always at offset BATCH_SIZE - 1
-            my_printf_debug("Using a loop for stripping state bits" NEWLINE);
-            MY_ASSERT(cur_input_tile_c % BATCH_SIZE == 0 || BATCH_SIZE % cur_input_tile_c == 0);
-            if (cur_input_tile_c % BATCH_SIZE == 0) {
-                for (int16_t *dest_ptr = orig_dest_addr + BATCH_SIZE - 1; dest_ptr < input_row_end; dest_ptr += BATCH_SIZE) {
-                    strip_state(dest_ptr);
-                }
-            } else {
-                int16_t offset = BATCH_SIZE - 1 - src_addr % BATCH_SIZE;
-                if (offset < cur_input_tile_c) {
-                    for (; offset < input_row_len; offset += cur_input_tile_c) {
-                        strip_state(orig_dest_addr + offset);
-                    }
-                }
-            }
-        }
-        stop_cpu_counter();
-#endif
         dest += conv_params->dest_offset * conv_params->group;
         input_src_offset += input_src_vertical_offset;
     }
@@ -572,11 +381,6 @@ static void load_ifm_tile_row(Model* model, const ConvLayerDimensions* layer_dim
 static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* layer_dims, ConvTaskParams *conv_params) {
     int8_t field_size = (layer_dims->kH - 1) / 2;
     int16_t max_n_filters = conv_params->flags->conv.output_tile_c;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, memory_layout));
-    max_n_filters *= 2;
-    stop_cpu_counter();
-#endif
     // 1 additional filters for values before transpose
     uint16_t inputs_buffer_end = LEA_BUFFER_SIZE - OUTPUT_LEN - conv_params->pState_len - (max_n_filters + 1) * conv_params->filter_offset;
     // Align tile_h with the stride size to make sure the next tile starts from the correct place
@@ -657,32 +461,12 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     layer_dims->OUTPUT_H = (conv_params->input_h_last - conv_params->input_h_first) / layer_dims->STRIDE_H + 1;
     layer_dims->OUTPUT_W = (conv_params->input_w_last - conv_params->input_w_first) / layer_dims->STRIDE_W + 1;
 
-#if !JAPARI
-    // skip the check for JAPARI as it is too complex
     MY_ASSERT(conv_input->dims[1] == conv_filter->dims[1] * conv_params->group);
     MY_ASSERT(conv_params->group == 1 || conv_params->group == conv_input->dims[1]);
-#endif
-
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, stripping));
-    conv_params->force_align_footprints = (OUTPUT_CHANNEL % BATCH_SIZE != 0);
-    OUTPUT_CHANNEL = extend_for_footprints(OUTPUT_CHANNEL, conv_params->force_align_footprints);
-    stop_cpu_counter();
-#endif
 
     conv_params->input_tile_c = conv_params->flags->conv.input_tile_c;
     conv_params->n_tiles_c = upper_gauss(CHANNEL, conv_params->input_tile_c);
 
-#if STATEFUL
-    start_cpu_counter(offsetof(Counters, memory_layout));
-    if (conv_params->flags->conv.output_tile_c % BATCH_SIZE) {
-        conv_params->output_padding = BATCH_SIZE - conv_params->flags->conv.output_tile_c % BATCH_SIZE;
-    } else {
-        conv_params->output_padding = 0;
-    }
-    OUTPUT_CHANNEL += conv_params->output_padding;
-    stop_cpu_counter();
-#endif
     my_printf_debug("input_tile_c=%d, output_tile_c=%d" NEWLINE, conv_params->input_tile_c, conv_params->flags->conv.output_tile_c);
 
     /* XXX: extend flags; assume dilation=(1, 1) for now */
@@ -693,13 +477,6 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     output->dims[3] = layer_dims->OUTPUT_W;
     output->scale = conv_input->scale * conv_filter->scale;
     output->param_flags |= TRANSPOSED;
-#if STATEFUL
-    start_cpu_counter(offsetof(Counters, embedding));
-    if (conv_input->slot == SLOT_TEST_SET) {
-        output->scale.shift++;
-    }
-    stop_cpu_counter();
-#endif
 
 #if ENABLE_DEMO_COUNTERS
     if (need_reset() && !model->run_counter) {
@@ -745,11 +522,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     conv_params->cached_filter_idx = -1;
     layer_dims->H = H;
     layer_dims->W = W;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, stripping));
-    conv_params->conv_input_has_footprints = has_footprints(conv_input);
-    stop_cpu_counter();
-#endif
 
     layer_dims->CHANNEL = CHANNEL;
     layer_dims->OUTPUT_CHANNEL = output->dims[1];
@@ -796,26 +568,10 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     }
 #endif
 
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    find_initial_state_bit(&conv_params->old_output_offset, &conv_params->turning_point_idx, &conv_params->next_turning_point,
-                           &conv_params->cur_slot_info, first_unfinished_value_offset, model, output);
-    stop_cpu_counter();
-
-    my_printf_debug("old_output_offset = %d" NEWLINE, conv_params->old_output_offset);
-#endif
-
     uint16_t cur_output_tile_c = conv_params->flags->conv.output_tile_c;
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    cur_output_tile_c = extend_for_footprints(cur_output_tile_c, conv_params->force_align_footprints);
-    stop_cpu_counter();
-#endif
 
     conv_params->input_tile_c_index = first_unfinished_value_offset / slice_size_input_channel_tiling;
     {
-        // Not extending for JAPARI footprints here as input_tile_c_offset will be extended later
         conv_params->input_tile_c_offset = first_unfinished_value_offset_with_skipped_jobs / slice_size_input_channel_tiling * conv_params->input_tile_c;
 #if DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_ONE_INDICATOR
         uint16_t original_input_tile_c_offset  = conv_params->input_tile_c_offset,
@@ -841,9 +597,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 
     conv_params->filter_tile_index = (first_unfinished_value_offset % layer_dims->OUTPUT_CHANNEL) / cur_output_tile_c;
     conv_params->filter_idx = first_unfinished_value_offset % layer_dims->OUTPUT_CHANNEL;
-#if JAPARI
-    conv_params->filter_idx = conv_params->filter_idx / (BATCH_SIZE + 1) * BATCH_SIZE;
-#endif
 
     first_unfinished_value_offset /= layer_dims->OUTPUT_CHANNEL;
 
@@ -936,11 +689,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #endif
 
         conv_params->cur_filter_tile_c = conv_params->cur_input_tile_c;
-#if JAPARI
-        start_cpu_counter(offsetof(Counters, embedding));
-        conv_params->input_tile_c_offset_with_footprints = extend_for_footprints(conv_params->input_tile_c_offset);
-        stop_cpu_counter();
-#endif
         my_printf_debug("cur_input_tile_c = %d" NEWLINE, conv_params->cur_input_tile_c);
         conv_params->dest_offset = layer_dims->kW * conv_params->cur_input_tile_c;
         if (conv_params->group == 1) {
@@ -1025,39 +773,13 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 break;
             }
             conv_params->filter_idx = conv_params->filter_tile_index * conv_params->flags->conv.output_tile_c;
-#if INDIRECT_RECOVERY
-            start_cpu_counter(offsetof(Counters, state_query));
-            uint32_t new_output_offset = conv_params->input_tile_c_index * layer_dims->OUTPUT_CHANNEL * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W;
-#if JAPARI
-            start_cpu_counter(offsetof(Counters, embedding));
-            new_output_offset += extend_for_footprints(conv_params->filter_idx);
-            stop_cpu_counter();
-#else
-            new_output_offset += conv_params->filter_idx;
-#endif
-            find_initial_state_bit(&conv_params->old_output_offset, &conv_params->turning_point_idx, &conv_params->next_turning_point, &conv_params->cur_slot_info,
-                                   new_output_offset, model, output);
-            stop_cpu_counter();
-#endif
         }
         conv_params->filter_idx = conv_params->filter_tile_index = 0;
 
         conv_params->input_tile_c_index++;
-#if INDIRECT_RECOVERY
-        start_cpu_counter(offsetof(Counters, state_query));
-        find_initial_state_bit(&conv_params->old_output_offset, &conv_params->turning_point_idx, &conv_params->next_turning_point, &conv_params->cur_slot_info,
-                               conv_params->input_tile_c_index * layer_dims->OUTPUT_CHANNEL * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W, model, output);
-        stop_cpu_counter();
-#endif
     }
 
     output->params_len = conv_params->input_tile_c_index * layer_dims->OUTPUT_H * layer_dims->OUTPUT_W * layer_dims->OUTPUT_CHANNEL * sizeof(int16_t);
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 
 #if ENABLE_DEMO_COUNTERS
     if (need_reset() && !model->run_counter) {
@@ -1091,36 +813,6 @@ void alloc_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo
     output->params_len = OUTPUT_CHANNEL * OUTPUT_H * OUTPUT_W * sizeof(int16_t);
     output->param_flags &= (~TRANSPOSED);
 }
-
-#if STATEFUL
-struct ConvMergeInputChunkHandlerParams {
-    int16_t *to_add;
-    uint32_t input_offset;
-};
-
-void ConvMergeInputChunkHandler(uint32_t range_offset, uint16_t range_len, int8_t state_bit, void* _params) {
-    ConvMergeInputChunkHandlerParams* params = reinterpret_cast<ConvMergeInputChunkHandlerParams*>(_params);
-    my_printf_debug("input range_offset=%d range_len=%d state_bit=%d" NEWLINE, range_offset, range_len, state_bit);
-    int16_t *to_offset = params->to_add + range_offset - params->input_offset;
-    my_offset_q15_batched(to_offset, -state_bit*0x4000, to_offset, range_len);
-}
-#endif
-
-#if JAPARI
-struct ConvMergeOutputChunkHandlerParams {
-    uint32_t tiling_results_offset;
-};
-
-void ConvMergeOutputChunkHandler(uint32_t range_offset, uint16_t range_len, int8_t state_bit, void* _params) {
-    ConvMergeOutputChunkHandlerParams* params = reinterpret_cast<ConvMergeOutputChunkHandlerParams*>(_params);
-    my_printf_debug("output range_offset=%d range_len=%d state_bit=%d" NEWLINE, range_offset, range_len, state_bit);
-    int16_t *to_offset = lea_buffer + range_offset - params->tiling_results_offset;
-    uint16_t n_footprints = (range_len + BATCH_SIZE) / (BATCH_SIZE + 1);
-    int16_t* footprint_buffer = lea_buffer + (LEA_BUFFER_SIZE - n_footprints) / 2 * 2;
-    my_fill_q15(-state_bit, footprint_buffer, n_footprints);
-    my_interleave_q15(footprint_buffer, BATCH_SIZE - (range_offset % (BATCH_SIZE + 1)), BATCH_SIZE + 1, to_offset, n_footprints);
-}
-#endif
 
 void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node* node, CurNodeFlags*, const NodeFlags*) {
     // Do not use conv_params here as its intialization in alloc_conv and
@@ -1165,20 +857,6 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
                              output_w * OUTPUT_CHANNEL +
                              chunk_offset; // NHWC
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    int16_t old_embedding_offset;
-    uint8_t output_turning_point_idx;
-    uint16_t next_output_turning_point;
-    SlotInfo *cur_output_slot_info;
-
-    find_initial_state_bit(&old_embedding_offset, &output_turning_point_idx, &next_output_turning_point,
-                           &cur_output_slot_info, output_offset, model, output);
-
-    my_printf_debug("old_embedding_offset = %d" NEWLINE, old_embedding_offset);
-    stop_cpu_counter();
-#endif
-
     // A special case - when all channels are pruned
     if (!n_tiles_c) {
         my_printf_debug("All channels are skipped - appending biases" NEWLINE);
@@ -1201,15 +879,6 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
                     int16_t *to_add = lea_buffer + input_tile_c_index * chunk_len;
                     uint32_t cur_input_offset = input_tile_c_index * tiling_results_len + input_offset;
                     my_memcpy_from_param(model, to_add, data, cur_input_offset, real_chunk_len * sizeof(int16_t));
-#if JAPARI
-                    add_counter(offsetof(Counters, data_loading), (real_chunk_len/2)*(4*8));
-#endif
-#if STATEFUL
-                    start_cpu_counter(offsetof(Counters, stripping));
-                    ConvMergeInputChunkHandlerParams params({to_add, cur_input_offset});
-                    iterate_chunks(model, data, cur_input_offset, real_chunk_len, ConvMergeInputChunkHandler, &params);
-                    stop_cpu_counter();
-#endif
                     my_printf_debug(NEWLINE "Input offset %d, input tile %d, output offset %d" NEWLINE, cur_input_offset, input_tile_c_index, output_offset);
                     my_printf_debug("Added chunk" NEWLINE);
                     dump_matrix_debug(to_add, real_chunk_len, ValueInfo(data));
@@ -1218,27 +887,6 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
                     }
                 }
             }
-
-#if INDIRECT_RECOVERY
-
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, state_query));
-            fill_state_offsets(output_offset, real_chunk_len, &old_embedding_offset, &output_turning_point_idx, &next_output_turning_point, cur_output_slot_info);
-            stop_cpu_counter();
-
-            start_cpu_counter(offsetof(Counters, embedding));
-            update_states(lea_buffer, real_chunk_len, true);
-            stop_cpu_counter();
-#elif JAPARI
-            start_cpu_counter(offsetof(Counters, embedding));
-            ConvMergeOutputChunkHandlerParams params({output_offset});
-            iterate_chunks(model, output, output_offset, real_chunk_len, ConvMergeOutputChunkHandler, &params);
-            stop_cpu_counter();
-#endif
-
-            my_printf_debug("After writing state bits in [%d, %d)" NEWLINE, output_offset, output_offset + real_chunk_len);
-            dump_matrix_debug(lea_buffer, real_chunk_len, ValueInfo(output));
-#endif
 
             my_memcpy_to_param(output, output_offset, lea_buffer, real_chunk_len * sizeof(int16_t), 0, true);
 #if HAWAII
@@ -1254,12 +902,6 @@ void handle_conv_stage2(Model *model, const ParameterInfo *input[], ParameterInf
     }
 
     my_printf_debug("After merging tiling results" NEWLINE);
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 
     dump_params_nhwc_debug(model, output, node->output_name, "ConvStage2");
 }

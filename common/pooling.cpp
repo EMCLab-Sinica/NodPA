@@ -65,15 +65,6 @@ void alloc_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *o
     }
     maxpool_params->need_nhwc2nchw = node_flags->max_pool.nhwc2nchw;
 
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    if (maxpool_params->need_nhwc2nchw) {
-        maxpool_params->new_W = extend_for_footprints(maxpool_params->new_W);
-        CHANNEL = CHANNEL / (BATCH_SIZE + 1) * BATCH_SIZE;
-    }
-    stop_cpu_counter();
-#endif
-
     output->params_len = maxpool_params->new_H * maxpool_params->new_W * CHANNEL * sizeof(int16_t);
     output->dims[0] = 1;
     output->dims[1] = CHANNEL;
@@ -114,28 +105,7 @@ static uint16_t maxpool_patch(MaxPoolParams *maxpool_params) {
             my_memcpy_from_param(maxpool_params->model, input_buffer, maxpool_params->data, val_offset, maxpool_params->n_channels * sizeof(int16_t));
             output_channel_offset = 0;
             for (uint16_t input_channel_offset = 0; input_channel_offset < maxpool_params->n_channels; input_channel_offset++) {
-#if JAPARI
-                start_cpu_counter(offsetof(Counters, stripping));
-                bool need_skipping = offset_has_state(maxpool_params->start_channel + input_channel_offset);
-                if (need_skipping) {
-                    // not checking need_nhwc2nchw here - if that is true, input footprint channels should already be skipped
-                    // before maxpool_patch is called
-                    output_channel_offset++;
-                }
-                stop_cpu_counter();
-                if (need_skipping) {
-                    continue;
-                }
-#endif
                 int16_t val = input_buffer[input_channel_offset];
-#if STATEFUL
-                start_cpu_counter(offsetof(Counters, stripping));
-                if (offset_has_state(maxpool_params->start_channel + input_channel_offset)) {
-                    strip_state(&val);
-                }
-                val *= 2;
-                stop_cpu_counter();
-#endif
                 my_printf_debug("% 6d ", val);
                 if (val > output_buffer[output_channel_offset]) {
                     output_buffer[output_channel_offset] = val;
@@ -175,16 +145,6 @@ void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *
 
     uint16_t initial_c, initial_h, initial_w;
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    int16_t offset;
-    uint16_t next_output_turning_point;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info, first_unfinished_value_offset, model, output);
-    stop_cpu_counter();
-#endif
-
     output_offset = first_unfinished_value_offset;
     if (!maxpool_params->need_nhwc2nchw) {
         initial_c = first_unfinished_value_offset % OUTPUT_CHANNEL;
@@ -220,15 +180,6 @@ void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *
                     maxpool_params->start_channel = c;
                     len = maxpool_patch(maxpool_params);
                     my_printf_debug("output_offset=[% 5d, % 5d) ", output_offset, output_offset + len);
-#if INDIRECT_RECOVERY
-                    start_cpu_counter(offsetof(Counters, embedding));
-#if STATEFUL
-                    my_scale_q15(lea_buffer, 0x4000, 0, lea_buffer, len * sizeof(int16_t));
-#endif
-                    fill_state_offsets(output_offset, len, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-                    update_states(lea_buffer, len, true);
-                    stop_cpu_counter();
-#endif
 #if MY_DEBUG >= MY_DEBUG_VERBOSE
                     my_printf_debug(" max=");
                     for (uint8_t idx = 0; idx < len; idx++) {
@@ -248,55 +199,12 @@ void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *
             output_h = 0;
         } else {
             // NCHW
-#if JAPARI
-            start_cpu_counter(offsetof(Counters, embedding));
-            // extend c as input footprint channels are skipped.
-            // Not using extend_for_footprints() as the initial c may not be on a footprint channel
-            c += c / BATCH_SIZE;
-            stop_cpu_counter();
-#endif
-
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, memory_layout));
-            uint8_t cur_batch_offset = output_offset % BATCH_SIZE;
-            stop_cpu_counter();
-#endif
-
             uint8_t channel_stride = 1;
             for (; c < CHANNEL; c += channel_stride) {
-#if JAPARI
-                start_cpu_counter(offsetof(Counters, stripping));
-                bool need_skipping = offset_has_state(c);
-                stop_cpu_counter();
-                if (need_skipping) {
-                    continue;
-                }
-#endif
                 for (; output_h < maxpool_params->new_H; output_h++) {
                     maxpool_params->output_h = output_h;
-#if !JAPARI
                     maxpool_params->output_w = output_w;
-#else
-                    start_cpu_counter(offsetof(Counters, embedding));
-                    maxpool_params->output_w = output_w / (BATCH_SIZE + 1) * BATCH_SIZE + output_w % (BATCH_SIZE +1);
-                    stop_cpu_counter();
-#endif
                     for (; output_w < maxpool_params->new_W; output_w++) {
-#if JAPARI
-                        start_cpu_counter(offsetof(Counters, embedding));
-                        bool need_embedding = offset_has_state(output_offset);
-                        if (need_embedding) {
-                            start_cpu_counter(offsetof(Counters, state_query));
-                            check_next_turning_point(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, output_offset);
-                            stop_cpu_counter();
-                            put_q15_param(output, output_offset, (offset == 0x4000 ? -1 : 1), false);
-                            output_offset++;
-                        }
-                        stop_cpu_counter();
-                        if (need_embedding) {
-                            continue;
-                        }
-#endif
                         maxpool_params->start_channel = c;
                         maxpool_params->n_channels = 1;
                         uint16_t len = maxpool_patch(maxpool_params);
@@ -305,19 +213,6 @@ void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *
                             continue;
                         }
                         my_printf_debug("output_offset=% 5d ", output_offset);
-#if STATEFUL
-                        start_cpu_counter(offsetof(Counters, embedding));
-                        lea_buffer[0] /= 2;
-                        if (cur_batch_offset == BATCH_SIZE - 1) {
-                            start_cpu_counter(offsetof(Counters, state_query));
-                            check_next_turning_point(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, output_offset);
-                            stop_cpu_counter();
-                            lea_buffer[0] -= offset;
-                            cur_batch_offset -= BATCH_SIZE;
-                        }
-                        cur_batch_offset++;
-                        stop_cpu_counter();
-#endif
                         my_printf_debug("max=% 6d " NEWLINE, lea_buffer[0]);
                         put_q15_param(output, output_offset, lea_buffer[0], false);
 #if HAWAII
@@ -343,12 +238,6 @@ void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *
 finished:
 #endif
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
-
     my_printf_debug("handle_maxpool output" NEWLINE);
     if (!maxpool_params->need_nhwc2nchw) {
         dump_params_nhwc_debug(model, output, node->output_name, "MaxPool");
@@ -356,16 +245,6 @@ finished:
         dump_params_debug(model, output, node->output_name, "MaxPool");
     }
 }
-
-#if STATEFUL
-void strip_states_vector(int16_t* data_buffer, uint16_t len) {
-    start_cpu_counter(offsetof(Counters, stripping));
-    for (int16_t *dest_ptr = data_buffer + BATCH_SIZE - 1; dest_ptr < data_buffer + len; dest_ptr += BATCH_SIZE) {
-        strip_state(dest_ptr);
-    }
-    stop_cpu_counter();
-}
-#endif
 
 void alloc_global_average_pool(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
     const ParameterInfo *data = input[0];
@@ -390,17 +269,6 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
     start_cpu_counter(offsetof(Counters, progress_seeking));
     first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
     stop_cpu_counter();
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    int16_t offset;
-    uint16_t next_output_turning_point;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info, first_unfinished_value_offset, model, output);
-    stop_cpu_counter();
-#endif
-
 #endif
 
     uint16_t CHANNEL = data->dims[1], H = data->dims[2], W = data->dims[3];
@@ -420,12 +288,6 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
             my_printf_debug("Input vector %d" NEWLINE, vector_offset + vector_idx_inner);
             dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
 
-#if STATEFUL
-            strip_states_vector(data_buffer, CHANNEL);
-            my_printf_debug("Input vector %d after stripping states" NEWLINE, vector_offset + vector_idx_inner);
-            dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
-#endif
-
             my_printf_debug("Accumulated vector" NEWLINE);
             for (uint16_t idx = 0; idx < CHANNEL; idx++) {
                 accumulation_buffer[idx] += data_buffer[idx];
@@ -439,13 +301,6 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
             data_buffer[idx] = accumulation_buffer[idx] / W;
         }
 
-#if INDIRECT_RECOVERY
-        start_cpu_counter(offsetof(Counters, state_query));
-        fill_state_offsets(vector_idx * CHANNEL, CHANNEL, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-        update_states(data_buffer, CHANNEL, true);
-        stop_cpu_counter();
-#endif
-
         my_printf_debug("Output vector %d, offset=%d" NEWLINE, vector_idx, vector_idx * CHANNEL);
         dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
 
@@ -455,12 +310,6 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
         hawaii_record_footprints(model, CHANNEL);
 #endif
     }
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 
     dump_params_debug(model, output, node->output_name, "GlobalAveragePool");
 }
@@ -485,17 +334,6 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
     start_cpu_counter(offsetof(Counters, progress_seeking));
     first_unfinished_value_offset = batch_start(job_index_to_offset(output, run_recovery(model, output)));
     stop_cpu_counter();
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    int16_t offset;
-    uint16_t next_output_turning_point;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info, first_unfinished_value_offset, model, output);
-    stop_cpu_counter();
-#endif
-
 #endif
 
     uint16_t CHANNEL = data->dims[1], H = data->params_len / sizeof(int16_t) / CHANNEL;
@@ -515,12 +353,6 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
         my_printf_debug("Input vector %d" NEWLINE, vector_idx);
         dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
 
-#if STATEFUL
-        strip_states_vector(data_buffer, CHANNEL);
-        my_printf_debug("Input vector %d after stripping states" NEWLINE, vector_idx);
-        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
-#endif
-
         my_printf_debug("Accumulated vector" NEWLINE);
         for (uint16_t idx = 0; idx < CHANNEL; idx++) {
             accumulation_buffer[idx] += data_buffer[idx];
@@ -533,13 +365,6 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
         data_buffer[idx] = accumulation_buffer[idx] / H;
     }
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    fill_state_offsets(0, CHANNEL, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-    update_states(data_buffer, CHANNEL, true);
-    stop_cpu_counter();
-#endif
-
     my_printf_debug("Output vector" NEWLINE);
     dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
 
@@ -550,12 +375,5 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
 #endif
 
 finished:
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
-
     dump_params_debug(model, output, node->output_name, "GlobalAveragePool");
 }

@@ -36,11 +36,6 @@ static void alloc_broadcasted_binary_op(Model *model, const ParameterInfo *input
             uint16_t X_dim = X->dims[dim_idx - X_dim_offset],
                      Y_dim = Y->dims[dim_idx - Y_dim_offset];
 
-#if JAPARI
-            if (dim_idx == 1) {
-                MY_ASSERT((X_dim == 1) || (Y_dim == 1) || (X_dim == Y_dim * 2), "Invalid broadcasting: incompatible dimensions");
-            } else
-#endif
             {
                 MY_ASSERT((X_dim == 1) || (Y_dim == 1) || (X_dim == Y_dim), "Invalid broadcasting: incompatible dimensions");
             }
@@ -99,17 +94,6 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
     uint32_t first_unfinished_job_idx = run_recovery(model, output);
     data_offset = batch_start(job_index_to_offset(output, first_unfinished_job_idx));
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    uint16_t next_output_turning_point;
-    int16_t offset;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-    find_initial_state_bit(&offset, &output_turning_point_idx, &next_output_turning_point, &output_slot_info,
-                           data_offset, model, output);
-    stop_cpu_counter();
-#endif
-
     stop_cpu_counter();
 #endif
 
@@ -137,14 +121,6 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
     }
 
     uint16_t* output_indices_without_footprints;
-#if JAPARI
-    uint16_t output_indices_without_footprints_arr[MAX_NUM_DIMS];
-    if (output_indices[binary_op_params.output_num_dims - 1] != 0) {
-        my_memcpy(output_indices_without_footprints_arr, output_indices, (binary_op_params.output_num_dims - 1) * sizeof(uint16_t));
-        output_indices_without_footprints_arr[binary_op_params.output_num_dims - 1] = offset_without_footprints(output_indices[binary_op_params.output_num_dims - 1]);
-        output_indices_without_footprints = output_indices_without_footprints_arr;
-    } else
-#endif
     {
         output_indices_without_footprints = output_indices;
     }
@@ -159,20 +135,12 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
     int16_t *buffer_x = lea_buffer,
             *buffer_y = buffer_x + buffer_size;
 
-#if JAPARI
-    uint16_t buffer_size_without_footprints = buffer_size;
-    buffer_size_without_footprints = offset_without_footprints(buffer_size);
-#endif
-
     uint32_t cached_Y_value_offset = UINT32_MAX;
 
     while (data_offset < output->params_len / sizeof(int16_t)) {
         uint16_t cur_buffer_size = buffer_size - (data_offset % buffer_size);
 
         uint16_t cur_buffer_size_without_footprints = cur_buffer_size;
-#if JAPARI
-        cur_buffer_size_without_footprints = offset_without_footprints(cur_buffer_size);
-#endif
 
         uint32_t X_value_offset = get_broadcast_index(X_dims, binary_op_params.X_num_dims, output_indices, X_strides),
                  Y_value_offset = get_broadcast_index(Y_dims, binary_op_params.Y_num_dims, output_indices_without_footprints, Y_strides);
@@ -191,24 +159,10 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
 
         my_memcpy_from_param(model, buffer_x, X, X_value_offset, cur_buffer_size * sizeof(int16_t));
 
-#if STATEFUL
-        my_printf_debug("Before strip states" NEWLINE);
-        dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(output), false);
-
-        for (uint16_t val_idx = BATCH_SIZE - 1; val_idx < cur_buffer_size; val_idx += BATCH_SIZE) {
-            strip_state(buffer_x + val_idx);
-        }
-#endif
-
         my_printf_debug("Before computation" NEWLINE);
         dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(X));
 
         bool broadcasted_Y;
-#if JAPARI
-        if (binary_op_params.channel_last) {
-            broadcasted_Y = (X_last_dim != Y_last_dim * 2);
-        } else
-#endif
         {
             broadcasted_Y = (X_last_dim != Y_last_dim);
         }
@@ -225,12 +179,6 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
             if (!cached_y) {
                 my_memcpy_from_param(model, buffer_y, Y, Y_value_offset, cur_buffer_size_without_footprints * sizeof(int16_t));
 
-#if JAPARI
-                start_cpu_counter(offsetof(Counters, embedding));
-                move_weights(buffer_y, false, buffer_size, buffer_size_without_footprints);
-                stop_cpu_counter();
-#endif
-
                 my_printf_debug("Y" NEWLINE);
                 dump_matrix_debug(buffer_y, cur_buffer_size, ValueInfo(Y));
             }
@@ -241,25 +189,11 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
         my_printf_debug("After computation" NEWLINE);
         dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(X));
 
-#if INDIRECT_RECOVERY
-        start_cpu_counter(offsetof(Counters, state_query));
-        fill_state_offsets(data_offset, cur_buffer_size, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-        stop_cpu_counter();
-        start_cpu_counter(offsetof(Counters, embedding));
-        update_states(buffer_x, cur_buffer_size, true);
-        stop_cpu_counter();
-        my_printf_debug("After embedding states" NEWLINE);
-        dump_matrix_debug(buffer_x, cur_buffer_size, ValueInfo(output), true);
-#endif
-
         my_memcpy_to_param(output, data_offset, buffer_x, cur_buffer_size * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/true);
 
         // Increment output_indices
         // One vector is processed at a time - reset the last index to 0
         output_indices[binary_op_params.output_num_dims - 1] = 0;
-#if JAPARI
-        output_indices_without_footprints[binary_op_params.output_num_dims - 1] = 0;
-#endif
         // Update remaining dimensions normally
         for (int8_t dim_idx = (binary_op_params.output_num_dims - 1) - 1; dim_idx >= 0; dim_idx--) {
             output_indices[dim_idx]++;
@@ -276,12 +210,6 @@ void handle_broadcastd_binary_op(Model *model, const ParameterInfo *input[], Par
 
         cached_Y_value_offset = Y_value_offset;
     }
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 }
 
 void alloc_mul(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node *node, CurNodeFlags* node_flags, const NodeFlags* orig_node_flags) {

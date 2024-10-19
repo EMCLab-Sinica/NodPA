@@ -1,391 +1,265 @@
 [
     {
-        "builder_name": "stateful-cnn-cifar10_ideal_b1",
+        "builder_name": "intermittent-cnn-cifar10_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 cifar10 --all-samples",
             "LOG_SUFFIX": "cifar10_ideal_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10_ideal_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10_ideal_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --ideal --batch-size 1 cifar10 --all-samples",
             "LOG_SUFFIX": "cifar10_ideal_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10_hawaii_b1",
+        "builder_name": "intermittent-cnn-cifar10_hawaii_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 cifar10",
             "LOG_SUFFIX": "cifar10_hawaii_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10_japari_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --japari --batch-size 1 cifar10",
-            "LOG_SUFFIX": "cifar10_japari_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-cifar10_stateful_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --stateful --batch-size 1 cifar10 --all-samples",
-            "LOG_SUFFIX": "cifar10_stateful_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-cifar10_hawaii_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10_hawaii_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 cifar10",
             "LOG_SUFFIX": "cifar10_hawaii_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10_japari_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --japari --batch-size 1 cifar10",
-            "LOG_SUFFIX": "cifar10_japari_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-cifar10_stateful_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --stateful --batch-size 1 cifar10 --all-samples",
-            "LOG_SUFFIX": "cifar10_stateful_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_ideal_b1",
+        "builder_name": "intermittent-cnn-kws_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 kws --all-samples",
             "LOG_SUFFIX": "kws_ideal_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-kws_ideal_b1_cmsis",
+        "builder_name": "intermittent-cnn-kws_ideal_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --ideal --batch-size 1 kws --all-samples",
             "LOG_SUFFIX": "kws_ideal_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-kws_hawaii_b1",
+        "builder_name": "intermittent-cnn-kws_hawaii_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 kws",
             "LOG_SUFFIX": "kws_hawaii_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-kws_hawaii_b2",
+        "builder_name": "intermittent-cnn-kws_hawaii_b2",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 2 kws",
             "LOG_SUFFIX": "kws_hawaii_b2"
         }
     },
     {
-        "builder_name": "stateful-cnn-kws_japari_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --japari --batch-size 1 kws",
-            "LOG_SUFFIX": "kws_japari_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_japari_b2",
-        "command_env": {
-            "CONFIG": "--target msp430 --japari --batch-size 2 kws",
-            "LOG_SUFFIX": "kws_japari_b2"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_stateful_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --stateful --batch-size 1 kws --all-samples",
-            "LOG_SUFFIX": "kws_stateful_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_stateful_b2",
-        "command_env": {
-            "CONFIG": "--target msp430 --stateful --batch-size 2 kws",
-            "LOG_SUFFIX": "kws_stateful_b2"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_hawaii_b1_cmsis",
+        "builder_name": "intermittent-cnn-kws_hawaii_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 kws",
             "LOG_SUFFIX": "kws_hawaii_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-kws_hawaii_b2_cmsis",
+        "builder_name": "intermittent-cnn-kws_hawaii_b2_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 2 kws",
             "LOG_SUFFIX": "kws_hawaii_b2_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-kws_japari_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --japari --batch-size 1 kws",
-            "LOG_SUFFIX": "kws_japari_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_japari_b2_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --japari --batch-size 2 kws",
-            "LOG_SUFFIX": "kws_japari_b2_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_stateful_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --stateful --batch-size 1 kws --all-samples",
-            "LOG_SUFFIX": "kws_stateful_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-kws_stateful_b2_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --stateful --batch-size 2 kws",
-            "LOG_SUFFIX": "kws_stateful_b2_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-har_ideal_b1",
+        "builder_name": "intermittent-cnn-har_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 har --all-samples",
             "LOG_SUFFIX": "har_ideal_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har_ideal_b1_cmsis",
+        "builder_name": "intermittent-cnn-har_ideal_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --ideal --batch-size 1 har --all-samples",
             "LOG_SUFFIX": "har_ideal_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har_hawaii_b1",
+        "builder_name": "intermittent-cnn-har_hawaii_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 har",
             "LOG_SUFFIX": "har_hawaii_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har_japari_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --japari --batch-size 1 har",
-            "LOG_SUFFIX": "har_japari_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-har_stateful_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --stateful --batch-size 1 har --all-samples",
-            "LOG_SUFFIX": "har_stateful_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-har_hawaii_b1_cmsis",
+        "builder_name": "intermittent-cnn-har_hawaii_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 har",
             "LOG_SUFFIX": "har_hawaii_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har_japari_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --japari --batch-size 1 har",
-            "LOG_SUFFIX": "har_japari_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-har_stateful_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --stateful --batch-size 1 har --all-samples",
-            "LOG_SUFFIX": "har_stateful_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-transformers_ideal_b1",
+        "builder_name": "intermittent-cnn-transformers_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 transformers --all-samples",
             "LOG_SUFFIX": "transformers_ideal_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-transformers_ideal_b1_cmsis",
+        "builder_name": "intermittent-cnn-transformers_ideal_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --ideal --batch-size 1 transformers --all-samples",
             "LOG_SUFFIX": "transformers_ideal_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-transformers_hawaii_b1",
+        "builder_name": "intermittent-cnn-transformers_hawaii_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 transformers",
             "LOG_SUFFIX": "transformers_hawaii_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-transformers_stateful_b1",
-        "command_env": {
-            "CONFIG": "--target msp430 --stateful --batch-size 1 transformers --all-samples",
-            "LOG_SUFFIX": "transformers_stateful_b1"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-transformers_hawaii_b1_cmsis",
+        "builder_name": "intermittent-cnn-transformers_hawaii_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 transformers",
             "LOG_SUFFIX": "transformers_hawaii_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-transformers_stateful_b1_cmsis",
-        "command_env": {
-            "CONFIG": "--target msp432 --stateful --batch-size 1 transformers --all-samples",
-            "LOG_SUFFIX": "transformers_stateful_b1_cmsis"
-        }
-    },
-    {
-        "builder_name": "stateful-cnn-cifar10-dnp_ideal_b1",
+        "builder_name": "intermittent-cnn-cifar10-dnp_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 cifar10-dnp --all-samples",
             "LOG_SUFFIX": "cifar10-dnp_ideal_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_ideal_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10-dnp_ideal_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --ideal --batch-size 1 cifar10-dnp --all-samples",
             "LOG_SUFFIX": "cifar10-dnp_ideal_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_coarse-grained_b1",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_coarse-grained_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach coarse-grained",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_coarse-grained_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_fine-grained_b1",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_fine-grained_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach fine-grained",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_fine-grained_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_multiple-indicators-basic_b1",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_multiple-indicators-basic_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach multiple-indicators-basic",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_multiple-indicators-basic_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_multiple-indicators_b1",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_multiple-indicators_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach multiple-indicators",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_multiple-indicators_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_coarse-grained_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_coarse-grained_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach coarse-grained",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_coarse-grained_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_fine-grained_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_fine-grained_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach fine-grained",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_fine-grained_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_multiple-indicators-basic_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_multiple-indicators-basic_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach multiple-indicators-basic",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_multiple-indicators-basic_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-cifar10-dnp_hawaii_multiple-indicators_b1_cmsis",
+        "builder_name": "intermittent-cnn-cifar10-dnp_hawaii_multiple-indicators_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 cifar10-dnp --dynamic-dnn-approach multiple-indicators",
             "LOG_SUFFIX": "cifar10-dnp_hawaii_multiple-indicators_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_ideal_b1",
+        "builder_name": "intermittent-cnn-har-dnp_ideal_b1",
         "command_env": {
             "CONFIG": "--target msp430 --ideal --batch-size 1 har-dnp --all-samples",
             "LOG_SUFFIX": "har-dnp_ideal_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_ideal_b1_cmsis",
+        "builder_name": "intermittent-cnn-har-dnp_ideal_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --ideal --batch-size 1 har-dnp --all-samples",
             "LOG_SUFFIX": "har-dnp_ideal_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_coarse-grained_b1",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_coarse-grained_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach coarse-grained",
             "LOG_SUFFIX": "har-dnp_hawaii_coarse-grained_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_fine-grained_b1",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_fine-grained_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach fine-grained",
             "LOG_SUFFIX": "har-dnp_hawaii_fine-grained_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_multiple-indicators-basic_b1",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_multiple-indicators-basic_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach multiple-indicators-basic",
             "LOG_SUFFIX": "har-dnp_hawaii_multiple-indicators-basic_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_multiple-indicators_b1",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_multiple-indicators_b1",
         "command_env": {
             "CONFIG": "--target msp430 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach multiple-indicators",
             "LOG_SUFFIX": "har-dnp_hawaii_multiple-indicators_b1"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_coarse-grained_b1_cmsis",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_coarse-grained_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach coarse-grained",
             "LOG_SUFFIX": "har-dnp_hawaii_coarse-grained_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_fine-grained_b1_cmsis",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_fine-grained_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach fine-grained",
             "LOG_SUFFIX": "har-dnp_hawaii_fine-grained_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_multiple-indicators-basic_b1_cmsis",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_multiple-indicators-basic_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach multiple-indicators-basic",
             "LOG_SUFFIX": "har-dnp_hawaii_multiple-indicators-basic_b1_cmsis"
         }
     },
     {
-        "builder_name": "stateful-cnn-har-dnp_hawaii_multiple-indicators_b1_cmsis",
+        "builder_name": "intermittent-cnn-har-dnp_hawaii_multiple-indicators_b1_cmsis",
         "command_env": {
             "CONFIG": "--target msp432 --hawaii --batch-size 1 har-dnp --dynamic-dnn-approach multiple-indicators",
             "LOG_SUFFIX": "har-dnp_hawaii_multiple-indicators_b1_cmsis"

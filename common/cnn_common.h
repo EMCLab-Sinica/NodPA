@@ -65,11 +65,6 @@ typedef struct ParameterInfo {
 static_assert(sizeof(ParameterInfo) == 24, "Unexpected size for ParameterInfo");
 
 typedef struct SlotInfo {
-#if INDIRECT_RECOVERY
-    int8_t state_bit;
-    uint8_t n_turning_points;
-    uint16_t turning_points[TURNING_POINTS_LEN];
-#endif
     int16_t user;
 } SlotInfo;
 
@@ -82,7 +77,7 @@ typedef struct Model {
     uint8_t version; // must be the last field in this struct
 } Model;
 
-static_assert(sizeof(Model) == 8 + NUM_SLOTS * (2 + INDIRECT_RECOVERY * (2 + TURNING_POINTS_LEN * 2)), "Unexpected size for Model");
+static_assert(sizeof(Model) == 8 + NUM_SLOTS * 2, "Unexpected size for Model");
 
 #if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop

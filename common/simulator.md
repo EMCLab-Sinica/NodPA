@@ -1,6 +1,6 @@
 # Intermittent CNN simulator on PC
 
-A simulator for running Stateful NN on PC.
+A simulator for running intermittent NN on PC.
 
 ## Building
 

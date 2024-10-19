@@ -24,7 +24,7 @@ logger = logging.getLogger('intermittent-cnn.layer_utils')
 def extend_for_footprints(batch_size, n):
     return n + n // batch_size
 
-def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_japari, intermediate_values_size, target, node, model_variant):
+def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, intermediate_values_size, target, node, model_variant):
     logger.debug('Determine tile size for Conv node %s', node.name)
 
     output_value_info = find_tensor_value_info(onnx_model, node.output[0])
@@ -54,10 +54,6 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
 
     def get_tile_input_usage(output_tile_c, filter_len):
         real_output_tile_c = output_tile_c
-        # *2 as in JAPARI, the number of footprint weights is up to the number of
-        # filters (e.g., batch size=1)
-        if is_japari:
-            real_output_tile_c *= 2
         ret = ((real_output_tile_c + 1) + 1) * filter_len
         return ret
 
@@ -66,8 +62,6 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, is_ja
             return 0
 
         n_filters = output_tile_c
-        if is_japari:
-            n_filters *= 2
         return filter_len * n_filters
 
     while True:

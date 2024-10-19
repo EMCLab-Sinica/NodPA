@@ -37,13 +37,7 @@ void alloc_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo *
     }
 
     output->dims[output_dims-2] = A->dims[input_dims-2];
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    output->dims[output_dims-1] = B->dims[weight_dims-1] / BATCH_SIZE * (BATCH_SIZE + 1) + B->dims[1] % BATCH_SIZE;
-    stop_cpu_counter();
-#else
     output->dims[output_dims-1] = B->dims[weight_dims-1];
-#endif
     output->scale = A->scale * B->scale;
 
     uint16_t output_len = 1;
@@ -69,12 +63,6 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
     start_cpu_counter(offsetof(Counters, progress_seeking));
     uint32_t first_unfinished_value_offset = job_index_to_offset(output, run_recovery(model, output));
 
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, state_query));
-    find_initial_state_bit(offset, output_turning_point_idx, next_output_turning_point, output_slot_info, first_unfinished_value_offset, model, output);
-    stop_cpu_counter();
-#endif
-
     first_unfinished_value_offset = batch_start(first_unfinished_value_offset);
 
     fix_first_unfinished_value_offset(model, &first_unfinished_value_offset);
@@ -99,13 +87,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
     *tile_a_row_offset = first_unfinished_value_offset / output_cols;
     *extended_tile_b_col_offset = first_unfinished_value_offset % output_cols;
 
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    *tile_b_col_offset = *extended_tile_b_col_offset / (BATCH_SIZE + 1) * BATCH_SIZE;
-    stop_cpu_counter();
-#else
     *tile_b_col_offset = *extended_tile_b_col_offset;
-#endif
 
     stop_cpu_counter();
 
@@ -136,14 +118,7 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
 
     int16_t *buffer_a = lea_buffer,
             *buffer_temp = buffer_a + (buffer_a_size + 1) / 2 * 2; // guarantee even addresses, making check_buffer_address happy
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    buffer_temp += 2;
-    int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_a_rows * extend_for_footprints(node_flags->gemm.tile_b_cols);
-    stop_cpu_counter();
-#else
     int16_t* buffer_b = buffer_temp + node_flags->gemm.tile_a_rows * node_flags->gemm.tile_b_cols;
-#endif
     make_buffer_aligned(&buffer_b);
 
     uint16_t tile_channel_offset = 0, tile_channel_idx = 0, tile_a_row_offset = 0, tile_b_col_offset = 0, extended_tile_b_col_offset = 0, part_idx = 0;
@@ -199,55 +174,11 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
                 uint16_t output_offset = tile_channel_idx * output_len + part_idx * output_rows * output_cols + tile_a_row_offset * output_cols + extended_tile_b_col_offset;
                 cur_tile_a_rows = MIN_VAL(node_flags->gemm.tile_a_rows, A_rows - tile_a_row_offset);
 
-#if INDIRECT_RECOVERY
-                int16_t orig_cur_tile_a_rows = cur_tile_a_rows;
-                if (tile_b_col_offset % node_flags->gemm.tile_b_cols != 0) {
-                    // Force tile_a_rows=1 when resuming from the middle of an output matrix, as with the current loop order,
-                    // processing of B starts from tile_b_col_offset, and thus preceeding columns after the first row are skipped.
-                    cur_tile_a_rows = 1;
-                } else {
-                    // Resulting states cannot be changed in the middle of an output matrix (ex: state 1 for the first two rows
-                    // and the first half of the third row, and state -1 for remaining), as states are outer products of specific
-                    // values in input and weight tiles. In these cases, cut tile_a_rows to before the state change.
-                    // MAX_VAL is needed for the A row after the state change. At that time, next_output_turning_point is not
-                    // updated for the current tile yet, and (next_output_turning_point - output_offset) / output_cols) may be 0 or negative.
-                    cur_tile_a_rows = MAX_VAL(
-                        1,
-                        MIN_VAL(cur_tile_a_rows, (next_output_turning_point - output_offset) / output_cols)
-                    );
-                }
-                if (cur_tile_a_rows != orig_cur_tile_a_rows) {
-                    weights_cache.cache_valid = false;
-                }
-#endif
-
-#if JAPARI
-                start_cpu_counter(offsetof(Counters, stripping));
-                bool need_skipping = has_footprints(A);
-                if (need_skipping) {
-                    // somehow loading many pieces is faster than loading a chunk and moving values around to remove footprints, even with external FRAM
-                    uint16_t input_offset = extend_for_footprints(tile_channel_offset);
-                    for (uint16_t idx = 0, output_idx = 0; output_idx < tile_channels; idx += BATCH_SIZE + 1, output_idx += BATCH_SIZE) {
-                        my_memcpy_from_param(model, buffer_a + output_idx, A, input_offset + idx, BATCH_SIZE * sizeof(uint16_t));
-                    }
-                }
-                stop_cpu_counter();
-                if (!need_skipping)
-#endif
                 for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
                     my_memcpy_from_param(model, buffer_a + tile_a_row_offset_inner * extended_tile_channels,
                                          A, (part_idx * A_rows + tile_a_row_offset + tile_a_row_offset_inner) * A_cols + tile_channel_offset, tile_channels * sizeof(uint16_t));
                 }
 
-#if STATEFUL
-                start_cpu_counter(offsetof(Counters, stripping));
-                if (A->slot != SLOT_TEST_SET) {
-                    for (int16_t *input_ptr = buffer_a + BATCH_SIZE - 1; input_ptr < buffer_a + cur_tile_a_rows * extended_tile_channels; input_ptr += BATCH_SIZE) {
-                        strip_state(input_ptr);
-                    }
-                }
-                stop_cpu_counter();
-#endif
                 for (uint16_t tile_a_row_offset_inner = 0; tile_a_row_offset_inner < cur_tile_a_rows; tile_a_row_offset_inner++) {
                     int16_t* bias_multiplier_ptr = buffer_a +tile_a_row_offset_inner * extended_tile_channels + tile_channels;
                     *bias_multiplier_ptr = -0x8000;
@@ -261,14 +192,7 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
                     int16_t tile_b_cols = MIN_VAL(node_flags->gemm.tile_b_cols, B_cols - tile_b_col_offset);
                     int16_t values_to_preserve = tile_b_cols,
                             full_tile_b_cols;
-#if JAPARI
-                    start_cpu_counter(offsetof(Counters, embedding));
-                    values_to_preserve = extend_for_footprints(tile_b_cols);
-                    full_tile_b_cols = (values_to_preserve + 1) / 2 * 2;
-                    stop_cpu_counter();
-#else
                     full_tile_b_cols = (tile_b_cols + 1) / 2 * 2;
-#endif
                     uint32_t part_offset = 0;
                     if (!weights_broadcasted) {
                         part_offset += part_idx * B_rows * B_cols;
@@ -302,40 +226,9 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
                                 }
                             }
 
-#if STATEFUL
-                            // When weights are also from an output feature map, states should be stripped
-                            if (B->parameter_info_idx >= N_INPUT) {
-                                for (uint16_t val_idx = BATCH_SIZE - 1; val_idx < tile_channels; val_idx += BATCH_SIZE) {
-                                    strip_state(weights_tmp + val_idx);
-                                }
-                            }
-#endif
-
-#if JAPARI
-                            my_interleave_q15(weights_tmp, extend_for_footprints(row), full_tile_b_cols, filter_ptr, tile_channels);
-#else
                             my_interleave_q15(weights_tmp, row, full_tile_b_cols, filter_ptr, tile_channels);
-#endif
                         }
                         filter_ptr += tile_channels * full_tile_b_cols;
-#if JAPARI
-                        start_cpu_counter(offsetof(Counters, embedding));
-                        my_fill_q15(0, filter_ptr, 2 * full_tile_b_cols);
-                        uint8_t processed_biases = 0, bias_offset = 0;
-                        for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
-                            if (processed_biases == BATCH_SIZE) {
-                                processed_biases = 0;
-                                filter_ptr[idx] = param_state_bit(model, output, output_offset + idx);
-                            } else {
-                                if (tile_channel_idx == 0) {
-                                    filter_ptr[idx] = -static_cast<int32_t>(get_q15_param(model, matC, bias_offset + tile_b_col_offset)) / A->scale.toFloat();
-                                }
-                                bias_offset++;
-                                processed_biases++;
-                            }
-                        }
-                        stop_cpu_counter();
-#else
                         if (tile_channel_idx == 0) {
                             for (uint16_t idx = 0; idx < values_to_preserve; idx++) {
                                 if (matC) {
@@ -345,20 +238,7 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
                                 }
                             }
                         }
-#endif
 
-#if INDIRECT_RECOVERY
-                        start_cpu_counter(offsetof(Counters, state_query));
-                        my_printf_debug("Fill states for output_offset=%d" NEWLINE, output_offset);
-                        fill_state_offsets(output_offset, tile_b_cols, &offset, &output_turning_point_idx, &next_output_turning_point, output_slot_info);
-                        stop_cpu_counter();
-#endif
-
-#if STATEFUL
-                        start_cpu_counter(offsetof(Counters, embedding));
-                        update_states(filter_ptr, tile_b_cols, false, true);
-                        stop_cpu_counter();
-#endif
                         weights_cache.cache_valid = true;
                         weights_cache.part_offset = part_offset;
                         weights_cache.tile_b_col_offset = tile_b_col_offset;
@@ -390,12 +270,6 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
         }
         part_idx = 0;
     }
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 }
 
 void alloc_gemm_stage2_impl(Model *model, const ParameterInfo *input[], ParameterInfo *output, const Node*, CurNodeFlags*, const NodeFlags*) {
@@ -425,11 +299,6 @@ void handle_gemm_stage2_impl(Model *model, const ParameterInfo *input[], Paramet
         // buffer_temp and buffer_gemm have the same size, and they occupy LEA buffer, so divide by 2
         output_tile_size = MIN_VAL(LIMIT_DMA_SIZE(output_len), LEA_BUFFER_SIZE / 2);
     }
-#if JAPARI
-    start_cpu_counter(offsetof(Counters, embedding));
-    output_tile_size = extend_for_footprints(output_tile_size);
-    stop_cpu_counter();
-#endif
 
     uint16_t merge_offset = 0;
 #if INTERMITTENT
@@ -452,26 +321,11 @@ void handle_gemm_stage2_impl(Model *model, const ParameterInfo *input[], Paramet
 
         for (uint16_t tile = 0; tile < n_tiles; tile++) {
             my_memcpy_from_param(model, buffer_temp, input[0], tile * output_len + merge_offset, cur_tile_size * sizeof(int16_t));
-#if STATEFUL
-            start_cpu_counter(offsetof(Counters, stripping));
-            for (uint16_t idx = BATCH_SIZE - 1; idx < cur_tile_size; idx += BATCH_SIZE) {
-                strip_state(buffer_temp + idx);
-            }
-            stop_cpu_counter();
-#endif
             my_add_q15(buffer_gemm, buffer_temp, buffer_gemm, cur_tile_size);
             my_printf_debug("accumulated buffer_gemm" NEWLINE);
             dump_matrix_debug(buffer_gemm, cur_tile_size, ValueInfo(output, model));
         }
 
-#if INDIRECT_RECOVERY
-        start_cpu_counter(offsetof(Counters, embedding));
-        OutputChunkHandlerParams params;
-        params.buffer = buffer_gemm;
-        params.buffer_offset = merge_offset;
-        iterate_chunks(model, output, merge_offset, cur_tile_size, OutputChunkHandler, &params);
-        stop_cpu_counter();
-#endif
         my_printf_debug("buffer_gemm after adjusting states; merge_offset=%d" NEWLINE, merge_offset);
         dump_matrix_debug(buffer_gemm, cur_tile_size, ValueInfo(output, model));
 
@@ -480,12 +334,6 @@ void handle_gemm_stage2_impl(Model *model, const ParameterInfo *input[], Paramet
         hawaii_record_footprints(model, cur_tile_size);
 #endif
     }
-
-#if INDIRECT_RECOVERY
-    start_cpu_counter(offsetof(Counters, table_updates));
-    flip_state_bit(model, output);
-    stop_cpu_counter();
-#endif
 }
 
 /* Wrappers for Gemm */
