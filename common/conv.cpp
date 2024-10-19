@@ -761,6 +761,9 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     conv_params->input_w = conv_params->input_w_first;
     conv_params->filter_tile_index = 0;
     conv_params->filter_idx = 0;
+
+    uint16_t slice_size_input_channel_tiling = layer_dims->OUTPUT_W * layer_dims->OUTPUT_H * layer_dims->OUTPUT_CHANNEL;
+
 #if INTERMITTENT
     start_cpu_counter(offsetof(Counters, progress_seeking));
 #if HAWAII
@@ -809,7 +812,6 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
     cur_output_tile_c = extend_for_footprints(cur_output_tile_c, conv_params->force_align_footprints);
     stop_cpu_counter();
 #endif
-    uint16_t slice_size_input_channel_tiling = layer_dims->OUTPUT_W * layer_dims->OUTPUT_H * layer_dims->OUTPUT_CHANNEL;
 
     conv_params->input_tile_c_index = first_unfinished_value_offset / slice_size_input_channel_tiling;
     {
