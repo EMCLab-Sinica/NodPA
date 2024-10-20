@@ -61,15 +61,6 @@ void print_all_counters() {
     uint32_t total_num_skipped_jobs = 0, total_num_processed_jobs = 0, total_num_skipped_units = 0, total_num_processed_units = 0;
     my_printf(NEWLINE "Power counters:          "); print_counters<&Counters::power_counters>();
     my_printf(NEWLINE "MACs:                    "); total_macs = print_counters<&Counters::macs>();
-    // state-embedding overheads
-    my_printf(NEWLINE "Embeddings:              "); total_overhead += print_counters<&Counters::embedding>();
-    my_printf(NEWLINE "Strippings:              "); total_overhead += print_counters<&Counters::stripping>();
-    my_printf(NEWLINE "Overflow handling:       "); total_overhead += print_counters<&Counters::overflow_handling>();
-    // state-assignment overheads
-    my_printf(NEWLINE "State queries:           "); total_overhead += print_counters<&Counters::state_query>();
-    my_printf(NEWLINE "Table updates:           "); total_overhead += print_counters<&Counters::table_updates>();
-    my_printf(NEWLINE "Table preservation:      "); total_overhead += print_counters<&Counters::table_preservation>();
-    my_printf(NEWLINE "Table loading:           "); total_overhead += print_counters<&Counters::table_loading>();
     // recovery overheads
     my_printf(NEWLINE "Progress seeking:        "); total_overhead += print_counters<&Counters::progress_seeking>();
     // misc

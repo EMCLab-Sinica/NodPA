@@ -34,9 +34,9 @@ ValueInfo::ValueInfo(const ParameterInfo *cur_param, Model *model) {
     this->scale = cur_param->scale.toFloat();
 }
 
-static void print_q15(LayerOutput* layer_out, int16_t val, const ValueInfo& val_info, bool has_state) {
+static void print_q15(LayerOutput* layer_out, int16_t val, const ValueInfo& val_info) {
     uint8_t use_prefix = 0;
-    float real_value = q15_to_float(val, val_info, &use_prefix, has_state);
+    float real_value = q15_to_float(val, val_info, &use_prefix);
 #ifdef USE_PROTOBUF
     if (layer_out) {
         layer_out->add_value(real_value);
@@ -60,7 +60,7 @@ static void print_integer(LayerOutput* layer_out, int16_t val) {
     }
 }
 
-void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state, const char* layer_name, const char* op_type) {
+void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, const char* layer_name, const char* op_type) {
     LayerOutput* layer_out = nullptr;
 #ifdef USE_PROTOBUF
     if (layer_name && model_output_data.get()) {
@@ -76,7 +76,7 @@ void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool
     MY_ASSERT(val_info.scale != 0);
 #endif
     for (size_t j = 0; j < len; j++) {
-        print_q15(layer_out, mat[j], val_info, has_state && offset_has_state(j));
+        print_q15(layer_out, mat[j], val_info);
         if (j && (j % 16 == 15)) {
             my_printf(NEWLINE);
         }
@@ -204,7 +204,7 @@ void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* 
                         if (cur_param->param_flags & INTEGER) {
                             print_integer(layer_out, val);
                         } else {
-                            print_q15(layer_out, val, ValueInfo(cur_param, model), offset_has_state(offset2));
+                            print_q15(layer_out, val, ValueInfo(cur_param, model));
                         }
                     }
                     PRINT_NEWLINE_IF_DATA_NOT_SAVED
@@ -243,7 +243,7 @@ void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer
                     if (cur_param->param_flags & INTEGER) {
                         print_integer(layer_out, val);
                     } else {
-                        print_q15(layer_out, val, ValueInfo(cur_param, model), offset_has_state(offset));
+                        print_q15(layer_out, val, ValueInfo(cur_param, model));
                     }
                 }
                 PRINT_NEWLINE_IF_DATA_NOT_SAVED
@@ -258,7 +258,7 @@ void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer
 void dump_turning_points(Model *model, const ParameterInfo *output) {
 }
 
-void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info, bool has_state) {
+void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info) {
 #ifndef __arm__
     my_printf("Scale: %f", val_info.scale);
     MY_ASSERT(val_info.scale != 0);
@@ -268,14 +268,14 @@ void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& 
         for (size_t j = 0; j < cols; j++) {
             for (size_t i = 0; i < rows; i++) {
                 size_t offset = i * cols + j;
-                print_q15(nullptr, mat[offset], val_info, has_state && offset_has_state(offset));
+                print_q15(nullptr, mat[offset], val_info);
             }
             my_printf(NEWLINE);
         }
     } else {
         my_printf(NEWLINE);
         for (size_t j = 0; j < rows * cols; j++) {
-            print_q15(nullptr, mat[j], val_info, has_state && offset_has_state(j));
+            print_q15(nullptr, mat[j], val_info);
             if ((j+1) % cols == 0) {
                 my_printf(NEWLINE);
             }

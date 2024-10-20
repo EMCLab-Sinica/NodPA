@@ -155,9 +155,7 @@ void flush_intermediate_parameter_info() {
 }
 
 Model* load_model_from_nvm(void) {
-    start_cpu_counter(offsetof(Counters, table_loading));
     Model* ret = get_versioned_data<Model>(0);
-    stop_cpu_counter();
     return ret;
 }
 
@@ -170,7 +168,6 @@ void commit_model(void) {
         print_all_counters();
         reset_counters(/*full=*/false);
     }
-    start_cpu_counter(offsetof(Counters, table_preservation));
     commit_versioned_data<Model>(0);
     // send finish signals only after the whole network has really finished
     add_counter(offsetof(Counters, power_counters), 1);
@@ -178,7 +175,6 @@ void commit_model(void) {
     if (!model_vm.running) {
         notify_model_finished();
     }
-    stop_cpu_counter();
 }
 
 void first_run(void) {
@@ -211,10 +207,6 @@ void write_to_nvm_segmented(const uint8_t* vm_buffer, uint32_t nvm_offset, uint3
     for (uint32_t idx = 0; idx < total_len; idx += segment_size) {
         write_to_nvm(vm_buffer + idx, nvm_offset + idx, MIN_VAL(total_len - idx, segment_size));
     }
-}
-
-void record_overflow_handling_overhead(uint32_t cycles) {
-    add_counter(offsetof(Counters, overflow_handling), cycles);
 }
 
 #if HAWAII

@@ -220,14 +220,14 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
     my_printf_debug("output_h=%d output_w=%d" NEWLINE, output_h, output_w);
 
     my_printf_debug("input" NEWLINE);
-    dump_matrix_debug(input_buffer_addr, A_rows, A_cols, ValueInfo(conv_params->conv_input, nullptr), false);
+    dump_matrix_debug(input_buffer_addr, A_rows, A_cols, ValueInfo(conv_params->conv_input, nullptr));
     my_printf_debug("filter_buffer_addr = lea_buffer + LEA_BUFFER_SIZE - OUTPUT_LEN - pState_len - %d" NEWLINE,
                     static_cast<int>(lea_buffer + LEA_BUFFER_SIZE - OUTPUT_LEN - conv_params->pState_len - filter_buffer_addr));
     my_printf_debug("filter" NEWLINE);
-    dump_matrix_debug(filter_buffer_addr, B_rows, B_cols, ValueInfo(conv_params->conv_filter, nullptr), false);
+    dump_matrix_debug(filter_buffer_addr, B_rows, B_cols, ValueInfo(conv_params->conv_filter, nullptr));
     if (conv_params->group != 1) {
         my_printf_debug("biases" NEWLINE);
-        dump_matrix_debug(biases, 1, n_filters, ValueInfo(conv_params->conv_filter, nullptr), false);
+        dump_matrix_debug(biases, 1, n_filters, ValueInfo(conv_params->conv_filter, nullptr));
     }
 
     my_printf_debug("matrix_mpy_results" NEWLINE);
@@ -417,8 +417,7 @@ static uint16_t handle_conv_inner_loop(Model *model, const ConvLayerDimensions* 
 #endif
 
         my_printf_debug("Loaded inputs" NEWLINE);
-        // state = 0 as state bits are already removed by my_offset_q15 above
-        dump_matrix_debug(lea_buffer, inputs_len, ValueInfo(conv_params->conv_input, nullptr), false);
+        dump_matrix_debug(lea_buffer, inputs_len, ValueInfo(conv_params->conv_input, nullptr));
 
         // filter_idx is set to initial_c in handle_conv
         convTask(cur_input_h, layer_dims, conv_params);
@@ -798,7 +797,7 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
         dump_params_debug(model, conv_channel_pruning_mask, output_name, "ConvChannelMask");
 
         strcpy(replaced, ":thres"); // pruning threshold, use abbreviation here to avoid buffer overflow
-        dump_matrix(&conv_params->flags->conv.pruning_threshold, /*len=*/1, ValueInfo(1.0f), /*has_state=*/false, output_name, "ConvChannelPruningThreshold");
+        dump_matrix(&conv_params->flags->conv.pruning_threshold, /*len=*/1, ValueInfo(1.0f), output_name, "ConvChannelPruningThreshold");
     }
 #endif
 }

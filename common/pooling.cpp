@@ -216,7 +216,7 @@ void handle_max_pool(Model *model, const ParameterInfo *input[], ParameterInfo *
                         my_printf_debug("max=% 6d " NEWLINE, lea_buffer[0]);
                         put_q15_param(output, output_offset, lea_buffer[0], false);
 #if HAWAII
-                        if (offset_has_state(output_offset)) {
+                        if (output_offset % BATCH_SIZE == BATCH_SIZE - 1) { // last job in a batch
                             write_hawaii_layer_footprint(model->layer_idx, BATCH_SIZE);
                         }
 #endif
@@ -286,7 +286,7 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
             my_memcpy_from_param(model, data_buffer, data, (vector_offset + vector_idx_inner) * CHANNEL, CHANNEL * sizeof(int16_t));
 
             my_printf_debug("Input vector %d" NEWLINE, vector_offset + vector_idx_inner);
-            dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+            dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data));
 
             my_printf_debug("Accumulated vector" NEWLINE);
             for (uint16_t idx = 0; idx < CHANNEL; idx++) {
@@ -302,7 +302,7 @@ void handle_global_average_pool(Model *model, const ParameterInfo *input[], Para
         }
 
         my_printf_debug("Output vector %d, offset=%d" NEWLINE, vector_idx, vector_idx * CHANNEL);
-        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data));
 
         my_memcpy_to_param(output, vector_idx * CHANNEL, data_buffer, CHANNEL * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/0);
 
@@ -351,7 +351,7 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
         my_memcpy_from_param(model, data_buffer, data, vector_offset, CHANNEL * sizeof(int16_t));
 
         my_printf_debug("Input vector %d" NEWLINE, vector_idx);
-        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+        dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data));
 
         my_printf_debug("Accumulated vector" NEWLINE);
         for (uint16_t idx = 0; idx < CHANNEL; idx++) {
@@ -366,7 +366,7 @@ void handle_global_average_pool_stage2(Model *model, const ParameterInfo *input[
     }
 
     my_printf_debug("Output vector" NEWLINE);
-    dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data), /*has_state=*/false);
+    dump_matrix_debug(data_buffer, CHANNEL, ValueInfo(data));
 
     my_memcpy_to_param(output, 0, data_buffer, CHANNEL * sizeof(int16_t), /*timer_delay=*/0, /*is_linear=*/0);
 

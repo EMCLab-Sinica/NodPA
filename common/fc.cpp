@@ -55,9 +55,7 @@ static void gemm_recovery(Model* model, const ParameterInfo *input[], ParameterI
                           // layer dimensions
                           uint16_t output_rows, uint16_t output_cols,
                           // loop indices
-                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_a_row_offset, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset, uint16_t* part_idx,
-                          // for state representation
-                          int16_t* offset, uint16_t* next_output_turning_point, uint8_t* output_turning_point_idx, SlotInfo** output_slot_info) {
+                          uint16_t* tile_channel_offset, uint16_t* tile_channel_idx, uint16_t* tile_a_row_offset, uint16_t* tile_b_col_offset, uint16_t* extended_tile_b_col_offset, uint16_t* part_idx) {
     const ParameterInfo *B = input[1];
 
     start_cpu_counter(offsetof(Counters, progress_seeking));
@@ -132,14 +130,8 @@ void handle_gemm_impl(Model *model, const ParameterInfo *input[], ParameterInfo 
              output_rows = output->dims[output_dims-2], output_cols = output->dims[output_dims-1];
 
 #if INTERMITTENT
-    int16_t offset;
-    uint16_t next_output_turning_point;
-    uint8_t output_turning_point_idx;
-    SlotInfo *output_slot_info;
-
     gemm_recovery(model, input, output, node, node_flags, orig_node_flags, output_rows, output_cols,
-                  &tile_channel_offset, &tile_channel_idx, &tile_a_row_offset, &tile_b_col_offset, &extended_tile_b_col_offset, &part_idx,
-                  &offset, &next_output_turning_point, &output_turning_point_idx, &output_slot_info);
+                  &tile_channel_offset, &tile_channel_idx, &tile_a_row_offset, &tile_b_col_offset, &extended_tile_b_col_offset, &part_idx);
 #endif
 
     bool weights_broadcasted = weight_dims < output_dims;
@@ -326,7 +318,7 @@ void handle_gemm_stage2_impl(Model *model, const ParameterInfo *input[], Paramet
             dump_matrix_debug(buffer_gemm, cur_tile_size, ValueInfo(output, model));
         }
 
-        my_printf_debug("buffer_gemm after adjusting states; merge_offset=%d" NEWLINE, merge_offset);
+        my_printf_debug("buffer_gemm after accumulation; merge_offset=%d" NEWLINE, merge_offset);
         dump_matrix_debug(buffer_gemm, cur_tile_size, ValueInfo(output, model));
 
         my_memcpy_to_param(output, merge_offset, buffer_gemm, cur_tile_size * sizeof(int16_t), 0, true);

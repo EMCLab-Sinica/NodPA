@@ -113,15 +113,6 @@ struct Counters {
     uint32_t power_counters;
     uint32_t macs;
 
-    uint32_t embedding;
-    uint32_t stripping;
-    uint32_t overflow_handling;
-
-    uint32_t state_query;
-    uint32_t table_updates;
-    uint32_t table_preservation;
-    uint32_t table_loading;
-
     uint32_t progress_seeking;
 
     uint32_t memory_layout;

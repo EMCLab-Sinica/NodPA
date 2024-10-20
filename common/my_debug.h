@@ -72,8 +72,8 @@ class ModelOutput;
 class LayerOutput;
 extern std::unique_ptr<ModelOutput> model_output_data;
 
-void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info, bool has_state = true,  const char* layer_name = nullptr, const char* op_type = nullptr);
-void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info, bool has_state = true);
+void dump_matrix(const int16_t *mat, size_t len, const ValueInfo& val_info,  const char* layer_name = nullptr, const char* op_type = nullptr);
+void dump_matrix(const int16_t *mat, size_t rows, size_t cols, const ValueInfo& val_info);
 void dump_params(Model *model, const ParameterInfo *cur_param, const char* layer_name, const char* op_type);
 void dump_params_nhwc(Model *model, const ParameterInfo *cur_param, const char* layer_name, const char* op_type);
 void dump_turning_points(Model *model, const ParameterInfo *output);

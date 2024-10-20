@@ -225,7 +225,7 @@ static void broadcasted_vector_mul(const ParameterInfo* X, const ParameterInfo* 
     static uint8_t shift;
 
     if (!cached_y) {
-        float_to_scale_params(&scaleFract, &shift, q15_to_float(*buffer_y, ValueInfo(Y), /*p_use_prefix=*/nullptr, /*has_state=*/false));
+        float_to_scale_params(&scaleFract, &shift, q15_to_float(*buffer_y, ValueInfo(Y), /*p_use_prefix=*/nullptr));
     }
 
     my_scale_q15(buffer_x, scaleFract, shift, buffer_x, buffer_size);

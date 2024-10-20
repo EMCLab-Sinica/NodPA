@@ -76,13 +76,12 @@ void iterate_chunks(Model *model, const ParameterInfo *param, uint16_t start_off
         params_len = start_offset + len;
     }
     uint16_t chunk_len = LIMIT_DMA_SIZE((LEA_BUFFER_SIZE - 1) / 2 * 2);
-    uint8_t state_bit = 0;
 
     uint16_t cur_chunk_len;
     for (uint32_t offset = start_offset; offset < params_len; offset += cur_chunk_len) {
         cur_chunk_len = MIN_VAL(chunk_len, params_len - offset);
         MY_ASSERT(cur_chunk_len != 0);
-        chunk_handler(offset, cur_chunk_len, state_bit, params);
+        chunk_handler(offset, cur_chunk_len, params);
     }
 }
 
@@ -106,11 +105,11 @@ void make_buffer_aligned(int16_t** p_buffer) {
     }
 }
 
-float q15_to_float(int16_t val, const ValueInfo& val_info, uint8_t* p_use_prefix, bool has_state) {
+float q15_to_float(int16_t val, const ValueInfo& val_info, uint8_t* p_use_prefix) {
     return val_info.scale * static_cast<int32_t>(val) / 32768.0;
 }
 
-void my_offset_q15_batched(const int16_t *pSrc, int16_t offset, int16_t *pDst, uint32_t blockSize, bool enforce_states) {
+void my_offset_q15_batched(const int16_t *pSrc, int16_t offset, int16_t *pDst, uint32_t blockSize) {
     MY_ASSERT(pSrc == pDst);
     if (BATCH_SIZE == 1) {
         my_offset_q15(pSrc, offset, pDst, blockSize);
