@@ -11,7 +11,7 @@ NodPA was integrated with the [HAWAII](https://ieeexplore.ieee.org/document/9211
 
 NodPA contains two main components which interacts with the inference engine at runtime:
 
-* Non-determinism accumulator: determines which progress indicators of dynamic computation to track, ensuring they can correctly identify the interrupted computation across different dynamic networks
+* Non-determinism accumulator: determines which progress indicators of dynamic computation to track, ensuring they can correctly identify the interrupted computation across different dynamic networks.
 * Preservation minimizer: reduces the amount of data written to NVM for progress preservation, by preserving only the changed portions of the progress indicators that have been updated.
 
 <!-- For more technical details, please refer to our paper **TODO**. -->
