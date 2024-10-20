@@ -266,7 +266,7 @@ static void run_model(uint16_t *ansptr, const ParameterInfo **output_node_ptr) {
             for (uint16_t buffer_idx = 0; buffer_idx < cur_buffer_len; buffer_idx++) {
                 int16_t got_q15 = lea_buffer[buffer_idx];
                 {
-                    float got_real = q15_to_float(got_q15, ValueInfo(output_node), nullptr, false);
+                    float got_real = q15_to_float(got_q15, ValueInfo(output_node), nullptr);
                     float expected = first_sample_outputs[ofm_idx];
                     float error = fabs((got_real - expected) / output_max);
                     // Errors in CIFAR-10 are quite large...
