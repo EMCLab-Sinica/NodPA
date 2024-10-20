@@ -38,8 +38,7 @@ static uint8_t check_buffer_address_with_base(const int16_t* base_addr, uint32_t
 #endif
 
 void check_buffer_address(const int16_t* addr, uint32_t blockSize) {
-    MY_ASSERT(check_buffer_address_with_base(lea_buffer, LEA_BUFFER_SIZE, addr, blockSize) ||
-              check_buffer_address_with_base(state_offsets, OUTPUT_LEN, addr, blockSize));
+    MY_ASSERT(check_buffer_address_with_base(lea_buffer, LEA_BUFFER_SIZE, addr, blockSize));
 }
 
 void my_add_q15(const int16_t *pSrcA, const int16_t *pSrcB, int16_t *pDst, uint32_t blockSize) {
@@ -195,7 +194,7 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
         matrix_mpy_params.srcACols = A_cols;
         matrix_mpy_params.srcBRows = B_rows;
         matrix_mpy_params.srcBCols = B_cols;
-        my_checkStatus(msp_matrix_mpy_q15(&matrix_mpy_params, pSrcA, pSrcB, pDst, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets));
+        my_checkStatus(msp_matrix_mpy_q15(&matrix_mpy_params, pSrcA, pSrcB, pDst, my_memcpy_to_param, param, offset_in_word, values_to_preserve));
 
         // Moving to the next row of matrix A
         pSrcA += A_cols;
@@ -210,10 +209,10 @@ void my_matrix_mpy_q15(uint16_t A_rows, uint16_t A_cols, uint16_t B_rows, uint16
         arm_mat_init_q15(&B, B_rows, B_cols, pSrcB);
         arm_mat_init_q15(&C, 1, B_cols, pDst);
 #ifdef __MSP432__
-        arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, param, offset_in_word, values_to_preserve, state_offsets);
+        arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, param, offset_in_word, values_to_preserve);
         MY_ASSERT(status == ARM_MATH_SUCCESS);
 #else
-        arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, NULL, 0, 0, state_offsets);
+        arm_status status = arm_mat_mult_fast_q15(&A, &B, &C, pState, my_memcpy_to_param, NULL, 0, 0);
         MY_ASSERT(status == ARM_MATH_SUCCESS);
         if (param) {
             my_memcpy_to_param(param, offset_in_word, pDst, values_to_preserve * sizeof(int16_t), 0, true);

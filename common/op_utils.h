@@ -32,5 +32,4 @@ void make_buffer_aligned(int16_t** p_buffer);
 float q15_to_float(int16_t val, const ValueInfo& val_info, uint8_t* p_use_prefix = nullptr, bool has_state = true);
 void my_offset_q15_batched(const int16_t *pSrc, int16_t offset, int16_t *pDst, uint32_t blockSize, bool enforce_states = false);
 
-extern int16_t state_offsets[OUTPUT_LEN];
 extern int16_t op_buffer[OP_BUFFER_LEN];
