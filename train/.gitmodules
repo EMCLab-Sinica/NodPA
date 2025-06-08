@@ -1,0 +1,3 @@
+[submodule "deep-learning-HAR"]
+	path = deep-learning-HAR
+	url = https://github.com/EMCLab-Sinica/deep-learning-HAR.git
