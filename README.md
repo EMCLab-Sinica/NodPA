@@ -38,6 +38,7 @@ Below is an explanation of the directories/files found in this repo.
 * `dnn-models/`: pre-trained models and python scripts for model training, converting different model formats to ONNX and converting a model into a custom format recognized by the lightweight inference engine.
 * `msp432/`: platform-speicific hardware initialization functions.
 * `tools/`: helper functions for various system peripherals (e.g., UART, system clocks and external FRAM).
+* `train/`: codes for training neural networks with dynamic pruning.
 
 ## Getting Started
 
