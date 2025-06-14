@@ -4,13 +4,15 @@ filelock==3.4.2
 numpy==1.26.2
 onnx==1.16.0
 onnxoptimizer==0.3.13
-onnxruntime==1.17.0
+onnxruntime==1.22.0
 tensorflow==2.16.1
 # Versions of torchaudio and torchvision should match torch
 # https://github.com/pytorch/vision#installation
 # https://pytorch.org/audio/main/installation.html#compatibility-matrix
 torch==2.2.0+cpu
 torchaudio==2.2.0+cpu
+# The backend for torchaudio
+soundfile==0.13.1
 torchvision==0.17.0+cpu
 # pandas needed for deep-learning-HAR
 pandas==2.2.1

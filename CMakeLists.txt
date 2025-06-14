@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)  # for CMAKE_CXX_STANDARD
+cmake_minimum_required(VERSION 3.5)  # for CMAKE_CXX_STANDARD
 
 project(intermittent-cnn)
 
