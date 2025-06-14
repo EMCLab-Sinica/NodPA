@@ -41,12 +41,13 @@ bool counters_cleared();
 void report_progress(uint32_t num_jobs);
 
 #else
+#define add_demo_counter(counter, value)
 #define add_counter(counter, value)
 #define start_cpu_counter(mem_ptr)
 #define stop_cpu_counter()
 #define print_all_counters()
-#define reset_counters()
-#define report_progress()
+#define reset_counters(full)
+#define report_progress(num_jobs)
 #endif
 
 // A global switch for disabling counters temporarily

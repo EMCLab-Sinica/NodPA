@@ -668,7 +668,10 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
                 // for FD, skipped MACs will be re-executed
                 add_demo_counter(offsetof(Counters, re_execution_macs), slice_size_input_channel_tiling * conv_params->cur_input_tile_c);
 #endif
+
+#if ENABLE_COUNTERS
                 num_skipped_jobs_since_boot += slice_size_input_channel_tiling;
+#endif
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
@@ -757,7 +760,10 @@ void handle_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outp
 #if HAWAII && DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_FINE_GRAINED
                 add_demo_counter(offsetof(Counters, re_execution_macs), num_jobs_in_unit * conv_params->cur_input_tile_c);
 #endif
+
+#if ENABLE_COUNTERS
                 num_skipped_jobs_since_boot += num_jobs_in_unit;
+#endif
 
 #if HAWAII && (DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS_BASIC || DYNAMIC_DNN_APPROACH == DYNAMIC_DNN_MULTIPLE_INDICATORS)
                 write_hawaii_layer_two_footprints(conv_params->model->layer_idx,
