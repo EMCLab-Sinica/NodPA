@@ -78,6 +78,17 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 4890,
         'op_filters': 4,
     },
+    'kws-dnp': {
+        'onnx_model': 'kws_kws-batched',
+        'onnx_model_single': 'kws_kws-single',
+        'scale': 1,
+        'input_scale': 120,
+        'num_slots': 3,
+        'data_loader': functools.partial(load_data_google_speech, for_cnn=True),
+        'n_all_samples': 4890,
+        'op_filters': 2,  # decision head is not compatible with op_filters=4
+        'pruning_threshold': 0.5,
+    },
     'har': {
         'onnx_model': 'HAR-CNN',
         'scale': 2,

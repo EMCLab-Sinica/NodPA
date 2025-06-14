@@ -73,7 +73,7 @@ def determine_conv_tile_c(onnx_model: onnx.ModelProto, config: ConfigType, inter
             # Not using 1, as LEA requires even dimensions
             output_tile_c = 2
         else:
-            output_tile_c = min(OUTPUT_CHANNEL, 32)
+            output_tile_c = min(OUTPUT_CHANNEL, 16)
 
         while True:
             tile_input_usage = get_tile_input_usage(output_tile_c, filter_len)

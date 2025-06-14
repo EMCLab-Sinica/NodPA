@@ -83,7 +83,7 @@ def preprocess_kws_dataset(original_dataset):
 
     return mfccs, labels
 
-def load_data_google_speech(train: bool, target_size: tuple[int, int]) -> ModelData:
+def load_data_google_speech(train: bool, target_size: tuple[int, int], for_cnn: bool = False) -> ModelData:
     xdg_cache_home = platformdirs.user_cache_path()
     with filelock.FileLock(xdg_cache_home / 'SpeechCommands.lock'):
         kws_cache_filename = xdg_cache_home / 'SpeechCommands-cache-v1.pth'
@@ -93,9 +93,15 @@ def load_data_google_speech(train: bool, target_size: tuple[int, int]) -> ModelD
             original_dataset = torchaudio.datasets.SPEECHCOMMANDS(root=xdg_cache_home, download=True, subset='training' if train else 'testing')
             mfccs, labels = preprocess_kws_dataset(original_dataset)
             torch.save((mfccs, labels), kws_cache_filename)
+
+    data_layout = DataLayout.NEUTRAL
+    if for_cnn:
+        mfccs = np.expand_dims(mfccs, axis=1)
+        data_layout = DataLayout.NCHW
+
     dataset = TensorDataset(torch.from_numpy(mfccs.astype(np.float32)), torch.tensor(labels))
     assert dataset[0][0].shape == target_size
-    return ModelData(dataset, data_layout=DataLayout.NEUTRAL)
+    return ModelData(dataset, data_layout=data_layout)
 
 # Inspired by https://blog.csdn.net/bucan804228552/article/details/120143943
 def load_har(train: bool, target_size: tuple[int, int]):
