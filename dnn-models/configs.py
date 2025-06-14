@@ -11,7 +11,6 @@ from datasets import (
     load_data_cifar10,
     load_data_google_speech,
     load_har,
-    load_attention_input_sequence,
 )
 from utils import ModelData
 
@@ -48,15 +47,6 @@ class ConfigType(TypedDict):
     pruning_threshold: NotRequired[float]
 
 configs: dict[str, ConfigType] = {
-    'cifar10': {
-        'onnx_model': 'squeezenet_cifar10',
-        'scale': 2,
-        'input_scale': 10,
-        'num_slots': 3,
-        'data_loader': load_data_cifar10,
-        'n_all_samples': 10000,
-        'op_filters': 2,
-    },
     'cifar10-dnp': {
         'onnx_model': 'cifar10_resnet10-batched',
         'onnx_model_single': 'cifar10_resnet10-single',
@@ -69,15 +59,6 @@ configs: dict[str, ConfigType] = {
         'pruning_threshold': 0.5,
         'swap_add': False,
     },
-    'kws': {
-        'onnx_model': 'KWS-DNN_S',
-        'scale': 1,
-        'input_scale': 120,
-        'num_slots': 2,
-        'data_loader': load_data_google_speech,
-        'n_all_samples': 4890,
-        'op_filters': 4,
-    },
     'kws-dnp': {
         'onnx_model': 'kws_kws-batched',
         'onnx_model_single': 'kws_kws-single',
@@ -88,15 +69,6 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 4890,
         'op_filters': 2,  # decision head is not compatible with op_filters=4
         'pruning_threshold': 0.5,
-    },
-    'har': {
-        'onnx_model': 'HAR-CNN',
-        'scale': 2,
-        'input_scale': 16,
-        'num_slots': 2,
-        'data_loader': load_har,
-        'n_all_samples': 2947,
-        'op_filters': 4,
     },
     'har-dnp': {
         'onnx_model': 'har_har_cnn-batched',
@@ -109,17 +81,5 @@ configs: dict[str, ConfigType] = {
         'op_filters': 4,
         'pruning_threshold': 0.5,
     },
-    'transformers': {
-        # TODO: use the single model in both onnx_model and onnx_model_single for now,
-        # as I cannot get two working models with the identical weights
-        'onnx_model': 'transformers_single',
-        'onnx_model_single': 'transformers_single',
-        'scale': 1,
-        'input_scale': 4,
-        'num_slots': 10,
-        'data_loader': load_attention_input_sequence,
-        'n_all_samples': 1,
-        'op_filters': 2,
-    }
 }
 

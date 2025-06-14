@@ -317,7 +317,7 @@ nodes = sort_nodes(nodes)
 for idx, inp in enumerate(onnx_model.graph.input):
     names[inp.name] = idx
 
-# For some ONNX models (e.g., squeezenet-cifar10 converted from Keras), inputs
+# For some ONNX models, inputs
 # do not include initializers. Merge them here.
 inputs_len = len(names.keys())
 for idx, initializer in enumerate(onnx_model.graph.initializer):

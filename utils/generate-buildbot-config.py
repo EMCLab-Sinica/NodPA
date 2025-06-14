@@ -45,14 +45,6 @@ def main() -> None:
     complete_config = {'targets': all_targets, 'approaches': all_approaches, 'batch_sizes': [1]}
     dynamic_dnn_approaches = ['coarse-grained', 'fine-grained', 'multiple-indicators-basic', 'multiple-indicators']
     model_configs = [
-        ModelConfig(model='cifar10', **ideal_config),
-        ModelConfig(model='cifar10', **complete_config),
-        ModelConfig(model='kws', **ideal_config),
-        ModelConfig(model='kws', targets=all_targets, approaches=all_approaches, batch_sizes=[1, 2]),
-        ModelConfig(model='har', **ideal_config),
-        ModelConfig(model='har', **complete_config),
-        ModelConfig(model='transformers', **ideal_config),
-        ModelConfig(model='transformers', targets=all_targets, approaches=['hawaii'], batch_sizes=[1]),
         ModelConfig(model='cifar10-dnp', **ideal_config),
         ModelConfig(model='cifar10-dnp', targets=all_targets, approaches=['hawaii'], batch_sizes=[1], dynamic_dnn_approaches=dynamic_dnn_approaches),
         ModelConfig(model='har-dnp', **ideal_config),

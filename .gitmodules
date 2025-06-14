@@ -1,6 +1,3 @@
-[submodule "models/SqueezeNet_vs_CIFAR10.git"]
-	path = dnn-models/SqueezeNet_vs_CIFAR10
-	url = ../SqueezeNet_vs_CIFAR10.git
 [submodule "models/deep-learning-HAR"]
 	path = dnn-models/deep-learning-HAR
 	url = ../deep-learning-HAR.git
