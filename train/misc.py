@@ -11,6 +11,8 @@ import pathlib
 import numpy as np
 from torch.utils.data import TensorDataset
 import sys
+import filelock
+import platformdirs
 
 import models
 from decision import (
@@ -130,8 +132,8 @@ def accuracy(output, target, topk=(1,)):
 
 def get_basic_argument_parser(default_lr: float, default_wd: float):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', default='har', type=str)
-    parser.add_argument('--arch', '-a', default='har_cnn', type=str)
+    parser.add_argument('--dataset', default='kws', type=str)
+    parser.add_argument('--arch', '-a', default='kws', type=str)
     parser.add_argument('--action_num', default=5, type=int)
     parser.add_argument('--sparsity_level', default=0.1, type=float)
     parser.add_argument('--lr', default=default_lr, type=float)
@@ -143,6 +145,69 @@ def get_basic_argument_parser(default_lr: float, default_wd: float):
     parser.add_argument('--pruning_threshold', default=0.5, type=float)
 
     return parser
+
+def preprocess_kws_dataset(original_dataset):
+    GOOGLE_SPEECH_SAMPLE_RATE = 16000
+    # From https://github.com/ARM-software/ML-KWS-for-MCU/blob/master/Pretrained_models/labels.txt
+    new_labels = '_silence_ _unknown_ yes no up down left right on off stop go'.split(' ')
+
+    import tensorflow as tf
+
+    with open(kws_dnn_model(), 'rb') as f:
+        graph_def = tf.compat.v1.GraphDef()
+        graph_def.ParseFromString(f.read())
+        tf.import_graph_def(graph_def)
+
+    with tf.compat.v1.Session() as sess:
+        mfcc_tensor = sess.graph.get_tensor_by_name('Mfcc:0')
+
+        labels = []
+        mfccs = None  # The dimensions are unknown yet
+        dataset_size = len(original_dataset)
+        for n in range(dataset_size):
+            # The first few _unknown_ samples are not recognized by Hello Edge's DNN model - use good ones instead
+            data = original_dataset[dataset_size - 1 - n]
+            waveform, sample_rate, label, _, _ = data
+            assert sample_rate == GOOGLE_SPEECH_SAMPLE_RATE
+            decoded_wav = np.squeeze(waveform)
+            # Some files in speech_commands_v0.02 are less than 1 second. By comparing with corresponding files in
+            # speech_commands_test_set_v0.02, zeros are padded at last apparently
+            decoded_wav = np.pad(decoded_wav, ((0, GOOGLE_SPEECH_SAMPLE_RATE - len(decoded_wav)),))
+            decoded_wav = np.expand_dims(decoded_wav, axis=-1)
+
+            # See the logic at https://github.com/tensorflow/datasets/blob/v4.6.0/tensorflow_datasets/audio/speech_commands.py#L128-L140
+            if label in new_labels:
+                label = new_labels.index(label)
+            elif label in ('_silence_', '_background_noise_'):
+                label = new_labels.index('_silence_')
+            else:
+                label = new_labels.index('_unknown_')
+            labels.append(label)
+
+            mfcc = sess.run(mfcc_tensor, {
+                'decoded_sample_data:0': decoded_wav,
+                'decoded_sample_data:1': GOOGLE_SPEECH_SAMPLE_RATE,
+            })
+            if mfccs is None:
+                mfccs_shape = list(mfcc.shape)
+                mfccs_shape[0] = dataset_size
+                mfccs = np.zeros(mfccs_shape)
+            mfccs[n, :, :] = mfcc
+
+    return mfccs, labels
+
+def load_data_google_speech(train: bool):
+    xdg_cache_home = platformdirs.user_cache_path()
+    with filelock.FileLock(xdg_cache_home / 'SpeechCommands.lock'):
+        kws_cache_filename = xdg_cache_home / 'SpeechCommands-cache-v1.pth'
+        if kws_cache_filename.exists():
+            mfccs, labels = torch.load(kws_cache_filename, weights_only=False)
+        else:
+            original_dataset = torchaudio.datasets.SPEECHCOMMANDS(root=xdg_cache_home, download=True, subset='training' if train else 'testing')
+            mfccs, labels = preprocess_kws_dataset(original_dataset)
+            torch.save((mfccs, labels), kws_cache_filename)
+    dataset = TensorDataset(torch.from_numpy(np.expand_dims(mfccs.astype(np.float32), axis=1)), torch.tensor(labels))
+    return dataset
 
 def prepare_data(dataset, train_batch_size):
     print('==> Preparing data..')
@@ -207,6 +272,13 @@ def prepare_data(dataset, train_batch_size):
         finally:
             sys.path = orig_sys_path
 
+    elif dataset =='kws':
+        trainloader = torch.utils.data.DataLoader(
+            load_data_google_speech(train=True),
+            batch_size=train_batch_size, shuffle=True)
+        testloader = torch.utils.data.DataLoader(
+            load_data_google_speech(train=False),
+            batch_size=100, shuffle=True)
     else:
         raise RuntimeError(f'Unknown dataset {dataset}')
 
@@ -221,6 +293,9 @@ def initialize_model(dataset, arch, num_classes):
     elif dataset in ['har']:
         model = models.har_cnn()
 
+    elif dataset in ['kws']:
+        model = models.KWS_CNN_S()
+
     return model
 
 def transform_model(model, arch, action_num):
@@ -230,7 +305,7 @@ def transform_model(model, arch, action_num):
         new_forward = decision_basicblock_forward
         module_type = 'BasicBlock'
 
-    elif arch == 'har_cnn':
+    elif arch in ('har_cnn', 'kws'):
         from decision import init_decision_conv_block, decision_conv_block_forward
         init_func = init_decision_conv_block
         new_forward = decision_conv_block_forward

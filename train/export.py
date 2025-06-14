@@ -56,6 +56,8 @@ def main():
         dummy_input = torch.zeros((1, 3, 32, 32))
     elif args.dataset == 'har':
         dummy_input = torch.zeros((1, 9, 128))
+    elif args.dataset == 'kws':
+        dummy_input = torch.zeros((1, 1, 25, 10))
 
     onnx_opset = 11
 

@@ -6,7 +6,7 @@ import misc
 
 print = misc.logger.info
 
-parser = misc.get_basic_argument_parser(default_lr=0.1, default_wd=1e-4)
+parser = misc.get_basic_argument_parser(default_lr=0.01, default_wd=1e-4)
 
 args = parser.parse_args()
 
