@@ -1,0 +1,8 @@
+python train_baseline.py --arch resnet10 --dataset cifar10
+python main.py --arch resnet10 --dataset cifar10
+
+python train_baseline.py --arch har_cnn --dataset har
+python main.py --arch har_cnn --dataset har
+
+python train_baseline.py --arch kws --dataset kws
+python main.py --arch kws --dataset kws
