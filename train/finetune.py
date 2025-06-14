@@ -31,7 +31,7 @@ torch.backends.cudnn.benchmark = True
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 args.logdir = 'finetune-decision-%d/%s-%s/sparsity-%.2f' % (
-    args.action_num, args.dataset, args.arch, args.sparsity_level
+    misc.action_num(args.arch), args.dataset, args.arch, args.sparsity_level
 )
 misc.prepare_logging(args)
 
@@ -95,19 +95,19 @@ else:
 
 print('==> Transforming model...')
 
-apply_func(model, module_type, init_func, action_num=args.action_num)
+apply_func(model, module_type, init_func, action_num=misc.action_num(args.arch))
 replace_func(model, module_type, new_forward)
 
 print('==> Loading pretrained decision model...')
 ckpt = torch.load(
     'logs/decision-%d/%s-%s/sparsity-%.2f/model.pth.tar' % (
-        args.action_num, args.dataset, args.arch, args.sparsity_level
+        misc.action_num(args.arch), args.dataset, args.arch, args.sparsity_level
 ))
 model.load_state_dict(ckpt['state_dict'])
 
 model = model.to(args.device)
 
-optimizer = torch.optim.SGD(model_params, lr=args.lr, momentum=0.9, weight_decay=1e-4)
+optimizer = torch.optim.SGD(model_params, lr=misc.learning_rate(args.arch), momentum=0.9, weight_decay=1e-4)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 120], gamma=0.1)
 
 def train(epoch):

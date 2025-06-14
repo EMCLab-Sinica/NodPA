@@ -11,7 +11,7 @@ import misc
 np.set_printoptions(precision=2, linewidth=160)
 print = misc.logger.info
 
-parser = misc.get_basic_argument_parser(default_lr=0.01, default_wd=1e-9)
+parser = misc.get_basic_argument_parser(default_wd=1e-9)
 parser.add_argument('--lambd', default=1.0, type=float)
 
 args = parser.parse_args()
@@ -22,7 +22,7 @@ args.device = 'cuda'
 torch.backends.cudnn.benchmark = True
 
 args.logdir = 'decision-%d/%s-%s/sparsity-%.2f' % (
-    args.action_num, args.dataset, args.arch, args.sparsity_level
+    misc.action_num(args.arch), args.dataset, args.arch, args.sparsity_level
 )
 misc.prepare_logging(args)
 
@@ -37,15 +37,15 @@ for p in model.parameters():
 print('==> Loading pretrained model...')
 model.load_state_dict(torch.load('logs/pretrained/%s/%s/checkpoint.pth' % (args.dataset, args.arch)))
 
-misc.transform_model(model, args.arch, args.action_num)
+misc.transform_model(model, args.arch, misc.action_num(args.arch))
 
 model = model.to(args.device)
 
 head_params = default_graph.get_tensor_list('head_params')
 gate_params = default_graph.get_tensor_list('gate_params')
 
-optimizer_gate = torch.optim.Adam(head_params + gate_params, lr=args.lr)
-optimizer_model = torch.optim.SGD(model_params, lr=args.lr, momentum=args.mm, weight_decay=args.wd)
+optimizer_gate = torch.optim.Adam(head_params + gate_params, lr=misc.learning_rate(args.arch))
+optimizer_model = torch.optim.SGD(model_params, lr=misc.learning_rate(args.arch), momentum=args.mm, weight_decay=args.wd)
 
 def train(epoch):
     model.train()

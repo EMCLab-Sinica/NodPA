@@ -24,6 +24,20 @@ from decision import (
 
 THIS_DIR = pathlib.Path(__file__).absolute().parent
 
+def action_num(arch):
+    if arch.startswith('resnet'):
+        return 40
+    elif arch in ('har_cnn', 'kws'):
+        return 5
+    raise Exception("Unknown model architecture {}".format(arch))
+
+def learning_rate(arch):
+    if arch == 'kws':
+        return 0.01
+    elif arch == 'har_cnn' or arch.startswith('resnet'):
+        return 0.1
+    raise Exception("Unknown model architecture {}".format(arch))
+
 def pil_loader(path):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
@@ -130,13 +144,11 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
-def get_basic_argument_parser(default_lr: float, default_wd: float):
+def get_basic_argument_parser(default_wd: float):
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', default='kws', type=str)
     parser.add_argument('--arch', '-a', default='kws', type=str)
-    parser.add_argument('--action_num', default=5, type=int)
     parser.add_argument('--sparsity_level', default=0.1, type=float)
-    parser.add_argument('--lr', default=default_lr, type=float)
     parser.add_argument('--mm', default=0.9, type=float)
     parser.add_argument('--wd', default=default_wd, type=float)
     parser.add_argument('--epochs', default=10, type=int)
@@ -254,7 +266,7 @@ def prepare_data(dataset, train_batch_size):
         # Inspired by https://blog.csdn.net/bucan804228552/article/details/120143943
         try:
             orig_sys_path = sys.path.copy()
-            sys.path.append(str(THIS_DIR / 'deep-learning-HAR' / 'utils'))
+            sys.path.append(str(THIS_DIR.parent / 'dnn-models' / 'deep-learning-HAR' / 'utils'))
             from utilities import read_data, standardize
 
             archive_dir = os.path.expanduser('~/.cache/UCI HAR Dataset')

@@ -24,13 +24,13 @@ def optimize_model(pytorch_exported_model: IO[bytes], model_name: str):
     onnx.save_model(onnx_model, model_name)
 
 def main():
-    # No training involved - use dummy values to lr and wd
-    parser = misc.get_basic_argument_parser(default_lr=0, default_wd=0)
+    # No training involved - use dummy values to wd
+    parser = misc.get_basic_argument_parser(default_wd=0)
     args = parser.parse_args()
 
     args.num_classes = 10 if args.dataset == 'cifar10' else 100
     args.logdir = 'decision-%d/%s-%s/sparsity-%.2f' % (
-        args.action_num, args.dataset, args.arch, args.sparsity_level
+        misc.action_num(args.arch), args.dataset, args.arch, args.sparsity_level
     )
     misc.prepare_logging(args)
 
@@ -42,7 +42,7 @@ def main():
         map_location=torch.device('cpu'),
     )
 
-    misc.transform_model(model, args.arch, args.action_num)
+    misc.transform_model(model, args.arch, misc.action_num(args.arch))
 
     model.eval()
     apply_func(model, 'DecisionHead', set_deterministic_value, deterministic=True)

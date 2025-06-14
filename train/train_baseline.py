@@ -6,7 +6,7 @@ import misc
 
 print = misc.logger.info
 
-parser = misc.get_basic_argument_parser(default_lr=0.01, default_wd=1e-4)
+parser = misc.get_basic_argument_parser(default_wd=1e-4)
 
 args = parser.parse_args()
 
@@ -24,7 +24,7 @@ model = misc.initialize_model(args.dataset, args.arch, args.num_classes)
 
 model = model.to(args.device)
 
-optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.mm, weight_decay=args.wd)
+optimizer = torch.optim.SGD(model.parameters(), lr=misc.learning_rate(args.arch), momentum=args.mm, weight_decay=args.wd)
 scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 120], gamma=0.1)
 
 
