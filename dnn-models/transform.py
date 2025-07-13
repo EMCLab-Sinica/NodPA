@@ -194,7 +194,7 @@ parser.add_argument('--debug', action='store_true')
 parser.add_argument('--data-output-dir', metavar='DIR', default='build')
 parser.add_argument('--model-variant', type=str, default='')
 # Use type=str instead of converting it to an enum, as the latter is discouraged https://docs.python.org/3/library/argparse.html
-parser.add_argument('--dynamic-dnn-approach', type=str, choices=DYNAMIC_DNN_APPROACH_NAMES, default='fine-grained')
+parser.add_argument('--dynamic-dnn-approach', type=str, choices=DYNAMIC_DNN_APPROACH_NAMES, default='multiple-indicators')
 intermittent_methodology = parser.add_mutually_exclusive_group(required=True)
 intermittent_methodology.add_argument('--ideal', action='store_true')
 intermittent_methodology.add_argument('--hawaii', action='store_true')

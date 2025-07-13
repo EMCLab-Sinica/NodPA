@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
+#include <linux/limits.h>
 #endif
 #include <fstream>
 #include <memory>
@@ -78,8 +79,9 @@ int main(int argc, char* argv[]) {
     Model *model;
 
 #ifdef __linux__
+    char nvm_bin_path[PATH_MAX+1] = "nvm.bin";
 
-    while((opt_ch = getopt(argc, argv, "frc:s:")) != -1) {
+    while((opt_ch = getopt(argc, argv, "frc:s:n:")) != -1) {
         switch (opt_ch) {
             case 'r':
                 read_only = 1;
@@ -99,19 +101,22 @@ int main(int argc, char* argv[]) {
                 my_printf("Cannot save outputs as protobuf support is not compiled or debug is not enabled." NEWLINE);
                 return 1;
 #endif
+            case 'n':
+                strncpy(nvm_bin_path, optarg, PATH_MAX);
+                break;
             default:
                 my_printf("Usage: %s [-r] [n_samples]" NEWLINE, argv[0]);
                 return 1;
         }
     }
 
-    my_printf("POWER_ON" NEWLINE);
+    // my_printf("POWER_ON" NEWLINE);
 
     if (argv[optind]) {
         n_samples = atoi(argv[optind]);
     }
 
-    nvm = reinterpret_cast<uint8_t*>(map_file("nvm.bin", NVM_SIZE, read_only));
+    nvm = reinterpret_cast<uint8_t*>(map_file(nvm_bin_path, NVM_SIZE, read_only));
 
 #else
     (void)read_only; // no simulated NVM other than Linux - silent a compiler warning
@@ -147,7 +152,7 @@ int main(int argc, char* argv[]) {
     delete [] nvm;
 #endif
 
-    my_printf("POWER_OFF" NEWLINE);
+    // my_printf("POWER_OFF" NEWLINE);
 
     return ret;
 }
@@ -190,7 +195,7 @@ void my_memcpy_ex(void* dest, const void* src, size_t n, uint8_t write_to_nvm) {
         if (write_to_nvm && counters_enabled && shutdown_counter_enabled) {
             shutdown_counter--;
             if (!shutdown_counter) {
-                my_printf("POWER_OFF" NEWLINE);
+                // my_printf("POWER_OFF" NEWLINE);
                 exit_with_status(2);
             }
             if (shutdown_counter > 1UL<<31) {
@@ -259,7 +264,7 @@ void copy_data_to_nvm(void) {
 
 void notify_layer_finished(void) {}
 void notify_model_finished(void) {
-    my_printf("." NEWLINE);
+    // my_printf("." NEWLINE);
 }
 void notify_indicator(uint8_t idx) {}
 bool read_gpio_flag(GPIOFlag flag) { return false; }

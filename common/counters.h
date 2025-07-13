@@ -6,7 +6,7 @@
 #include "cnn_common.h"
 #include <cstdint>
 
-#define ENABLE_COUNTERS 1
+#define ENABLE_COUNTERS 0
 
 // Counter pointers have the form offsetof(Counter, field_name). I use offsetof() instead of
 // pointers to member fields like https://stackoverflow.com/questions/670734/pointer-to-class-data-member

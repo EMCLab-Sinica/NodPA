@@ -23,3 +23,6 @@
 # External projects
 /msp430/driverlib
 /msp432/driverlib
+
+# Logs
+/exp_data/logs/

@@ -11,12 +11,14 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('run-intermittently')
 
 CHUNK_SIZE = 2000
-CHUNK_LINES = 20
+CHUNK_LINES = 1
 
-def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[int, int], power_cycles_limit, n_samples: int) -> int:
+def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[int, int], power_cycles_limit, n_samples: int, nvm_bin_path: str) -> int:
     num_power_cycles = 0
     timeout_counter = 0
     shutdown_after_writes_lower, shutdown_after_writes_upper = shutdown_after_writes
+
+    previous_last_chunk = ''
 
     while True:
         shutdown_args = []
@@ -36,6 +38,9 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[i
         if n_samples:
             cmd.append(str(n_samples))
 
+        if nvm_bin_path:
+            cmd.extend(['-n', nvm_bin_path])
+
         with Popen(cmd, stdout=logfile, stderr=logfile) as proc:
             try:
                 kwargs = {}
@@ -50,15 +55,18 @@ def run_one_inference(program, interval, logfile, shutdown_after_writes: tuple[i
                 proc.send_signal(signal.SIGINT)
             proc.wait()
             num_power_cycles += 1
-            if proc.returncode in (2, -signal.SIGINT):
-                # simulated power failure
-                continue
 
             logfile.seek(0, 2)
             file_size = logfile.tell()
             logfile.seek(-(CHUNK_SIZE if file_size > CHUNK_SIZE else file_size), 2)
-            last_chunk = logfile.read()
-            print('\n'.join(last_chunk.decode('ascii').split('\n')[-CHUNK_LINES:]))
+            last_chunk = logfile.read().strip()
+            if last_chunk and last_chunk != previous_last_chunk:
+                print('\n'.join(last_chunk.decode('ascii').split('\n')[-CHUNK_LINES:]))
+                previous_last_chunk = last_chunk
+
+            if proc.returncode in (2, -signal.SIGINT):
+                # simulated power failure
+                continue
 
             print(f'Number of power cycles: {num_power_cycles}')
 
@@ -83,6 +91,7 @@ def main():
     parser.add_argument('--suffix', default='')
     parser.add_argument('--compress', default=False, action='store_true')
     parser.add_argument('--n-samples', default=1, type=int)
+    parser.add_argument('--nvm-bin-path', default='')
     parser.add_argument('program')
     args = parser.parse_args()
 
@@ -103,7 +112,15 @@ def main():
             logfile_path = logdir / f'intermittent-cnn-{rounds}'
         compressed_logfile_path = logfile_path.with_suffix('.zst')
         with open(logfile_path, mode='w+b') as logfile:
-            ret = run_one_inference(args.program, args.interval, logfile, args.shutdown_after_writes, args.power_cycles_limit, args.n_samples)
+            ret = run_one_inference(
+                args.program,
+                args.interval,
+                logfile,
+                args.shutdown_after_writes,
+                args.power_cycles_limit,
+                args.n_samples,
+                args.nvm_bin_path,
+            )
 
         if args.compress:
             check_call(['touch', log_archive])

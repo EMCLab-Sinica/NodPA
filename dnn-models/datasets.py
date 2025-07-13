@@ -29,6 +29,8 @@ def load_data_cifar10(train: bool, target_size: tuple[int, int], normalized: boo
     transforms.append(Resize(size=target_size[-2:], antialias=True))  # H and W from NCHW of ONNX
 
     with filelock.FileLock(xdg_cache_home / 'cifar10.lock'):
+        # Work-around https://github.com/pytorch/vision/issues/5039
+        torchvision.datasets.CIFAR10.url="https://data.brainchip.com/dataset-mirror/cifar10/cifar-10-python.tar.gz"
         dataset = torchvision.datasets.CIFAR10(root=xdg_cache_home, train=train, download=True, transform=Compose(transforms))
     # XXX: CIFAR10.classes is likely a private field
     return ModelData(dataset=dataset, data_layout=DataLayout.NCHW, label_names=dataset.classes)
