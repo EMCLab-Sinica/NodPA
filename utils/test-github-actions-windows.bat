@@ -1,5 +1,5 @@
 python3 -m pip install --user --upgrade pip setuptools
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirements-base.txt
 
 python3 dnn-models\transform.py --data-output-dir build-windows --target msp430 --hawaii har
 cmake -B build-windows -G "Visual Studio 17 2022"

@@ -47,7 +47,7 @@ Below is an explanation of the directories/files found in this repo.
 Here are basic software and hardware requirements to build NodPA along with the HAWAII intermittent inference engine:
 
 * Python 3.11
-* Several deep learning Python libraries defined in `requirements.txt`. Those libraries can be installed with `pip3 install -r requirements.txt`.
+* Several deep learning Python libraries defined in `requirements-base.txt`. Those libraries can be installed with `pip3 install -r requirements-base.txt`.
 * [Code composer studio](https://www.ti.com/tool/CCSTUDIO) 12.8
 * [MSP-EXP432P401R LaunchPad](https://www.ti.com/tool/MSP-EXP432P401R)
 * [MSP432 driverlib](https://www.ti.com/tool/MSPDRIVERLIB) 3.21.00.05

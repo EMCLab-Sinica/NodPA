@@ -9,6 +9,6 @@ RUN apt-get -y install --no-install-recommends --no-install-suggests python3-pip
 
 RUN python3 -m pip install --upgrade pip setuptools
 
-COPY requirements.txt .
+COPY requirements-base.txt .
 
-RUN python3 -m pip install -r requirements.txt
+RUN python3 -m pip install -r requirements-base.txt
