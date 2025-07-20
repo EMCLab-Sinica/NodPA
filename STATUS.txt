@@ -1,0 +1,12 @@
+We claim the following badges.
+
+* Artifacts Available:
+We have placed our artifact on the Zenodo publically accessible archival repository.
+
+
+* Artifacts Evaluated (Functional):
+Our simulator can be used to verify the functionality of NodPA, as well as verify the inference accuracy results reported in the paper. 
+
+
+* Artifact Reproduced:
+Our artifact evaluation depends on custom hardware. AE reviewers can access a remote machine with all required software and hardware setup to reproduce our experimental results.

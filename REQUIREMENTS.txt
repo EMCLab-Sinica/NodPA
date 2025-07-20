@@ -1,0 +1,32 @@
+Software requirements to compile the simulator can be found in requirements.txt 
+
+Prerequisites for compiling the NodPA middleware for deployment:
+Code composer studio 12.8
+MSP432 driverlib 3.21.00.05
+
+Hardware requirements for deployment testing:
+MSP-EXP432P401R LaunchPad (abbreviated as MSP432) as the intermittent system
+LAUNCHXL-CC1352R1 LaunchPad (abbreviated as CC1352) as the monitoring board
+Cypress CY15B116QN FRAM (abbreviated as CY15B116QN) as the external NVM
+
+
+	Wire connections related to EHM:
+    Connect BAT and VBAT_OK of CJMCU-25504 to 5LP01SP PMOS, 5LN01SP NMOS and a large resistor (e.g., 10MΩ) as shown in EHM_circuit.png
+Schematic of evaluation hardware setup
+
+    Wire connection with MSP432 and the monitoring board (CC1352):
+    CC1352 GND   <-> MSP432 GND
+    CC1352 DIO16 <-> MSP432 P5.5 for counting inferences
+    CC1352 DIO11 <-> MSP432 3V3  for checking power on/off
+
+    Wire connection with MSP432 and EHM:
+    EHM GND  <-> MSP432 GND
+    EHM VOUT <-> MSP432 3V3 for providing energy to MSP432
+
+    Wire connection with MSP432 and external NVM (CY15B116QN):
+    CY15B116QN GND <-> MSP432 GND
+    CY15B116QN 3V3 <-> MSP432 3V3  for providing energy to CY15B116QN
+    CY15B116QN CS  <-> MSP432 P1.5 for enabling/disabling CY15B116QN from MSP432
+    CY15B116QN SDI <-> MSP432 P2.3 for sending data from MSP432 to CY15B116QN
+    CY15B116QN SDO <-> MSP432 P2.2 for sending data from CY15B116QN to MSP432
+    CY15B116QN SCK <-> MSP432 P2.1 for synchronizing bits between MSP432 and CY15B116QN
