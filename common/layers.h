@@ -6,8 +6,6 @@
 #include "data.h"
 #include "layer-defs.h"
 
-#define OFM_DUMPED 1
-
 struct Node;
 struct NodeFlags;
 struct ParameterInfo;

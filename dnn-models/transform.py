@@ -127,6 +127,10 @@ other_flags = [
     'TRANSPOSED',
     'INTEGER',  # For integer types like INT64; no conversion like Q15 involved
 ]
+other_node_flags = [
+    'OFM_DUMPED',
+    'INPUT_1_SCALE',
+]
 
 def op_flag(flag):
     return 2 ** other_flags.index(flag)
@@ -439,6 +443,10 @@ for idx, n in enumerate(nodes):
         if kernel_shape == input_dims[2:] and (auto_pad == 'NOTSET' and set(pads) == {0} or auto_pad == 'VALID'):
             n.orig_node.op_type = 'GlobalAveragePool'
 
+    force_scale = config.get('force_scales', {}).get(n.name, '')
+    if force_scale == 'INPUT_1_SCALE':
+        n.flags.general_flags |= 1 << other_node_flags.index(force_scale)
+        print(n.flags.general_flags)
     for output_ in output:
         names[output_] = idx + Constants.N_INPUT
 
@@ -852,8 +860,9 @@ struct NodeFlags;
         '''))
 
     # data
-    for idx, name in enumerate(other_flags):
-        output_h.write(f'#define {name} {2**idx}\n')
+    for flag_list in (other_flags, other_node_flags):
+        for idx, name in enumerate(flag_list):
+            output_h.write(f'#define {name} {2**idx}\n')
 
     def hex_str(arr):
         return '  ' + ', '.join([f'0x{num:02x}' for num in arr]) + ',\n'

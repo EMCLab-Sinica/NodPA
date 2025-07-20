@@ -149,7 +149,12 @@ static void convTask(int16_t cur_input_h, const ConvLayerDimensions* layer_dims,
                 if (conv_params->conv_bias) {
                     // convert int16_t to int32_t first as on MSP430, registers are 20 bit while there are only 16 bits when int16_t is converted to uint16_t
                     // If the dividend is negative, the quotient is wrong
-                    bias_val = static_cast<int32_t>(get_q15_param(conv_params->model, conv_params->conv_bias, conv_params->filter_idx + idx)) / conv_params->conv_input->scale.toFloat();
+                    int32_t bias_val_i32 = static_cast<int32_t>(get_q15_param(conv_params->model, conv_params->conv_bias, conv_params->filter_idx + idx));
+                    if (!(conv_params->flags->general_flags & INPUT_1_SCALE)) {
+                        bias_val = bias_val_i32 / conv_params->conv_input->scale.toFloat();
+                    } else {
+                        bias_val = bias_val_i32;
+                    }
                 }
             }
             last_elem += bias_val;
@@ -474,7 +479,11 @@ void alloc_conv(Model *model, const ParameterInfo *input[], ParameterInfo *outpu
     output->dims[1] = OUTPUT_CHANNEL;
     output->dims[2] = layer_dims->OUTPUT_H;
     output->dims[3] = layer_dims->OUTPUT_W;
-    output->scale = conv_input->scale * conv_filter->scale;
+    if (conv_params->flags->general_flags & INPUT_1_SCALE) {
+        output->scale = conv_filter->scale;
+    } else {
+        output->scale = conv_input->scale * conv_filter->scale;
+    }
     output->param_flags |= TRANSPOSED;
 
 #if ENABLE_DEMO_COUNTERS

@@ -58,6 +58,9 @@ configs: dict[str, ConfigType] = {
         'op_filters': 2,
         'pruning_threshold': 0.5,
         'swap_add': False,
+        'force_scales': {
+            '/layers/layers.1/layers.1.0/conv2/Conv': 'INPUT_1_SCALE',
+        },
     },
     'kws-dnp': {
         'onnx_model': 'kws_kws-batched',
@@ -69,6 +72,7 @@ configs: dict[str, ConfigType] = {
         'n_all_samples': 4890,
         'op_filters': 2,  # decision head is not compatible with op_filters=4
         'pruning_threshold': 0.5,
+        'max_output_channel': 16,
     },
     'har-dnp': {
         'onnx_model': 'har_har_cnn-batched',
