@@ -3,7 +3,8 @@
 <!-- ABOUT THE PROJECT -->
 ## Overview
 
-This project develops a middleware module (referred to as NodPA) that accumulates non-deterministic inference progress to enable correct and efficient dynamic neural network inference on intermittent systems. NodPA uses additional progress information to capture the non-deterministic status of dynamic computations while preserving only the changed portions of the progress information to maintain low runtime overhead. 
+This project develops a middleware module (referred to as NodPA) that accumulates non-deterministic inference progress to enable correct and efficient dynamic neural network inference on intermittent systems. 
+NodPA strategically selects additional progress information to capture the non-determinism of the power-interrupted computation while preserving only the changed portions of the progress information to maintain low runtime overhead.
 
 We implemented NodPA on the Texas Instruments device MSP-EXP432P401R. It is an ARM-based 32-bit MCU with 64KB SRAM and single instruction multiple data (SIMD) instructions for accelerated computation. An external NVM module (Cypress CY15B116QN serial FRAM) was integrated to the platform. 
 
@@ -11,12 +12,14 @@ NodPA was integrated with the [HAWAII](https://ieeexplore.ieee.org/document/9211
 
 NodPA contains two main components which interacts with the inference engine at runtime:
 
-* Non-determinism accumulator: determines which progress indicators of dynamic computation to track, ensuring they can correctly identify the interrupted computation across different dynamic networks.
-* Preservation minimizer: reduces the amount of data written to NVM for progress preservation, by preserving only the changed portions of the progress indicators that have been updated.
+* Non-determinism accumulator: determines the sufficient set of progress indicators to track, ensuring non-deterministic progress information capture of the target dynamic network.
+* Preservation minimizer: ensures low progress preservation overhead, by reducing both the amount of data and number of transfers when preserving progress to NVM. 
 
-<!-- For more technical details, please refer to our paper **TODO**. -->
+We evaluate NodPA on three networks, ResNet, HAR, and KWS, using both static and dynamic variants, trained on the CIFAR-10 dataset, an accelerometer sensor dataset, and the Google Speech Commands dataset, respectively.
+We compare NodPA with two existing baselines, CD and FD, in terms of model accuracy, inference latency, and runtime overhead, which includes both preservation and recovery overhead.
 
-Demo video: [https://youtu.be/0rpf01PJ684](https://youtu.be/_1qVoG4aCxY)
+
+Demo video: [https://youtu.be/_1qVoG4aCxY](https://youtu.be/_1qVoG4aCxY)
 
 <!-- TABLE OF CONTENTS -->
 ## Table of Contents
