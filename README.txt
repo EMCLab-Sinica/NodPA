@@ -38,10 +38,12 @@ Below is an explanation of the directories/files found in this repo.
 * `common/platform.*`, `common/plat-mcu.*` and `common/plat-pc.*`: high-level wrappers for handling platform-specific peripherals.
 * `common/my_dsplib.*`: high-level wrappers for accessing different vendor-specific library calls performing accelerated computations.
 * `common/counters.*` : helper functions for measuring runtime overhead.
-* `dnn-models/`: pre-trained models and python scripts for model training, converting different model formats to ONNX and converting a model into a custom format recognized by the lightweight inference engine.
+* `dnn-models/`: pre-trained ONNX models and python scripts for converting an ONNX model into a custom format recognized by the lightweight inference engine.
+* `exp_data/exp.xlsx`: experimental results.
 * `msp432/`: platform-speicific hardware initialization functions.
-* `tools/`: helper functions for various system peripherals (e.g., UART, system clocks and external FRAM).
-* `train/`: codes for training neural networks with dynamic pruning.
+* `tools/`: helper functions for various system peripherals (e.g., UART, system clocks and external FRAM)
+* `tools/intermittent-power-supply/`: codes for controlling the power supply to simulate intermittent power traces.
+* `train/`: codes for training neural networks with dynamic pruning and exporting trained models to ONNX.
 
 ## Getting Started
 
@@ -55,9 +57,17 @@ Here are basic software and hardware requirements to build NodPA along with the 
 * [MSP-EXP432P401R LaunchPad](https://www.ti.com/tool/MSP-EXP432P401R)
 * [MSP432 driverlib](https://www.ti.com/tool/MSPDRIVERLIB) 3.21.00.05
 
-### Setup and Build
+### Setup and Build for Real-device Deployment
 
 1. Prepare vendor-supplied libraries for hardware-accelerated computation. `git submodule update --init --recursive` will download them all.
 1. Convert the provided pre-trained models with the command `python3 dnn-models/transform.py --target msp432 --hawaii (cifar10-dnp|har-dnp)` to specify the model to deploy from one of `cifar10-dnp`, or `har-dnp`.
 1. Download and extract MSP432 driverlib, and copy `driverlib/MSP432P4xx` folder into the `msp432/` folder.
-1. Import the folder `msp432/` as a project in CCStudio.
+1. Import the folder `msp432/` as a project in CCStudio and build the project. Alternatively, pre-compiled binaries in `msp432-binaries/` can be used.
+
+## Setup and Build the Simulator
+
+1. Convert the provided pre-trained models using the same `dnn-models/transform.py` command as Real-device Deployment
+1. Build the project with `cmake -B build && make -C build`
+1. Run the built simulator with `./build/intermittent-cnn`
+
+For more details about the simulator, see `common/simulator.md`.
