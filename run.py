@@ -142,6 +142,7 @@ class RealDeviceRunner(Runner):
     MONITORING_BOARD_SERIAL_NUMBER = 'L4100AFL'
 
     NUM_INFERENCES = {
+        'continuous': 10,
         '4mW': 10,
         '12mW': 25,
     }
@@ -201,10 +202,11 @@ class RealDeviceRunner(Runner):
         input("Set jumpers... Hit ENTER to continue")
 
         now_str = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        teraterm_log_dir = self.PROJECT_ROOT / 'exp_data' / 'logs'
-        teraterm_log_dir.mkdir(exist_ok=True)
-        teraterm_log_path = teraterm_log_dir / f'teraterm-{variant}-{model}-{now_str}-raw.log'
+        exp_log_dir = self.PROJECT_ROOT / 'exp_data' / 'logs'
+        exp_log_dir.mkdir(exist_ok=True)
+        teraterm_log_path = exp_log_dir / f'teraterm-{variant}-{model}-{now_str}-raw.log'
         teraterm_ini = self.PROJECT_ROOT / 'exp' / 'TERATERM.ini'
+        power_trace_log_path = exp_log_dir / f'power-trace-{power}-{now_str}.csv'
 
         serial_port = None
         for port in comports():
@@ -224,12 +226,22 @@ class RealDeviceRunner(Runner):
             f'/F={teraterm_ini}',
         ]
         intermittent_power_supply_root = self.PROJECT_ROOT / 'tools' / 'intermittent-power-supply'
-        power_supply_cmdline =  [
+        power_supply_cmdline = [
             sys.executable,
             str(intermittent_power_supply_root / 'control-power-supply.py'),
-            '--script', str(intermittent_power_supply_root / 'script-rf.csv'),
-            '--normalized_average_current', str(int(power[:-len('mW')]) / 1000),
+            '--power-trace-log-csv', str(power_trace_log_path),
         ]
+        if power != 'continuous':
+            power_supply_cmdline.extend([
+                '--script', str(intermittent_power_supply_root / 'script-rf.csv'),
+                '--normalized_average_current', str(int(power[:-len('mW')]) / 1000),
+            ])
+        else:
+            power_supply_cmdline.extend([
+                '--script', str(intermittent_power_supply_root / 'script-solar.csv'),
+                '--voltage', '3',
+                '--normalized_average_current', '0.1',
+            ])
 
         print('Running: ' + shlex.join(teraterm_cmdline))
         teraterm_proc = subprocess.Popen(teraterm_cmdline)
@@ -240,22 +252,23 @@ class RealDeviceRunner(Runner):
         try:
             time.sleep(3)
 
-            self.check_call([
+            parse_log_cmdline = [
                 sys.executable,
                 str(self.PROJECT_ROOT / 'exp' / 'parse-intermittent-inference-logs.py'),
                 '--log-filename', str(teraterm_log_path),
                 '--num-inferences', str(self.NUM_INFERENCES[power]),
-            ])
+            ]
+            if power == 'continuous':
+                parse_log_cmdline.append('--continuous-power')
+            self.check_call(parse_log_cmdline)
         finally:
             host = '127.0.0.1'
             port = 65432
             message = "STOP"
 
-            print("Connecting to server...")
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((host, port))
                 s.sendall(message.encode())
-                print(f"Sent message: '{message}'")
             power_supply_proc.wait()
             teraterm_proc.terminate()
 
