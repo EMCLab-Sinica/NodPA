@@ -146,12 +146,15 @@ class RealDeviceRunner(Runner):
         '12mW': 25,
     }
 
+    def __init__(self, regenerate_binaries: bool = False):
+        self.regenerate_binaries = regenerate_binaries
+
     def get_prebuilt_real_device_binary_filename(self, model, variant, with_preservation) -> str:
         suffix = '' if with_preservation else '-nopres'
         return str(self.PROJECT_ROOT / 'msp432-binaries' / f'intermittent-cnn-msp432-{variant}-{model}{suffix}.out')
 
     def convert_model(self, model: str, variant: str, with_preservation: bool) -> None:
-        if os.path.exists(self.get_prebuilt_real_device_binary_filename(model, variant, with_preservation)):
+        if os.path.exists(self.get_prebuilt_real_device_binary_filename(model, variant, with_preservation)) and not self.regenerate_binaries:
             return
         super().convert_model(model, variant, with_preservation)
 
@@ -164,7 +167,7 @@ class RealDeviceRunner(Runner):
         # Build the project if needed
         output_file = self.get_prebuilt_real_device_binary_filename(model, variant, with_preservation)
 
-        if not os.path.exists(output_file):
+        if not os.path.exists(output_file) or self.regenerate_binaries:
             self.check_call([
                 str(self.CCS_ROOT / 'eclipse' / 'eclipsec.exe'),
                 '-noSplash',
@@ -176,6 +179,9 @@ class RealDeviceRunner(Runner):
 
     def deploy(self, model: str, variant: str, with_preservation: bool, power: str) -> None:
         from serial.tools.list_ports import comports
+
+        if self.regenerate_binaries:
+            return
 
         input("Set jumpers... Hit ENTER to continue")
 
@@ -258,6 +264,7 @@ def main():
     parser.add_argument('--model', default='all', help='The model to run.', choices=['all'] + Runner.ALL_MODEL_COMBINATIONS_STR)
     parser.add_argument('--power', default='all', help='The power supply to use.', choices=Runner.ALL_POWERS)
     parser.add_argument('--platform', default='simulator', help='The platform to run.', choices=['simulator', 'real_device'])
+    parser.add_argument('--regenerate-binaries', help=argparse.SUPPRESS, action='store_true')
     args = parser.parse_args()
 
     if args.model == 'all':
@@ -268,7 +275,7 @@ def main():
     if args.platform == 'simulator':
         runner = SimulatorRunner()
     elif args.platform == 'real_device':
-        runner = RealDeviceRunner()
+        runner = RealDeviceRunner(args.regenerate_binaries)
     runner.run(args.model, args.power)
 
 if __name__ == '__main__':
