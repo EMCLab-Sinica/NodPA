@@ -11,6 +11,8 @@ tensorflow==2.16.1
 # https://pytorch.org/audio/main/installation.html#compatibility-matrix
 torch==2.2.0+cpu
 torchaudio==2.2.0+cpu
+# Needed by experiment scripts
+scipy==1.16.1
 # The backend for torchaudio
 soundfile==0.13.1
 torchvision==0.17.0+cpu
